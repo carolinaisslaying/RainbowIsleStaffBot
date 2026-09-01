@@ -21,9 +21,12 @@ import {
 export const LEAVE_REQUEST_MODAL = "leaveRequest";
 export const LEAVE_EXTEND_MODAL = "leaveExtend";
 
+export const CONFIG_IMPORT_MODAL = "configImport";
+
 export const FIELD_START = "start";
 export const FIELD_END = "end";
 export const FIELD_REASON = "reason";
+export const FIELD_CONFIG_JSON = "configJson";
 
 function dateField(
     customId: string,
@@ -133,5 +136,41 @@ export function leaveExtendModal(
                 "Why the extension",
                 "Visible to Executives only. Appended to your original reason."
             )
+        );
+}
+
+/**
+ * The import paste.
+ *
+ * A modal is the only way Discord lets a button collect text, and its ceiling
+ * is 4000 characters. A full export of a deployment with a long tracked channel
+ * list can pass that, which is the other reason the reader applies only the
+ * keys it is given: an oversized file goes in as two pastes.
+ */
+export function configImportModal(): ModalBuilder {
+    return new ModalBuilder()
+        .setCustomId(CONFIG_IMPORT_MODAL)
+        .setTitle("Import configuration")
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(
+                "Paste an exported file, or just the keys you want to change. Only the keys " +
+                    "you paste are touched.\n" +
+                    "-# You will see every change listed before anything is written. If one " +
+                    "key is wrong, none of them are applied."
+            )
+        )
+        .addLabelComponents(
+            new LabelBuilder()
+                .setLabel("Configuration JSON")
+                .setDescription("The whole file, or an object with the keys you want to set.")
+                .setTextInputComponent(
+                    new TextInputBuilder()
+                        .setCustomId(FIELD_CONFIG_JSON)
+                        .setStyle(TextInputStyle.Paragraph)
+                        .setRequired(true)
+                        .setMinLength(2)
+                        .setMaxLength(4000)
+                        .setPlaceholder('{ "weeklyTargetMinutes": 120 }')
+                )
         );
 }

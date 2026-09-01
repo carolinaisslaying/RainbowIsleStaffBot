@@ -75,13 +75,27 @@ export async function membersWithRole(
     return [...members.filter((member) => member.roles.cache.has(roleId)).values()];
 }
 
+/**
+ * Every role in the guild, id to name.
+ *
+ * Names rather than ids because both callers put the result in front of a
+ * person: "your Senior Moderator rank is back" against "your 918273645 is
+ * back". The id stays the key, since that is what the snapshot holds.
+ */
+export async function guildRoleNames(
+    client: Client,
+    guildId: string
+): Promise<Map<string, string>> {
+    const guild = await client.guilds.fetch(guildId);
+    const roles = await guild.roles.fetch();
+    return new Map(roles.map((role) => [role.id, role.name]));
+}
+
 export async function existingRoleIds(
     client: Client,
     guildId: string
 ): Promise<Set<string>> {
-    const guild = await client.guilds.fetch(guildId);
-    const roles = await guild.roles.fetch();
-    return new Set(roles.map((role) => role.id));
+    return new Set((await guildRoleNames(client, guildId)).keys());
 }
 
 /** Best effort DM. A member with DMs closed must never break an action. */

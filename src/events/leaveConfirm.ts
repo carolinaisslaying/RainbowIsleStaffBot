@@ -4,7 +4,7 @@ import { ObjectId } from "mongodb";
 import type { StaffBotConfig } from "../config/guildConfig.js";
 import { createLeaveRequest, extendLeave, findLeave, pendingOrApprovedLeaveFor } from "../domain/leave.js";
 import { audit } from "../domain/audit.js";
-import { staffChannel } from "../services/leaveService.js";
+import { rememberLeaveCard, staffChannel, updateLeaveCard } from "../services/leaveService.js";
 import { errorCard, leaveRequestCard, noticeCard } from "../render/cards.js";
 import { respond, sendOptions } from "../discord/respond.js";
 import { ts } from "../time/format.js";
@@ -165,7 +165,7 @@ async function commitRequest(
         // so rather than letting them wait for a decision nobody will ever see.
         log.warn("No leaveChannelId configured; the request has nowhere to post.");
     } else {
-        await channel.send(
+        const posted = await channel.send(
             sendOptions(
                 leaveRequestCard({
                     leaveId: leave._id.toHexString(),
@@ -173,10 +173,14 @@ async function commitRequest(
                     startDate: draft.startDate as Date,
                     endDate: draft.endDate,
                     reason: draft.reason,
+                    status: "pending",
                     decided: null
                 })
             )
         );
+        // Everything that happens to this leave later edits this one message,
+        // so the record has to know where it is.
+        await rememberLeaveCard(leave._id, posted.channelId, posted.id);
     }
 
     await audit("leave.request", {
@@ -242,6 +246,11 @@ async function commitExtension(
             note: draft.reason
         }
     });
+
+    // The request card carries the dates, and one of them just moved, so it is
+    // redrawn before anyone is told anything. A card still showing last week's
+    // return date is worse than no card.
+    await updateLeaveCard(client, config, updated);
 
     // Executives approved a window, and the window just changed. They are told,
     // rather than finding out when someone does not come back.

@@ -14,6 +14,12 @@ export interface StaffDoc {
     joinedTeamAt: Date;
     active: boolean;
     leaderboardOptOut: boolean;
+    /**
+     * Chosen ring face, by id. Null until they pick one, which the onboarding
+     * gate makes them do; unknown ids fall back rather than failing, so
+     * retiring a face cannot break a member's cards.
+     */
+    ringFace?: string | null;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -124,6 +130,20 @@ export interface LeaveDoc {
     rolesRestoredAt: Date | null;
     /** Role IDs that no longer exist on return. */
     restoreErrors: string[];
+    /**
+     * The card in the leave channel. Stored so that any later change of state
+     * can edit that one card in place, whether a decision, an early end, or the
+     * scheduler closing it on time, instead of posting a second message about
+     * the same leave.
+     */
+    logChannelId?: string | null;
+    logMessageId?: string | null;
+    /**
+     * Set when an Executive ended the leave before its own end date. Null for
+     * leave that ran its course or that the member ended themselves, so the
+     * three cases can be told apart on the record and in the wording.
+     */
+    endedEarlyBy?: ObjectId | null;
 }
 
 /** Server load, for the heatmap. No identity attached, ever. */

@@ -2,6 +2,7 @@ import { Resvg } from "@resvg/resvg-js";
 import { FONT_OPTIONS } from "./fonts.js";
 import { escapeXml, round } from "./svg.js";
 import { FONT_STACK, SURFACE } from "./theme.js";
+import { panelDefs, panelGround, panelRim } from "./panel.js";
 import {
     GRID_DAYS,
     GRID_HOURS,
@@ -26,10 +27,13 @@ import {
  */
 
 const CELL = 30;
-const PAD = 18;
-const LEFT_GUTTER = 46;
+/** The same margin on all four sides, as on the ring card. */
+const PAD = 22;
+/** The weekday column, right aligned into the margin. */
+const DAY_COLUMN = 26;
+const LEFT_GUTTER = PAD + DAY_COLUMN;
 const TOP_GUTTER = 58;
-const LEGEND_HEIGHT = 54;
+const LEGEND_HEIGHT = 60;
 const WIDTH = LEFT_GUTTER + GRID_HOURS * CELL + PAD;
 const HEIGHT = TOP_GUTTER + GRID_DAYS * CELL + LEGEND_HEIGHT;
 
@@ -42,22 +46,34 @@ const HEIGHT = TOP_GUTTER + GRID_DAYS * CELL + LEGEND_HEIGHT;
 const RAMP = ["#0a84ff", "#2bb1a8", "#c3c33a", "#ff9f0a", "#ff453a"];
 const EMPTY = "rgba(255,255,255,0.045)";
 
-function colourFor(ratio: number, maxRatio: number): string {
-    if (ratio <= 0 || maxRatio <= 0) return EMPTY;
+/**
+ * Ink for the figure inside a cell.
+ *
+ * One value for all five bands, not a light one for the cool end. Dark ink
+ * out-contrasts light on every colour in this ramp, the blue included: black on
+ * #0a84ff is 5.7:1 against white's 3.7:1, and the figures are 9.5px and bold,
+ * where contrast is worth more than anything else. So the fix is to darken the
+ * ink rather than to flip it.
+ */
+const CELL_INK = "rgba(0,0,0,0.82)";
+
+function bandFor(ratio: number, maxRatio: number): number {
+    if (ratio <= 0 || maxRatio <= 0) return -1;
     const normalised = Math.min(1, ratio / maxRatio);
-    return RAMP[Math.min(RAMP.length - 1, Math.floor(normalised * RAMP.length))];
+    return Math.min(RAMP.length - 1, Math.floor(normalised * RAMP.length));
+}
+
+function colourFor(ratio: number, maxRatio: number): string {
+    const band = bandFor(ratio, maxRatio);
+    return band < 0 ? EMPTY : RAMP[band];
 }
 
 function panel(body: string, height: number): string {
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${height}" viewBox="0 0 ${WIDTH} ${height}">
-    <defs>
-    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="${SURFACE.panelTop}" />
-        <stop offset="1" stop-color="${SURFACE.panelBottom}" />
-    </linearGradient>
+    <defs>${panelDefs(WIDTH, height)}
     </defs>
-    <rect width="${WIDTH}" height="${height}" rx="18" fill="url(#panel)" />
-    <rect x="0.5" y="0.5" width="${WIDTH - 1}" height="${height - 1}" rx="17.5" fill="none" stroke="${SURFACE.rimLight}" stroke-width="1" />
+    ${panelGround(WIDTH, height)}
+    ${panelRim(WIDTH, height)}
     ${body}
 </svg>`;
 }
@@ -83,7 +99,7 @@ export function heatmapSvg(grid: CoverageGrid): string {
 
     const days = weekdayLabels(grid.weekStartDay);
     const parts: string[] = [
-        `<text x="${LEFT_GUTTER}" y="26" fill="${SURFACE.text}" font-size="14" ` +
+        `<text x="${LEFT_GUTTER}" y="28" fill="${SURFACE.text}" font-size="14" ` +
             `font-family="${FONT_STACK}" font-weight="bold" letter-spacing="-0.2">` +
             `${escapeXml(grid.timeZone)}, ${grid.weeks} week mean</text>`
     ];
@@ -101,7 +117,7 @@ export function heatmapSvg(grid: CoverageGrid): string {
     for (let weekday = 0; weekday < GRID_DAYS; weekday += 1) {
         const y = TOP_GUTTER + weekday * CELL;
         parts.push(
-            `<text x="${LEFT_GUTTER - 12}" y="${round(y + CELL / 2 + 4)}" ` +
+            `<text x="${LEFT_GUTTER - 11}" y="${round(y + CELL / 2 + 4)}" ` +
                 `fill="${SURFACE.textMuted}" font-size="11.5" font-family="${FONT_STACK}" ` +
                 `text-anchor="end">${days[weekday]}</text>`
         );
@@ -121,14 +137,14 @@ export function heatmapSvg(grid: CoverageGrid): string {
                 const label = ratio >= 10 ? String(Math.round(ratio)) : ratio.toFixed(1);
                 parts.push(
                     `<text x="${round(x + CELL / 2)}" y="${round(y + CELL / 2 + 3.5)}" ` +
-                        `fill="rgba(0,0,0,0.72)" font-size="9.5" font-family="${FONT_STACK}" ` +
+                        `fill="${CELL_INK}" font-size="9.5" font-family="${FONT_STACK}" ` +
                         `font-weight="bold" text-anchor="middle">${escapeXml(label)}</text>`
                 );
             }
         }
     }
 
-    const legendY = TOP_GUTTER + GRID_DAYS * CELL + 20;
+    const legendY = TOP_GUTTER + GRID_DAYS * CELL + 22;
     parts.push(
         `<text x="${LEFT_GUTTER}" y="${round(legendY)}" fill="${SURFACE.textMuted}" ` +
             `font-size="11" font-family="${FONT_STACK}">Messages per available moderator, ` +
@@ -138,7 +154,7 @@ export function heatmapSvg(grid: CoverageGrid): string {
     // One continuous bar rather than separate chips: the scale is continuous,
     // and five detached lozenges implied five discrete bands.
     const barX = LEFT_GUTTER;
-    const barY = round(legendY + 10);
+    const barY = round(legendY + 12);
     const barWidth = 168;
     const segments = RAMP.map((colour, index) => {
         const segment = barWidth / RAMP.length;
@@ -154,7 +170,7 @@ export function heatmapSvg(grid: CoverageGrid): string {
             `height="9" rx="4.5" /></clipPath>`,
         `<g clip-path="url(#rampClip)">${segments}</g>`,
         `<rect x="${barX}" y="${barY}" width="${barWidth}" height="9" rx="4.5" fill="none" ` +
-            `stroke="${SURFACE.rimLight}" stroke-width="1" />`,
+            `stroke="url(#panelRim)" stroke-width="1" />`,
         `<text x="${barX + barWidth + 10}" y="${round(barY + 8)}" fill="${SURFACE.textMuted}" ` +
             `font-size="10.5" font-family="${FONT_STACK}">quiet to worst gap</text>`
     );

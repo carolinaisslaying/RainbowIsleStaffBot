@@ -9,7 +9,14 @@ import { ObjectId } from "mongodb";
 import { loadConfig, type StaffBotConfig } from "../config/guildConfig.js";
 import { commandsByName } from "../commands/index.js";
 import type { Command } from "../commands/types.js";
-import { ensureStaff, findStaffByDiscordId, needsTimezone, setTimezone } from "../domain/staff.js";
+import {
+    ensureStaff,
+    findStaffByDiscordId,
+    needsRingFace,
+    needsTimezone,
+    setRingFace,
+    setTimezone
+} from "../domain/staff.js";
 import {
     atLeast,
     bootstrapAdminsConfigured,
@@ -20,7 +27,8 @@ import {
     type Tier
 } from "../domain/permissions.js";
 import { pendingOrApprovedLeaveFor } from "../domain/leave.js";
-import { errorCard, noticeCard, timezoneSetupCard } from "../render/cards.js";
+import { errorCard, faceSetupCard, noticeCard, timezoneSetupCard } from "../render/cards.js";
+import { FACES, faceFor } from "../render/faces.js";
 import { respond, sendOptions } from "../discord/respond.js";
 import { COLOUR } from "../render/theme.js";
 import { handleReviewButton } from "./reviewButtons.js";
@@ -28,11 +36,17 @@ import { handleLeaveButton } from "./leaveButtons.js";
 import { handleLeaveModal } from "./leaveModals.js";
 import { handleLeaveConfirmButton } from "./leaveConfirm.js";
 import { handleLeavePurgeButton } from "./leavePurge.js";
+import {
+    handleConfigButton,
+    handleConfigImportModal
+} from "./configTransferButtons.js";
+import { CONFIG_IMPORT_MODAL } from "../render/modals.js";
 import { renderLeaderboard, type LeaderboardScope } from "../commands/leaderboard.js";
 import { canonicaliseTimezone } from "../time/timezones.js";
 import { publicGuildName, staffGuildName } from "../discord/guildNames.js";
 import { cmd } from "../discord/commandMentions.js";
 import { log } from "../log.js";
+import { staffDisplayName } from "../discord/displayName.js";
 
 export function registerInteractionHandler(client: Client): void {
     client.on(Events.InteractionCreate, async (interaction: Interaction) => {
@@ -82,10 +96,9 @@ export function registerInteractionHandler(client: Client): void {
                             `department role in ${publicGuildName()}.` +
                             (bootstrapAdminsConfigured()
                                 ? ""
-                                : "\n\n-# Nothing is configured yet and no seeded admin is " +
-                                  "set. Add your user ID to **BOOTSTRAP_ADMIN_IDS** in the env " +
-                                  "file and restart, then run " +
-                                  `${cmd("config set", interaction.guildId)}.`)
+                                : "\n\n-# The bot has not been set up yet, and nobody is " +
+                                  "able to set it up. Whoever deployed it needs to name an " +
+                                  "administrator before any command will work.")
                     )
                 );
                 return;
@@ -101,10 +114,17 @@ export function registerInteractionHandler(client: Client): void {
 
             const staff = await ensureStaff(interaction.user.id);
 
-            // The onboarding gate. Any command from a department member with no
-            // timezone returns the setup card and refuses the original action.
+            // The onboarding gate, in two steps. Timezone first because it is
+            // functional and everything else reads wrong without it; the ring
+            // face second because it is not, and because the point of asking is
+            // that the first card they see is one they chose.
             if (needsTimezone(staff) && !command.bypassTimezoneGate) {
                 await respond(interaction, timezoneSetupCard(interaction.guildId));
+                return;
+            }
+
+            if (needsRingFace(staff) && !command.bypassTimezoneGate) {
+                await respond(interaction, faceSetupCard(FACES, interaction.guildId));
                 return;
             }
 
@@ -212,8 +232,22 @@ async function routeModal(
     interaction: import("discord.js").ModalSubmitInteraction
 ): Promise<void> {
     const config = await loadConfig();
-    if (interaction.guildId !== null && interaction.guildId !== config.staffGuildId) {
+    const configHatch =
+        interaction.customId === CONFIG_IMPORT_MODAL &&
+        interaction.guildId === config.publicGuildId;
+    if (
+        !configHatch &&
+        interaction.guildId !== null &&
+        interaction.guildId !== config.staffGuildId
+    ) {
         await respond(interaction, wrongSurfaceCard(interaction.guildId, config));
+        return;
+    }
+
+    // Ahead of the staff lookup: configuring the bot is the one thing a seeded
+    // admin does before there is anything for a staff record to describe.
+    if (interaction.customId === CONFIG_IMPORT_MODAL) {
+        await handleConfigImportModal(client, config, interaction);
         return;
     }
 
@@ -235,20 +269,35 @@ async function routeModal(
         config,
         interaction,
         staff,
-        member?.displayName ?? interaction.user.username
+        await staffDisplayName(client, config, interaction.user.id, interaction.user.username)
     );
 }
 
 async function routeButton(client: Client, interaction: import("discord.js").ButtonInteraction) {
     const config = await loadConfig();
-    // Buttons live on cards posted in the staff server or sent as DMs. None of
-    // them belong to the configuration fallback, so the plain rule applies.
-    if (interaction.guildId !== null && interaction.guildId !== config.staffGuildId) {
+    const [namespace, first, second] = interaction.customId.split(":");
+
+    // Buttons live on cards posted in the staff server or sent as DMs, with one
+    // exception. The configuration buttons follow their command into the
+    // community server, because that is the recovery hatch: when staffGuildId
+    // is wrong, `/config view` there is the only surface left, and an import is
+    // the fastest way to put a broken deployment back. The handler checks
+    // Executive on every click, and a seeded admin resolves as Executive, which
+    // is what makes the hatch work at all.
+    const configHatch = namespace === "config" && interaction.guildId === config.publicGuildId;
+    if (
+        !configHatch &&
+        interaction.guildId !== null &&
+        interaction.guildId !== config.staffGuildId
+    ) {
         await respond(interaction, wrongSurfaceCard(interaction.guildId, config));
         return;
     }
 
-    const [namespace, first, second] = interaction.customId.split(":");
+    if (namespace === "config") {
+        await handleConfigButton(client, config, interaction, first, second);
+        return;
+    }
 
     if (namespace === "review") {
         await handleReviewButton(client, config, interaction, new ObjectId(first), second);
@@ -294,6 +343,17 @@ async function routeButton(client: Client, interaction: import("discord.js").But
         }
         const staff = await ensureStaff(interaction.user.id);
         await setTimezone(staff._id, zone);
+
+        // Straight into the second question rather than saying "saved" and
+        // making them run a command to be asked it. Onboarding is two choices;
+        // it should feel like two choices, not like being refused twice.
+        if (needsRingFace(staff)) {
+            await interaction.update(
+                sendOptions(faceSetupCard(FACES, interaction.guildId)) as never
+            );
+            return;
+        }
+
         await interaction.update(
             sendOptions(
                 noticeCard(
@@ -308,18 +368,49 @@ async function routeButton(client: Client, interaction: import("discord.js").But
         return;
     }
 
+    if (namespace === "face") {
+        // The picker is the member's own ephemeral card, so the answer replaces
+        // it rather than sitting under it. Same rule as the timezone confirm.
+        const staff = await ensureStaff(interaction.user.id);
+        const face = faceFor(first);
+        await setRingFace(staff._id, face.id);
+        await interaction.update(
+            sendOptions(
+                noticeCard(
+                    `${face.name} it is`,
+                    `Your rings are ${face.blurb.charAt(0).toLowerCase()}${face.blurb.slice(1)}\n\n` +
+                        "Run the command you were after and you will see them. Change your " +
+                        `mind whenever you like with ${cmd("staff face", interaction.guildId)}.`,
+                    { colour: COLOUR.approved }
+                )
+            ) as never
+        );
+        return;
+    }
+
     if (namespace === "leaderboard") {
         if (first === "noop") return;
         const staff = await findStaffByDiscordId(interaction.user.id);
         if (!staff) return;
         const member = await fetchPublicMember(client, config, interaction.user.id);
         const tier = resolveTier(interaction.user.id, member, config);
+
+        // Paging edits the message the buttons are on, and anyone can press
+        // them. So on a leaderboard sitting in a channel, the next page is
+        // rendered as everyone's page, whoever turned it. A Lead
+        // pressing Next on a public card would otherwise rewrite that public
+        // card with the privileged view, publishing every hidden row to the
+        // channel. Their own privileged copy is one command away and arrives
+        // where only they can read it.
+        const inChannel = !interaction.message.flags.has(MessageFlags.Ephemeral);
+        const readerTier = inChannel ? "staff" : tier;
+
         await interaction.deferUpdate();
         const card = await renderLeaderboard(
             client,
             config,
             staff,
-            tier,
+            readerTier,
             first as LeaderboardScope,
             Number.parseInt(second, 10) || 1
         );

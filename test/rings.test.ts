@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ringStateFor } from "../src/domain/rings.js";
-import { ringsSvg, describeRings } from "../src/render/rings.js";
+import { ringCardSvg, ringsSvg, describeRings } from "../src/render/rings.js";
 import { cappedArcPath, capAngle, polarToCartesian } from "../src/render/svg.js";
 
 const base = { weeklyTargetMinutes: 120, amberThresholdPercent: 75, onLeave: false };
@@ -306,5 +306,151 @@ describe("round caps that still land on the figure", () => {
             softRingsEnabled: false
         });
         expect(parts(svg, "ring-progress")[0]).toContain('stroke-linecap="round"');
+    });
+});
+
+describe("the labelled card's margins", () => {
+    // Every one of these was a hand-picked number that only happened to look
+    // right for three rows, which is why the card sat left of centre.
+
+    const input = {
+        activityMinutes: 9,
+        activityTarget: 120,
+        shiftHours: 1,
+        shiftTarget: 4,
+        activeDays: 1,
+        activeDaysTarget: 3,
+        state: "red" as const,
+        softRingsEnabled: true
+    };
+
+    /** Where the ring group lands on the card, and how far it was scaled. */
+    function ringPlacement(svg: string): { x: number; y: number; scale: number } {
+        const match = /translate\(([-\d.]+), ([-\d.]+)\) scale\(([\d.]+)\)/.exec(svg);
+        if (!match) throw new Error("no ring transform");
+        return { x: Number(match[1]), y: Number(match[2]), scale: Number(match[3]) };
+    }
+
+    /** The rings are drawn on a 200 canvas whose outer edge is 5 in from it. */
+    const RING_EDGE = 5;
+    const PAD = 24;
+
+    it("insets the rings by the margin on the left and on the top", () => {
+        const { x, y, scale } = ringPlacement(ringCardSvg(input));
+        expect(x + RING_EDGE * scale).toBeCloseTo(PAD, 1);
+        expect(y + RING_EDGE * scale).toBeCloseTo(PAD, 1);
+    });
+
+    it("ends the legend rails on the same margin", () => {
+        const svg = ringCardSvg(input);
+        const rails = [...svg.matchAll(/<rect x="(\d+)" y="[\d.]+" width="(\d+)"/g)];
+        expect(rails.length).toBeGreaterThan(0);
+        for (const rail of rails) {
+            expect(Number(rail[1]) + Number(rail[2])).toBe(460 - PAD);
+        }
+    });
+
+    it("centres the legend block whether it holds one row or three", () => {
+        // Three rows fill the height between the margins, matching the rings.
+        // One row does not stretch to fill it; it sits in the middle. Either
+        // way the ink above the block and below it has to come out equal.
+        const extent = (svg: string) => {
+            const labelYs = [...svg.matchAll(/<text x="234" y="([\d.]+)"[^>]*font-size="15"/g)]
+                .map((match) => Number(match[1]));
+            const railYs = [
+                ...svg.matchAll(/<rect x="234" y="([\d.]+)" width="\d+" height="4"/g)
+            ].map((match) => Number(match[1]));
+            expect(labelYs.length).toBeGreaterThan(0);
+            expect(railYs.length).toBeGreaterThan(0);
+            return { top: Math.min(...labelYs) - 11, bottom: Math.max(...railYs) + 4 };
+        };
+
+        const three = extent(ringCardSvg(input));
+        expect(three.top).toBeCloseTo(PAD, 1);
+        expect(200 - three.bottom).toBeCloseTo(PAD, 1);
+
+        const one = extent(ringCardSvg({ ...input, softRingsEnabled: false }));
+        expect(one.top).toBeCloseTo(200 - one.bottom, 1);
+    });
+});
+
+describe("the legend's ring markers", () => {
+    const input = {
+        activityMinutes: 9,
+        activityTarget: 120,
+        shiftHours: 1,
+        shiftTarget: 4,
+        activeDays: 1,
+        activeDaysTarget: 3,
+        state: "red" as const,
+        softRingsEnabled: true
+    };
+
+    it("gives every row a marker in the colour of the ring it names", () => {
+        const svg = ringCardSvg(input);
+        const halos = [...svg.matchAll(/<circle class="pip-halo"[^>]*stroke="([^"]+)"/g)].map(
+            (match) => match[1]
+        );
+        // Same three colours, in the same order, as the tracks in the drawing.
+        expect(halos).toEqual(["#ff453a", "#0a84ff", "#bf5af2"]);
+    });
+
+    it("dims the marker's halo by exactly as much as an unlit ring track", () => {
+        expect(ringCardSvg(input)).toContain('class="pip-halo"');
+        const halo = /<circle class="pip-halo"[^>]*>/.exec(ringCardSvg(input))?.[0] ?? "";
+        expect(halo).toContain('stroke-opacity="0.19"');
+    });
+
+    it("drops the two soft markers when the soft rings are off", () => {
+        const svg = ringCardSvg({ ...input, softRingsEnabled: false });
+        expect([...svg.matchAll(/class="pip-halo"/g)]).toHaveLength(1);
+    });
+
+    it("greys the markers out on leave, like the rings", () => {
+        const svg = ringCardSvg({ ...input, state: "leave" });
+        for (const colour of ["#ff453a", "#0a84ff", "#bf5af2"]) {
+            expect(svg).not.toContain(colour);
+        }
+    });
+
+    it("keeps a rail visible at a fraction of a percent", () => {
+        // A one pixel sliver reads as a rendering fault. The rail's own round
+        // end is the smallest thing that reads as "barely started".
+        const svg = ringCardSvg({ ...input, activityMinutes: 1 });
+        const fill = /<rect class="rail-fill"[^>]*width="([\d.]+)"/.exec(svg)?.[1];
+        expect(Number(fill)).toBeGreaterThanOrEqual(4);
+    });
+});
+
+describe("the glass is in the panel, never in the rings", () => {
+    const input = {
+        activityMinutes: 60,
+        activityTarget: 120,
+        shiftHours: 2,
+        shiftTarget: 4,
+        activeDays: 2,
+        activeDaysTarget: 3,
+        state: "red" as const,
+        softRingsEnabled: true
+    };
+
+    it("never blurs, at 20ms of a 27ms render", () => {
+        expect(ringCardSvg(input)).not.toContain("feGaussianBlur");
+        expect(ringsSvg(input)).not.toContain("feGaussianBlur");
+    });
+
+    it("gives the panel a sheen and a rim, and the bare rings neither", () => {
+        expect(ringCardSvg(input)).toContain("url(#panelSheen)");
+        expect(ringCardSvg(input)).toContain("url(#panelRim)");
+        // The thumbnail has no panel, so it must not reference one.
+        expect(ringsSvg(input)).not.toContain("panel");
+    });
+
+    it("still draws each ring as a track and an arc and nothing else", () => {
+        const svg = ringCardSvg({ ...input, softRingsEnabled: false });
+        const ringElements = [
+            ...svg.matchAll(/<(circle|path) class="ring-(track|progress|overlay)"/g)
+        ];
+        expect(ringElements).toHaveLength(2);
     });
 });

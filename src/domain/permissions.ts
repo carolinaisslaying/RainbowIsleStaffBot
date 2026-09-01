@@ -48,10 +48,11 @@ export function isBootstrapAdmin(userId: string): boolean {
 /**
  * Whether the deployment has any seeded admins at all.
  *
- * Permission refusals mention BOOTSTRAP_ADMIN_IDS only when this is false. A
- * configured deployment naming an environment variable at a Moderator who
- * simply lacks a role tells them nothing they can act on, and advertises the
- * escape hatch to everyone who mistypes a command.
+ * A permission refusal says the bot is not set up yet only when this is false.
+ * The cards are read by Moderators, so they never name the environment variable
+ * behind it: a configured deployment pointing a Moderator who simply lacks a
+ * role at a deployment setting tells them nothing they can act on, and
+ * advertises the escape hatch to everyone who mistypes a command.
  */
 export function bootstrapAdminsConfigured(): boolean {
     return env.bootstrapAdminIds.length > 0;

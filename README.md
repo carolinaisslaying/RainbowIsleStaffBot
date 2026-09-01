@@ -24,10 +24,10 @@ fetched.
 
 Configuration lives in two places, and only the first is a file.
 
-**1. `.env` — deployment wiring.** Token, application ID, the two guild IDs,
+**1. `.env`, the deployment wiring.** Token, application ID, the two guild IDs,
 the Mongo URL, the API token. Copy `.env.example` and fill it in.
 
-**2. The `guildConfig` document — everything else.** Roles, tracked channels,
+**2. The `guildConfig` document, everything else.** Roles, tracked channels,
 review and recap channels, targets, thresholds and timings. There is no config
 file for these: they are edited at runtime with `/config set`, Executive only,
 and every change is audited. `/config view` prints the current document.
@@ -43,7 +43,7 @@ cp .env.example .env
 ```
 
 Fill in `DISCORD_TOKEN`, `DISCORD_APPLICATION_ID`, `PUBLIC_GUILD_ID`,
-`STAFF_GUILD_ID`, `API_BEARER_TOKEN`, and — for the first setup only —
+`STAFF_GUILD_ID`, `API_BEARER_TOKEN`, and, for the first setup only,
 **`BOOTSTRAP_ADMIN_IDS` with your own Discord user ID**.
 
 That last one matters. Executive tier is resolved from the `executiveRoles`
@@ -155,8 +155,8 @@ crosses that gap by fetching from whichever server the key refers to.
 | `staffRankRoles` | Leave removes the department role only, not ranks |
 | `recapChannelId` | Recaps still DM; only the channel copy is missing |
 
-Everything else has a working default from the spec — targets, thresholds,
-timings, `accountingTimezone`, `weekStartDay`, `fortnightAnchor` — and can be
+Everything else has a working default from the spec: targets, thresholds,
+timings, `accountingTimezone`, `weekStartDay` and `fortnightAnchor`. All can be
 left alone until you want to change policy.
 
 `trackedChannels` deserves particular attention: it is the whitelist that
@@ -226,16 +226,16 @@ Registration failures are logged with a specific hint. `docker compose logs bot
 | grep -i "registered\|FAILED to register"` shows what happened.
 
 1. **Nothing logged at all** - the bot never reached ready. Check the token.
-2. **`FAILED to register ... 403`** — missing the `applications.commands`
+2. **`FAILED to register ... 403`.** Missing the `applications.commands`
    scope. Re-invite with the URL above; adding the bot with `bot` alone is the
    usual cause.
-3. **`FAILED to register ... 404`** — `DISCORD_APPLICATION_ID` does not match
+3. **`FAILED to register ... 404`.** `DISCORD_APPLICATION_ID` does not match
    the token's application, or the bot is not in that guild. The application ID
    is on the General Information page and is not always the bot user ID.
-4. **Registered, but you cannot see them** — you are probably looking in the
+4. **Registered, but you cannot see them.** You are probably looking in the
    wrong guild for that command (see the table above), or you lack Manage Guild
    in the staff guild for the Executive ones.
-5. **Registered, visible, but refused** — that is the permission tier talking,
+5. **Registered, visible, but refused.** That is the permission tier talking,
    not registration. See `BOOTSTRAP_ADMIN_IDS` above.
 
 Guild commands appear immediately; there is no one hour propagation delay,

@@ -1,6 +1,8 @@
 services:
     bot:
-        build: .
+        build:
+            context: .
+            dockerfile: Dockerfile
         restart: unless-stopped
         env_file: .env
         depends_on:
@@ -12,34 +14,49 @@ services:
         # inside this network.
         expose:
             - "8080"
-        healthcheck:
-            test:
-                [
-                    "CMD",
-                    "node",
-                    "-e",
-                    "fetch('http://127.0.0.1:'+(process.env.API_PORT||8080)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-                ]
-            interval: 30s
-            timeout: 5s
-            start_period: 40s
-            retries: 3
+        # A real init as PID 1. Node installs its own SIGTERM handler, but only
+        # once main() reaches that line; tini answers signals from the first
+        # instant and reaps anything the container leaves behind.
+        init: true
+        # The healthcheck lives in the Dockerfile, so the image describes how to
+        # tell whether it is alive wherever it is run, not only under compose.
+        logging: &logging
+            driver: json-file
+            options:
+                # Container logs are otherwise unbounded, and this bot logs on
+                # every interaction. Three files of 10MB is a few days of
+                # history against a disk that cannot fill.
+                max-size: "10m"
+                max-file: "3"
 
     mongo:
         image: mongo:8
         restart: unless-stopped
-        command: ["--bind_ip_all"]
+        # WiredTiger's default cache is half of everything above 1GB, which on
+        # any ordinary host is gigabytes reserved for a dataset measured in
+        # megabytes. Raise this if the collections ever grow past it; on a small
+        # host it is already below the default and changes nothing.
+        command: ["--bind_ip_all", "--wiredTigerCacheSizeGB", "0.5"]
         volumes:
             - mongo-data:/data/db
         networks:
             - internal
         # No ports section. Mongo is not reachable from the host.
         healthcheck:
-            test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
-            interval: 30s
-            timeout: 5s
-            start_period: 30s
-            retries: 5
+            # mongosh is a Node program and costs a second or so to start, so it
+            # runs every two minutes rather than every thirty seconds once the
+            # container is up. start_interval keeps boot detection fast: this is
+            # the gate `depends_on` waits on, and the bot cannot start until it
+            # passes. The 10s timeout is deliberate headroom -- mongosh's own
+            # startup can exceed 5s on a loaded host, which reads as a failing
+            # database when nothing is wrong.
+            test: ["CMD", "mongosh", "--quiet", "--norc", "--eval", "db.adminCommand('ping').ok"]
+            interval: 2m
+            timeout: 10s
+            start_period: 40s
+            start_interval: 2s
+            retries: 3
+        logging: *logging
 
 volumes:
     mongo-data:

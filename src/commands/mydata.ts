@@ -76,8 +76,8 @@ export const mydataCommand: Command = {
                         `${days.length} recorded days, ${shifts.length} shifts, ` +
                         `${weeks.length} weekly rollups, ${assessments.length} assessments, ` +
                         `${warnings.length} warnings, ${leave.length} leave records.\n\n` +
-                        "-# Only you can see this. No command deletes any of it. See " +
-                        "DELETION.md in the repository for the purge procedure."
+                        "-# Only you can see this. Nothing here is deleted by any command. " +
+                        "Ask an Executive if you need a record removed."
                 )
             )
             .addFileComponents(new FileBuilder().setURL(`attachment://${fileName}`));

@@ -22,6 +22,18 @@ export async function listActiveStaff(): Promise<StaffDoc[]> {
 }
 
 /**
+ * How many active members are hiding from the leaderboard.
+ *
+ * A count rather than the records, because the one caller needs it before it
+ * has acknowledged an interaction: Discord allows three seconds, the leaderboard
+ * itself takes longer than that to build, and whether the reply is ephemeral has
+ * to be decided at the moment it is deferred.
+ */
+export async function countHiddenStaff(): Promise<number> {
+    return collections.staff().countDocuments({ active: true, leaderboardOptOut: true });
+}
+
+/**
  * Registration is implicit: the first time we see a member of the Moderation
  * Department, they get a record. Timezone stays null until they set it, and the
  * onboarding gate refuses every other command until they do.
@@ -40,6 +52,7 @@ export async function ensureStaff(discordId: string): Promise<StaffDoc> {
                 joinedTeamAt: now,
                 active: true,
                 leaderboardOptOut: false,
+                ringFace: null,
                 createdAt: now
             },
             $set: { updatedAt: now }
@@ -57,6 +70,24 @@ export async function setTimezone(staffId: ObjectId, timezone: string): Promise<
         { $set: { timezone, timezoneSetAt: now, updatedAt: now } }
     );
     await audit("timezone.set", { targetStaffId: staffId, detail: { timezone } });
+}
+
+/**
+ * The second half of onboarding. Cosmetic, and still required: a member who has
+ * never been asked has no face, and the whole point is that the first ring card
+ * they ever see is one they chose.
+ */
+export async function setRingFace(staffId: ObjectId, faceId: string): Promise<void> {
+    await collections.staff().updateOne(
+        { _id: staffId },
+        { $set: { ringFace: faceId, updatedAt: new Date() } }
+    );
+    await audit("face.set", { targetStaffId: staffId, detail: { face: faceId } });
+}
+
+/** Has this member ever chosen a face? */
+export function needsRingFace(staff: StaffDoc | null): boolean {
+    return !staff || !staff.ringFace;
 }
 
 export async function setLeaderboardOptOut(

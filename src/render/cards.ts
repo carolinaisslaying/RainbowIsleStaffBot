@@ -14,7 +14,7 @@ import {
     ThumbnailBuilder
 } from "discord.js";
 import type { APIMessageTopLevelComponent, JSONEncodable } from "discord.js";
-import type { RingState } from "../db/types.js";
+import type { LeaveStatus, RingState } from "../db/types.js";
 import { cmd } from "../discord/commandMentions.js";
 import { RING_STATE_COLOUR, RING_STATE_LABEL } from "../domain/rings.js";
 import {
@@ -23,6 +23,7 @@ import {
     ringsCacheKey,
     type RingsInput
 } from "./rings.js";
+import { describeFaces, renderFacePicker } from "./facePicker.js";
 import { formatDuration, formatMinutes, percent, ts } from "../time/format.js";
 import { COLOUR } from "./theme.js";
 
@@ -88,6 +89,8 @@ export function errorCard(body: string): RenderedMessage {
 export interface RingCardInput {
     staffId: string;
     displayName: string;
+    /** The subject's chosen ring face. Theirs, not the viewer's. */
+    face?: string | null;
     weekStart: Date;
     weekEnd: Date;
     activityMinutes: number;
@@ -106,6 +109,7 @@ export interface RingCardInput {
 function ringsInputFor(input: RingCardInput): RingsInput {
     const shiftHours = input.shiftMs / 3_600_000;
     return {
+        face: input.face,
         activityMinutes: input.activityMinutes,
         activityTarget: input.activityTarget,
         shiftHours,
@@ -119,7 +123,8 @@ function ringsInputFor(input: RingCardInput): RingsInput {
             shiftHours: Math.round(shiftHours * 100) / 100,
             activeDays: input.activeDays,
             state: input.state,
-            softRingsEnabled: input.softRingsEnabled
+            softRingsEnabled: input.softRingsEnabled,
+            face: input.face
         })
     };
 }
@@ -404,29 +409,56 @@ export function reviewRowCard(row: ReviewRowInput): ContainerBuilder {
  * who removed it, so the channel still reads as a record of what was decided
  * rather than going quiet about a request that once existed.
  */
+/**
+ * How each state of a leave record is coloured.
+ *
+ * Colour never carries meaning alone, and every card below also says its state
+ * in words. But the channel is read at a glance and scrolled past, so the
+ * glance should be right. Amber is a decision waiting on a human, green a yes, red a
+ * no, blue something running by itself, grey something finished with nothing
+ * left to do.
+ */
+const LEAVE_STATUS_COLOUR: Record<LeaveStatus, number> = {
+    pending: COLOUR.pending,
+    approved: COLOUR.approved,
+    declined: COLOUR.adverse,
+    active: COLOUR.inProgress,
+    ended: COLOUR.settled
+};
+
+const LEAVE_STATUS_LABEL: Record<LeaveStatus, string> = {
+    pending: "Waiting on an Executive",
+    approved: "Approved, not started yet",
+    declined: "Declined",
+    active: "On leave now",
+    ended: "Back"
+};
+
 export function leaveRequestCard(options: {
     leaveId: string;
     displayName: string;
     startDate: Date;
     endDate: Date | null;
     reason: string;
+    status: LeaveStatus;
     decided: string | null;
+    /** What became of the leave itself: ended early, ran its course, came back. */
+    outcome?: string | null;
     purged?: string | null;
 }): RenderedMessage {
     const container = new ContainerBuilder()
         .setAccentColor(
-            options.purged
-                ? COLOUR.settled
-                : options.decided
-                  ? COLOUR.settled
-                  : COLOUR.pending
+            options.purged ? COLOUR.settled : LEAVE_STATUS_COLOUR[options.status]
         )
         .addTextDisplayComponents(
             text(
                 `## Leave request\n**${options.displayName}**\n` +
+                    `-# ${LEAVE_STATUS_LABEL[options.status]}\n` +
                     `From ${ts(options.startDate, "f")} ` +
                     `to ${options.endDate ? ts(options.endDate, "f") : "**open ended**"}` +
-                    (options.endDate ? `, ending ${ts(options.endDate, "R")}` : "") +
+                    (options.endDate && options.status !== "ended"
+                        ? `, ending ${ts(options.endDate, "R")}`
+                        : "") +
                     `\n\n**Reason**\n${options.reason}`
             )
         );
@@ -438,12 +470,16 @@ export function leaveRequestCard(options: {
         container.addTextDisplayComponents(text(options.decided));
     }
 
+    if (options.outcome) {
+        container.addTextDisplayComponents(text(options.outcome));
+    }
+
     if (options.purged) {
         container.addSeparatorComponents(separator());
         container.addTextDisplayComponents(
             text(
-                `-# ${options.purged}\n-# The record is gone from the database. The audit ` +
-                    "log retains what it held."
+                `-# ${options.purged}\n-# The record is gone. The audit log retains what it ` +
+                    "held."
             )
         );
         // No buttons: there is nothing left to act on, and a button that can
@@ -451,27 +487,46 @@ export function leaveRequestCard(options: {
         return { components: [container], files: [], flags: V2_FLAGS };
     }
 
-    if (options.decided) {
-        container.addActionRowComponents(
-            new ActionRowBuilder<ButtonBuilder>().addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`leavePurge:${options.leaveId}:ask`)
-                    .setLabel("Purge this record")
-                    .setStyle(ButtonStyle.Danger)
-            )
+    const buttons: ButtonBuilder[] = [];
+
+    if (options.status === "pending") {
+        buttons.push(
+            new ButtonBuilder()
+                .setCustomId(`leave:${options.leaveId}:approve`)
+                .setLabel("Approve")
+                .setStyle(ButtonStyle.Success),
+            new ButtonBuilder()
+                .setCustomId(`leave:${options.leaveId}:decline`)
+                .setLabel("Decline")
+                .setStyle(ButtonStyle.Danger)
         );
-    } else {
+    }
+
+    // Leave that is running, or approved and about to, is the only leave there
+    // is anything to end. The label says what the click does rather than naming
+    // the state it moves to: an Executive pressing this is bringing someone
+    // back, today, whatever the record says about next Friday.
+    if (options.status === "approved" || options.status === "active") {
+        buttons.push(
+            new ButtonBuilder()
+                .setCustomId(`leave:${options.leaveId}:end`)
+                .setLabel(options.status === "active" ? "Bring them back now" : "Cancel this leave")
+                .setStyle(ButtonStyle.Secondary)
+        );
+    }
+
+    if (options.status !== "pending") {
+        buttons.push(
+            new ButtonBuilder()
+                .setCustomId(`leavePurge:${options.leaveId}:ask`)
+                .setLabel("Purge this record")
+                .setStyle(ButtonStyle.Danger)
+        );
+    }
+
+    if (buttons.length > 0) {
         container.addActionRowComponents(
-            new ActionRowBuilder<ButtonBuilder>().addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`leave:${options.leaveId}:approve`)
-                    .setLabel("Approve")
-                    .setStyle(ButtonStyle.Success),
-                new ButtonBuilder()
-                    .setCustomId(`leave:${options.leaveId}:decline`)
-                    .setLabel("Decline")
-                    .setStyle(ButtonStyle.Danger)
-            )
+            new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons)
         );
     }
 
@@ -479,12 +534,61 @@ export function leaveRequestCard(options: {
 }
 
 /**
+ * The second click on ending someone's leave early.
+ *
+ * Ending leave restores ranks, restarts assessment and tells the member they
+ * are back, all at once and all to somebody who is not in the room. That is
+ * worth one confirmation, and the confirmation names the person and the date
+ * being cut short rather than asking "are you sure".
+ */
+export function leaveEndConfirmCard(options: {
+    leaveId: string;
+    displayName: string;
+    endDate: Date | null;
+    active: boolean;
+}): RenderedMessage {
+    const container = new ContainerBuilder()
+        .setAccentColor(COLOUR.pending)
+        .addTextDisplayComponents(
+            text(
+                `### ${options.active ? "Bring them back now?" : "Cancel this leave?"}\n` +
+                    `${options.displayName} ` +
+                    (options.active
+                        ? options.endDate
+                            ? `is due back ${ts(options.endDate, "D")}, ` +
+                              `${ts(options.endDate, "R")}. Ending it now restores their ranks ` +
+                              "and tells them they are back."
+                            : "is on open ended leave. Ending it now restores their ranks and " +
+                              "tells them they are back."
+                        : "has not started this leave yet. Cancelling it means their ranks " +
+                          "are never set aside and they are told it is off.") +
+                    "\n\nThe fortnights this leave excused stay excused. They can request " +
+                    "leave again at any time."
+            )
+        )
+        .addActionRowComponents(
+            new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`leave:${options.leaveId}:endConfirm`)
+                    .setLabel(options.active ? "Bring them back" : "Cancel the leave")
+                    .setStyle(ButtonStyle.Danger),
+                new ButtonBuilder()
+                    .setCustomId(`leave:${options.leaveId}:endCancel`)
+                    .setLabel("Leave it running")
+                    .setStyle(ButtonStyle.Secondary)
+            )
+        );
+
+    return { components: [container], files: [], flags: V2_FLAGS | MessageFlags.Ephemeral };
+}
+
+/**
  * What the parser made of what the member typed, shown before anything is
  * recorded.
  *
  * Plain English costs a member nothing to type and costs the parser a guess, so
- * the guess is put in front of them in full — weekday, date, year, time and the
- * zone it was read in — while the request is still nothing but a form. A wrong
+ * the guess is put in front of them in full, weekday and date and year and time
+ * and the zone it was read in, while the request is still only a form. A wrong
  * reading is one click from being thrown away here. Once submitted it is an
  * Executive's problem.
  */
@@ -585,6 +689,77 @@ export function purgeConfirmCard(options: {
     );
 
     return { components: [container], files: [], flags: V2_FLAGS | MessageFlags.Ephemeral };
+}
+
+/**
+ * The second onboarding gate: pick a ring face.
+ *
+ * It comes after the timezone because the timezone is functional and this is
+ * not, and it is still a gate because a face nobody was asked about is a
+ * setting nobody knows exists. Asking once, at the point the images start
+ * appearing, is the difference between a preference and a thing they own.
+ *
+ * Four buttons, one image, no scrolling. The picture is the argument; the
+ * blurbs underneath are for anyone deciding between two of them.
+ */
+export function faceSetupCard(
+    faces: RingFaceOption[],
+    guildId?: string | null
+): RenderedMessage {
+    const png = renderFacePicker();
+    const fileName = "ring-faces.png";
+    const attachment = new AttachmentBuilder(png, {
+        name: fileName,
+        description: describeFaces()
+    });
+
+    const container = new ContainerBuilder()
+        .setAccentColor(COLOUR.personal)
+        .addTextDisplayComponents(
+            text(
+                "### Pick your rings\n" +
+                    "Your activity, shift time and active days are drawn as three rings. " +
+                    "Choose the colours you want to look at. This is yours, and it changes " +
+                    "nothing anybody measures."
+            )
+        )
+        .addMediaGalleryComponents(
+            new MediaGalleryBuilder().addItems(
+                new MediaGalleryItemBuilder()
+                    .setURL(`attachment://${fileName}`)
+                    .setDescription(describeFaces())
+            )
+        )
+        .addTextDisplayComponents(
+            text(faces.map((face) => `**${face.name}**: ${face.blurb}`).join("\n"))
+        )
+        .addActionRowComponents(
+            new ActionRowBuilder<ButtonBuilder>().addComponents(
+                ...faces.map((face) =>
+                    new ButtonBuilder()
+                        .setCustomId(`face:${face.id}:set`)
+                        .setLabel(face.name)
+                        .setStyle(ButtonStyle.Secondary)
+                )
+            )
+        )
+        .addTextDisplayComponents(
+            text(`-# You can change it whenever you like with ${cmd("staff face", guildId)}.`)
+        );
+
+    return {
+        components: [container],
+        files: [attachment],
+        flags: V2_FLAGS | MessageFlags.Ephemeral
+    };
+}
+
+/** What the picker needs to know about a face. Kept structural so `render/` */
+/** stays a leaf and does not reach into anything above it. */
+export interface RingFaceOption {
+    id: string;
+    name: string;
+    blurb: string;
 }
 
 /** The onboarding gate. Refuses the original action and explains why. */

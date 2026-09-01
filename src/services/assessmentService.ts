@@ -10,7 +10,6 @@ import {
     windowForIndex
 } from "../domain/assessments.js";
 import { findStaffById } from "../domain/staff.js";
-import { fetchMember } from "../discord/roles.js";
 import { staffChannel } from "./leaveService.js";
 import {
     containersMessage,
@@ -25,6 +24,7 @@ import { labelWindow, formatMinutes } from "../time/format.js";
 import { cmd } from "../discord/commandMentions.js";
 import { COLOUR } from "../render/theme.js";
 import { log } from "../log.js";
+import { staffDisplayName } from "../discord/displayName.js";
 
 /**
  * The bot never issues a warning by itself. It assesses, posts one review card
@@ -148,15 +148,21 @@ export async function postReviewCard(
     const MAX_ROWS = 12;
     for (const assessment of below.slice(0, MAX_ROWS)) {
         const staff = await findStaffById(assessment.staffId);
-        const member = staff
-            ? await fetchMember(client, config.publicGuildId, staff.discordId)
-            : null;
         containers.push(
             reviewRowCard({
                 assessmentId: assessment._id.toHexString(),
-                displayName: member
-                    ? `${member.displayName} (<@${staff?.discordId}>)`
-                    : (staff?.discordId ?? "unknown member"),
+                // The mention is appended rather than used as the fallback,
+                // so someone who has left both servers reads as a named row an
+                // Executive can still click through, not as the same mention
+                // printed twice.
+                displayName: staff
+                    ? `${await staffDisplayName(
+                          client,
+                          config,
+                          staff.discordId,
+                          "Departed member"
+                      )} (<@${staff.discordId}>)`
+                    : "unknown member",
                 week1Minutes: assessment.week1Minutes,
                 week2Minutes: assessment.week2Minutes,
                 totalMinutes: assessment.totalMinutes,

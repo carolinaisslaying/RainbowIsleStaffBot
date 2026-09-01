@@ -9,8 +9,8 @@ import {
 } from "../domain/weekly.js";
 import { isLeadOrAbove } from "../domain/permissions.js";
 import { errorCard, noticeCard, ringCard } from "../render/cards.js";
-import { fetchMember } from "../discord/roles.js";
 import { defer, respond } from "../discord/respond.js";
+import { staffDisplayName } from "../discord/displayName.js";
 
 export const ringsCommand: Command = {
     tier: "staff",
@@ -24,7 +24,7 @@ export const ringsCommand: Command = {
                 .setRequired(false)
         ),
 
-    async execute({ client, config, interaction, staff, member, tier }) {
+    async execute({ client, config, interaction, staff, tier }) {
         const target = interaction.options.getUser("user");
         const isSelf = !target || target.id === interaction.user.id;
 
@@ -51,10 +51,6 @@ export const ringsCommand: Command = {
             return;
         }
 
-        const subjectMember = isSelf
-            ? member
-            : await fetchMember(client, config.publicGuildId, subject.discordId);
-
         const window = weekWindowFor(new Date(), config);
         const stats = await currentWeekStats(subject._id, config);
         const streak = await computeStreak(subject._id, config);
@@ -63,7 +59,15 @@ export const ringsCommand: Command = {
             interaction,
             ringCard({
                 staffId: subject._id.toHexString(),
-                displayName: subjectMember?.displayName ?? interaction.user.username,
+                displayName: await staffDisplayName(
+                    client,
+                    config,
+                    subject.discordId,
+                    // The subject's handle, not the viewer's. A Lead looking at
+                    // someone who has left both servers used to get their own
+                    // name on the other member's card.
+                    (target ?? interaction.user).username
+                ),
                 weekStart: window.start,
                 weekEnd: window.end,
                 activityMinutes: stats.activityMinutes,
@@ -74,6 +78,7 @@ export const ringsCommand: Command = {
                 activeDaysTarget: config.weeklyActiveDaysTarget,
                 state: stats.ringState,
                 softRingsEnabled: config.softRingsEnabled,
+        face: subject.ringFace,
                 streak,
                 footnote: leaveNoteFor(stats)
             })

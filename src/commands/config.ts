@@ -421,7 +421,7 @@ async function applyChange(
     const before = { ...fresh, [key]: previous } as StaffBotConfig;
 
     const nextStep = status.ready
-        ? "Everything essential is set."
+        ? "Every required setting now has a value."
         : `Still needed: ${status.missingRequired.map((item) => `**${item}**`).join(", ")}.`;
 
     await respond(

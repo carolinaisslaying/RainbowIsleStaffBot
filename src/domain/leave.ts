@@ -207,12 +207,33 @@ export async function markLeaveActive(
 
 export async function markLeaveEnded(
     leaveId: ObjectId,
-    restoreErrors: string[]
+    restoreErrors: string[],
+    endedEarlyBy: ObjectId | null = null
 ): Promise<void> {
     await collections.leave().updateOne(
         { _id: leaveId },
-        { $set: { status: "ended", rolesRestoredAt: new Date(), restoreErrors } }
+        {
+            $set: { status: "ended", rolesRestoredAt: new Date(), restoreErrors, endedEarlyBy }
+        }
     );
+}
+
+/**
+ * Remember where the request's card was posted.
+ *
+ * Every later change of state edits that one card rather than posting a second
+ * message about the same leave, so the channel reads as one row per request
+ * from "pending" through to "ended". That is only possible if the record knows
+ * where its own card is.
+ */
+export async function recordLeaveCard(
+    leaveId: ObjectId,
+    channelId: string,
+    messageId: string
+): Promise<void> {
+    await collections
+        .leave()
+        .updateOne({ _id: leaveId }, { $set: { logChannelId: channelId, logMessageId: messageId } });
 }
 
 /**

@@ -2,8 +2,8 @@
  * Reading a date out of ordinary English.
  *
  * The parser does not try to work out which day a phrase means. It works out
- * what the phrase *constrains* — a weekday, a day of the month, a month, an
- * hour — and hands that to a resolver which walks forward from the member's own
+ * what the phrase *constrains*: a weekday, a day of the month, a month, an
+ * hour. It hands that to a resolver which walks forward from the member's own
  * today until it finds the first date satisfying all of it. That split is what
  * makes "Tuesday the 6th" behave: the two facts are constraints on one date
  * rather than two competing answers, and a phrase whose constraints can never

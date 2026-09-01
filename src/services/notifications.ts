@@ -2,7 +2,7 @@ import type { Client } from "discord.js";
 import { ObjectId } from "mongodb";
 import type { StaffBotConfig } from "../config/guildConfig.js";
 import { collections } from "../db/client.js";
-import { fetchMember, tryDm } from "../discord/roles.js";
+import { tryDm } from "../discord/roles.js";
 import { findStaffById, listActiveStaff } from "../domain/staff.js";
 import {
     computeStreak,
@@ -17,6 +17,7 @@ import { localHourIn } from "../time/timezones.js";
 import { formatMinutes, ts } from "../time/format.js";
 import { COLOUR } from "../render/theme.js";
 import { log } from "../log.js";
+import { staffDisplayName } from "../discord/displayName.js";
 
 /**
  * Ring closure DMs, weekly recaps and milestones.
@@ -62,12 +63,11 @@ export async function maybeRingClosure(
     const staff = await findStaffById(staffId);
     if (!staff) return;
 
-    const member = await fetchMember(client, config.publicGuildId, staff.discordId);
     const streak = await computeStreak(staffId, config, now);
 
     const card = ringGalleryCard({
         staffId: staffId.toHexString(),
-        displayName: member?.displayName ?? "You",
+        displayName: await staffDisplayName(client, config, staff.discordId, "You"),
         weekStart: window.start,
         weekEnd: window.end,
         activityMinutes: stats.activityMinutes,
@@ -78,6 +78,7 @@ export async function maybeRingClosure(
         activeDaysTarget: config.weeklyActiveDaysTarget,
         state: stats.ringState,
         softRingsEnabled: config.softRingsEnabled,
+        face: staff.ringFace,
         streak,
         heading: "## Ring closed"
     });
@@ -184,11 +185,10 @@ async function sendRecap(
                 : `down ${rank - priorRank}`;
 
     const streak = await computeStreak(staffId, config);
-    const member = await fetchMember(client, config.publicGuildId, staff.discordId);
 
     const card = ringCard({
         staffId: staffId.toHexString(),
-        displayName: member?.displayName ?? "You",
+        displayName: await staffDisplayName(client, config, staff.discordId, "You"),
         weekStart: closed.start,
         weekEnd: closed.end,
         activityMinutes: stored.activityMinutes,
@@ -199,6 +199,7 @@ async function sendRecap(
         activeDaysTarget: config.weeklyActiveDaysTarget,
         state: stored.ringState,
         softRingsEnabled: config.softRingsEnabled,
+        face: staff.ringFace,
         streak,
         heading: "## Your week",
         footnote:

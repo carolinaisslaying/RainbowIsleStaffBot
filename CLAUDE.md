@@ -6,10 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - Node >= 26, TypeScript 5.9.3, ESM (`"type": "module"`, `module`/`moduleResolution: NodeNext`).
   Relative imports **must** carry the `.js` extension, including in `test/`.
-- discord.js 14.27.0 — Components V2 only (`MessageFlags.IsComponentsV2`). With that flag set,
+- discord.js 14.27.0. Components V2 only (`MessageFlags.IsComponentsV2`). With that flag set,
   `content`, `embeds`, `poll` and `stickers` are unavailable on a message.
 - mongodb 6.21.0 (driver, no ODM). MongoDB 8 in Docker.
-- @resvg/resvg-js 2.6.2 — SVG rasterised to PNG for rings and heatmaps.
+- @resvg/resvg-js 2.6.2. SVG rasterised to PNG for rings and heatmaps.
 - vitest 3.2.7. No linter or formatter is configured; `tsc` is the only static check.
 
 ## Commands
@@ -69,19 +69,74 @@ edited with `/config set`. Everything the spec calls configurable is a key on `S
 check, because that check fails for reasons only fixable via `/config set`; a failure must not
 leave the bot with no commands. `reconcileOnBoot` runs before any scheduler starts.
 
+**Docker.** One `npm ci` for the whole build: the deps stage installs, the build stage compiles and
+then `npm prune --omit=dev`, and the runtime stage copies that tree rather than resolving production
+dependencies a second time. Every stage is the same base image on the same platform, which is what
+makes copying `node_modules` (resvg's prebuilt native binary included) safe. The runtime installs
+`fonts-inter`, `fonts-dejavu-core` and `curl` and **asserts the font paths with `test -d`**. That
+assertion has already earned itself: it caught `fonts.ts` looking for Inter under `truetype/` when
+Debian ships it under `opentype/`. No `fontconfig`: `FONT_OPTIONS` names its directories, so nothing ever
+consults it. The healthcheck is curl, not `node -e`; the old one started a Node runtime every 30
+seconds. Mongo's healthcheck runs `mongosh`, which is itself a Node program, so it polls every two
+minutes with a `start_interval` keeping boot detection fast.
+
 **Two guilds.** Roles live in the public guild; commands answer in the staff guild or in DMs.
 `resolveTierAllowingLeave` in `interactionCreate.ts` re-grants Staff tier to members whose
 department role was removed by active leave, or they could not run `/leave end`.
 
+Consequently **permissions read the public guild and display names read the staff guild**, and the
+two must not be confused. `fetchPublicMember` is for roles and tiers only. Every name the bot prints
+goes through `staffDisplayName` (`src/discord/displayName.ts`), which prefers the staff guild's
+nickname, falls back to the public guild's, then to a caller-supplied last resort. Never print
+`member.displayName` from a member fetched for a permission check: that member came from the public
+guild, and its name is the community nickname rather than the one the staff room uses. That was
+the bug: one person appeared under two different names depending on which card they were on.
+
+**The leaderboard is public unless somebody's copy is not.** `leaderboardVisibility`
+(`domain/leaderboard.ts`) decides: a Lead or Executive sees hidden members flagged, and a hidden
+member sees their own row, so either copy goes ephemeral. That only holds while somebody is
+actually hidden; otherwise standings belong in the channel. The decision happens *before* the defer, because
+ephemerality is fixed at defer time, which is why `countHiddenStaff` exists as a count rather than a
+fetch. The card always states which way it went and why. Paging a card that is sitting in a channel
+renders the everyone-view whoever presses it: the buttons edit that public message, so a Lead
+pressing Next would otherwise publish every hidden row to the channel.
+
+**Nothing user-facing names a file, a repository or an environment variable.** The cards are read by
+Moderators. Operator detail belongs in `log.*`, which is where it now lives.
+
+**Config transfer.** `/config view` carries **Export as JSON** and **Import JSON**.
+`config/configTransfer.ts` holds both, as pure functions over a config object. Import applies only
+the keys the paste names, which makes a partial paste a feature (copy policy between deployments
+without the ids) and works around the modal's 4000 character ceiling. Every value goes through
+`parseConfigValue`, the same validator `/config set` uses, so no rule is written twice. An import is
+all or nothing: one bad key fails the batch and the report names every problem at once. A paste is
+staged in memory with a 10 minute TTL, shown as a before and after list, and applied only by the
+person who pasted it. The `config` button namespace and the import modal are the one exception to
+the staff-server-only surface rule, because they follow their command into the community server
+recovery hatch.
+
 **Interaction routing.** All buttons go through `routeButton` in `src/events/interactionCreate.ts`,
-which splits `customId` on `:` into `namespace:first:second`. Namespaces in use: `review`, `leave`,
-`leaveConfirm`, `leavePurge`, `tz`, `leaderboard`. A pressed button edits its own message in place
+which splits `customId` on `:` into `namespace:first:second`. Namespaces in use: `config`
+(`export`/`import`/`apply`/`discard`), `review`, `leave`
+(`approve`/`decline`/`end`/`endConfirm`/`endCancel`), `leaveConfirm`, `leavePurge`, `tz`,
+`leaderboard`. A pressed button edits its own message in place
 (`interaction.update` / `deferUpdate` + `editReply`) rather than replying beneath it.
 
 **Time.** Two clocks. `config.accountingTimezone` defines weeks and fortnights for everyone;
 a member's `timezone` is display only. All zone maths goes through `src/time/calendar.ts`, which
 uses `Intl.DateTimeFormat` parts and never assumes a 24-hour day (`zonedToUtc` converges in two
 passes). `activityDays` is keyed by **UTC** day (`utcDayKey`), independent of both clocks.
+
+**One leave record, one card.** A request's card in the leave channel is edited in place through
+its whole life, from pending through approved or declined, active, back and purged. It is never
+replaced, and never followed by a second message. `logChannelId`/`logMessageId` on the record are what make that possible, and
+`leaveCardFor` in `services/leaveService.ts` is the only thing that draws it, so colour, buttons and
+status cannot disagree. Colour is the state: amber waiting on a human, green approved, red declined,
+blue running, grey finished. Buttons are the actions that state actually has, which is why a
+declined record offers no way to end anything. An Executive can end active leave (or cancel approved
+leave) from that card; it confirms first, because ending leave restores ranks, restarts assessment
+and tells somebody who is not in the room that they are back. `endLeave` takes a `LeaveEndReason`
+and returns the card it sent, so `/leave end` shows the member exactly what it DMed them.
 
 **Leave input is parsed, not read.** `src/time/naturalDate.ts` turns a phrase into constraints
 (`{weekday?, day?, month?, year?, hour, minute}`); `src/time/input.ts` resolves them by walking
@@ -91,7 +146,7 @@ Because the parser interprets, a modal submission is **staged in memory** (`even
 
 **Rollups are derived, never authoritative.** `weeklyStats` and `fortnightAssessments` are
 recomputed from `activityDays`/`shifts`/`leave` by `/admin recompute`. Consequence: deleting raw
-data silently changes historical verdicts — a purged leave record removes the exemption that made
+data silently changes historical verdicts: a purged leave record removes the exemption that made
 a past fortnight `exempt` (`domain/assessments.ts` + `domain/leavePurge.ts`).
 
 **Deletion.** `purgeLeaveRecord` is the only delete in the codebase, reachable only from the
@@ -100,19 +155,49 @@ aborts if that write fails. `DELETION.md` is the procedure for everything else a
 Note `audit()` in `domain/audit.ts` deliberately swallows its own failures; the purge path
 therefore writes to `collections.auditLog()` directly so a failure can abort.
 
+**Ring faces.** A member picks one of four curated faces (`render/faces.ts`), stored as
+`StaffDoc.ringFace`. A face sets **only the two soft rings**, shift time and active days, because
+`rings.ts` says those carry no compliance meaning. The outer ring is red/amber/green/grey and is
+never customisable: a member who could recolour it could hide the answer from themselves. Leave
+overrides the face entirely, since grey is what "away" means. Two rules the tests enforce: **no face
+may use a hue in the reserved bands** (0–60 red/amber, 90–165 green), or "on target" and "that is
+just their shift ring" become the same glance; and a face's two hues must sit at least 35° apart.
+Faces are curated, never free hex. The track renders at 0.19 alpha on near-black, and most
+arbitrary colours read there as a fault. `light` and `overlay` are derived from one core hex by `lighten`,
+which reproduces the original hand-picked values to within a couple of values per channel.
+**`ringsCacheKey` includes the face**; without it, changing your face changes nothing you can see
+until your minute count happens to move.
+
+**Onboarding is two gates,** both in `interactionCreate.ts`: timezone (functional) then ring face
+(not). `/timezone set` bypasses both. The timezone confirm button leads straight into the face
+picker rather than saying "saved", so it reads as two choices instead of two refusals. Adding
+`ringFace` means every existing member is asked once on their next command.
+
 **Images.** `ringsSvg` / `ringCardSvg` / `heatmapSvg` are pure string functions, exported separately
 from the `render*` wrappers so tests assert on markup without invoking resvg. Ring elements carry
 semantic classes (`ring-track`, `ring-progress`, `ring-overlay`), which is what the tests count.
 PNGs are LRU-cached by `ringsCacheKey`. Every `new Resvg` must pass `font: FONT_OPTIONS`
-(`render/fonts.ts`) — the default rebuilds a font database per image. Only Inter and DejaVu are
+(`render/fonts.ts`), or the default rebuilds a font database per image. Only Inter and DejaVu are
 installed in the runtime image (see `Dockerfile`).
 
-Two rules the renderers exist to obey, both learned by getting them wrong. **A ring is a track and
-an arc, nothing else** — decorative strokes multiply by three rings and turn the image into a
+Three rules the renderers exist to obey, all learned by getting them wrong. **A ring is a track and
+an arc, nothing else**. Decorative strokes multiply by three rings and turn the image into a
 bullseye. **No `feGaussianBlur`**: it cost 20ms of a 27ms render; use flat fills and gradients.
+**Glass is a property of the panel, never of a ring**: `render/panel.ts` is the only place that
+draws it, as three layers (a near-black ground, a specular sheet over the upper 46%, and a rim
+brighter along the top edge than the bottom), and both `ringCardSvg` and `heatmapSvg` call it.
 Panels are near-black (`SURFACE` in `theme.ts`) so they read as an inset rather than as a box
-inside Discord's ~#2b2d31 container. Preview against *sparse* data (0%, 8%, an all-zero heatmap),
-not busy data — every failure in this area has been an empty or near-empty state.
+inside Discord's ~#2b2d31 container. The one exception to the flat-ring rule is the legend marker
+beside each row of the ring card: a lit bead inside a halo dimmed by `trackAlpha`, which is the
+legend's echo of that row's track and arc.
+
+Every margin on an image comes from one constant per file (`PANEL_PAD`, `PAD`), and derived
+positions are computed from it rather than typed in: three legend rows are spaced so the block is
+exactly as tall as the rings are wide, so both are inset by the same amount on all four sides.
+`test/rings.test.ts` and `test/heatmap.test.ts` assert those margins, because the failure mode here
+is a card that looks a few pixels off-centre and no one can say why. Preview against *sparse* data
+(0%, 8%, an all-zero heatmap), not busy data. Every failure in this area has been an empty or
+near-empty state.
 
 **Jobs** (`src/jobs/index.ts`): `shift-sweep` and `leave-transitions` every minute, `recaps` hourly,
 `week-close` at 00:05 in the accounting timezone. All are date-driven and idempotent, so a missed
@@ -125,7 +210,7 @@ in scope for a deletion request.
 
 ## Tests
 
-`test/` covers pure functions only — there is no database or Discord fixture. Domain logic that
+`test/` covers pure functions only. There is no database or Discord fixture. Domain logic that
 needs testing is factored into a pure function first (`coverageOf` beside `leaveCoverageFor`,
 `transitionFor` in `presenceUpdate.ts`). Tests that involve dates freeze `now` and pass an explicit
 timezone, usually `Pacific/Auckland`, because it has a DST rule that catches 24-hour-day

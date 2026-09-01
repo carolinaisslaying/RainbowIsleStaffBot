@@ -24,6 +24,7 @@ import { formatDuration, ts } from "../time/format.js";
 import { COLOUR } from "../render/theme.js";
 import { publicGuildName } from "../discord/guildNames.js";
 import { cmd } from "../discord/commandMentions.js";
+import { staffDisplayName } from "../discord/displayName.js";
 
 /**
  * Shift orchestration: the state machine plus the role, DM and card effects
@@ -77,6 +78,7 @@ async function ringCardFor(
         activeDaysTarget: config.weeklyActiveDaysTarget,
         state: stats.ringState,
         softRingsEnabled: config.softRingsEnabled,
+        face: staff.ringFace,
         streak,
         heading,
         footnote: leaveNoteFor(stats)
@@ -101,7 +103,13 @@ export async function beginShift(
     client: Client,
     config: StaffBotConfig,
     staff: StaffDoc,
-    displayName: string
+    displayName: string,
+    /**
+     * Where the reply will be read. A command mention carries the id of one
+     * registration, and the staff server's ids and the direct message ones are
+     * different: send the wrong one and Discord renders the chip as flat text.
+     */
+    guildId?: string | null
 ): Promise<StartResult> {
     const existing = await getOpenShift(staff._id);
     if (existing) {
@@ -113,7 +121,7 @@ export async function beginShift(
                     ? `Your shift is open but marked away. Send a message in ${publicGuildName()}, ` +
                       "or come back online, and you will be available again.\n\n" +
                       `It ends itself ${ts(awayDeadline(existing, config), "R")} if you stay away.`
-                    : `Use ${cmd("shift end")} when you are finished.`,
+                    : `Use ${cmd("shift end", guildId)} when you are finished.`,
                 { ephemeral: true }
             )
         };
@@ -126,7 +134,7 @@ export async function beginShift(
             card: noticeCard(
                 "You are on leave",
                 "Shifts are unavailable while your leave is active. Ask an Executive to end " +
-                    `your leave, or use ${cmd("leave end")} if you are back early.`,
+                    `your leave, or use ${cmd("leave end", guildId)} if you are back early.`,
                 { ephemeral: true }
             )
         };
@@ -276,6 +284,7 @@ export async function finishShift(
         activeDaysTarget: config.weeklyActiveDaysTarget,
         state: stats.ringState,
         softRingsEnabled: config.softRingsEnabled,
+        face: staff.ringFace,
         streak,
         durationMs: closed.durationMs,
         pausedMs: closed.pausedMs,
@@ -297,8 +306,7 @@ export async function autoFinishShift(
     const staff = await findStaffById(staffId);
     if (!staff) return;
 
-    const member = await fetchMember(client, config.publicGuildId, staff.discordId);
-    const displayName = member?.displayName ?? "You";
+    const displayName = await staffDisplayName(client, config, staff.discordId, "You");
 
     const card = await finishShift(client, config, staff, displayName, reason, at);
     if (card) await tryDm(client, staff.discordId, { ...card });

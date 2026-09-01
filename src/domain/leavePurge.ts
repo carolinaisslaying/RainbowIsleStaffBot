@@ -11,7 +11,7 @@ import { fortnightIndexFor, weekStartFor } from "../time/calendar.js";
  *
  * Leave is not inert once it has been taken. A fortnight in which a member was
  * away for a full week is assessed as exempt, and that verdict is not stored as
- * a fact about the fortnight — it is recomputed from the leave records every
+ * a fact about the fortnight. It is recomputed from the leave records every
  * time `/admin recompute` runs. Delete the leave and the exemption goes with
  * it, so a fortnight that was settled months ago comes back as a real pass or
  * fail against figures the member had no chance to earn.

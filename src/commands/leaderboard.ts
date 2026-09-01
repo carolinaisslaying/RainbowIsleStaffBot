@@ -2,19 +2,20 @@ import { SlashCommandBuilder } from "discord.js";
 import type { Command } from "./types.js";
 import type { StaffDoc } from "../db/types.js";
 import { collections } from "../db/client.js";
-import { listActiveStaff } from "../domain/staff.js";
+import { countHiddenStaff, listActiveStaff } from "../domain/staff.js";
 import { countMinutesBetween } from "../domain/activity.js";
 import { staffFullyOnLeaveDuring } from "../domain/leave.js";
 import { weekWindowFor } from "../domain/weekly.js";
 import { currentFortnightIndex, windowForIndex } from "../domain/assessments.js";
 import { ringStateFor } from "../domain/rings.js";
 import { isLeadOrAbove } from "../domain/permissions.js";
+import { leaderboardVisibility } from "../domain/leaderboard.js";
 import { leaderboardCard, type LeaderboardRowView } from "../render/cards.js";
 import { describeRings, renderRings, ringsCacheKey } from "../render/rings.js";
 import { currentWeekStats } from "../domain/weekly.js";
 import { defer, respond } from "../discord/respond.js";
-import { fetchMember } from "../discord/roles.js";
 import { labelWindow } from "../time/format.js";
+import { staffDisplayName } from "../discord/displayName.js";
 
 /** Page at 10 rows. The 40 component ceiling is not negotiable. */
 const PAGE_SIZE = 10;
@@ -106,7 +107,16 @@ export const leaderboardCommand: Command = {
         ),
 
     async execute({ client, config, interaction, staff, tier }) {
-        await defer(interaction, false);
+        // Decided before the defer, because ephemerality is fixed at defer time
+        // and cannot be changed on the edit. One count is cheap enough to run
+        // inside the three seconds Discord allows; building the leaderboard is
+        // not, which is why this cannot simply be read off the finished card.
+        const visibility = leaderboardVisibility({
+            privileged: isLeadOrAbove(tier),
+            viewerHidden: staff.leaderboardOptOut,
+            hiddenCount: await countHiddenStaff()
+        });
+        await defer(interaction, visibility.ephemeral);
 
         const scope = (interaction.options.getString("scope") ?? "week") as LeaderboardScope;
         const page = interaction.options.getInteger("page") ?? 1;
@@ -146,10 +156,14 @@ export async function renderLeaderboard(
         entry: LeaderboardEntry,
         rank: number
     ): Promise<LeaderboardRowView> => {
-        const member = await fetchMember(client, config.publicGuildId, entry.staff.discordId);
         return {
             rank,
-            label: member?.displayName ?? `<@${entry.staff.discordId}>`,
+            label: await staffDisplayName(
+                client,
+                config,
+                entry.staff.discordId,
+                `<@${entry.staff.discordId}>`
+            ),
             activityMinutes: entry.minutes,
             target,
             state: ringStateFor({
@@ -194,12 +208,14 @@ export async function renderLeaderboard(
         activeDaysTarget: config.weeklyActiveDaysTarget,
         state: viewerStats.ringState,
         softRingsEnabled: config.softRingsEnabled,
+        face: viewer.ringFace,
         cacheKey: ringsCacheKey(viewer._id.toHexString(), window.start, {
             activityMinutes: viewerStats.activityMinutes,
             shiftHours: Math.round((viewerStats.shiftMs / 3_600_000) * 100) / 100,
             activeDays: viewerStats.activeDays,
             state: viewerStats.ringState,
-            softRingsEnabled: config.softRingsEnabled
+            softRingsEnabled: config.softRingsEnabled,
+            face: viewer.ringFace
         })
     };
 
@@ -214,14 +230,17 @@ export async function renderLeaderboard(
         totalMinutes: ranked.reduce((sum, entry) => sum + entry.minutes, 0),
         participants: ranked.length,
         viewerRings: { png: renderRings(ringsInput), alt: describeRings(ringsInput) },
-        footnote: privileged
-            ? optedOut > 0
-                ? `${optedOut} member(s) are marked hidden. You see them because you are Lead ` +
-                  "or Executive; other Moderators do not."
-                : undefined
-            : hiddenFromViewer > 0
-              ? `${hiddenFromViewer} member(s) have hidden themselves. Their minutes still ` +
-                "count, and Leads and Executives still see them."
-              : undefined
+        // Who can read this card, said on the card. The old footnote described
+        // the roster; this describes the room, which is the thing somebody about
+        // to screenshot it needs to know.
+        footnote: leaderboardVisibility({
+            privileged,
+            viewerHidden: viewer.leaderboardOptOut,
+            hiddenCount: optedOut
+        }).note +
+            (!privileged && hiddenFromViewer > 0
+                ? ` ${hiddenFromViewer} member(s) have hidden themselves and are not listed; ` +
+                  "their minutes still count."
+                : "")
     });
 }

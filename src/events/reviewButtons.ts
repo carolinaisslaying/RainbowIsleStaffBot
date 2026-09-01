@@ -12,6 +12,7 @@ import { labelWindow } from "../time/format.js";
 import { cmd } from "../discord/commandMentions.js";
 import { COLOUR } from "../render/theme.js";
 import { log } from "../log.js";
+import { staffDisplayName } from "../discord/displayName.js";
 
 type JsonNode = { type?: number; components?: JsonNode[]; [key: string]: unknown };
 
@@ -78,7 +79,15 @@ export async function handleReviewButton(
 
     const reviewer = await ensureStaff(interaction.user.id);
     const outcome = ACTIONS[action];
-    const note = `${outcome} by ${interaction.user.tag}`;
+    // The member reads this note in their own /mydata export, so it names the
+    // Executive the way the staff server does. `reviewedBy` on the record is
+    // the stable link back to them; this line is the prose.
+    const note = `${outcome} by ${await staffDisplayName(
+        client,
+        config,
+        interaction.user.id,
+        interaction.user.username
+    )}`;
 
     await recordReview(assessmentId, reviewer._id, outcome, note);
 

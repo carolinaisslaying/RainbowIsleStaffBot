@@ -249,16 +249,40 @@ describe("the configuration viewer", () => {
         const card = configViewCard(DEFAULT_CONFIG, NAMES, "/config set");
 
         // Servers, Roles, Channels in one container; Targets, Timings, Calendar
-        // in the next. Three headings each means two dividers each.
+        // in the next. Three headings each means two dividers between them.
         for (const index of [1, 2]) {
             const json = card.components[index].toJSON() as {
                 components: { type: number }[];
             };
             const headings = json.components.filter((child) => child.type === 10);
-            const dividers = json.components.filter((child) => child.type === 14);
             expect(headings).toHaveLength(3);
-            expect(dividers).toHaveLength(2);
+
+            // Count only the dividers that sit between two headings, so the one
+            // introducing the transfer buttons at the foot of the second
+            // container is not mistaken for a heading separator.
+            const betweenHeadings = json.components.filter(
+                (child, position) =>
+                    child.type === 14 &&
+                    json.components.slice(position + 1).some((later) => later.type === 10)
+            );
+            expect(betweenHeadings).toHaveLength(2);
         }
+    });
+
+    it("offers export and import at the foot of the card, after the settings", async () => {
+        const { configViewCard } = await import("../src/render/configCards.js");
+        const card = configViewCard(DEFAULT_CONFIG, NAMES, "/config set");
+        const json = JSON.stringify(card.components[2].toJSON());
+
+        expect(json).toContain("config:export:now");
+        expect(json).toContain("config:import:open");
+        // Below the settings, not above them: somebody reading down the card
+        // has seen what is configured before reaching a control that replaces
+        // all of it.
+        const policy = card.components[2].toJSON() as { components: { type: number }[] };
+        const lastHeading = policy.components.map((child) => child.type).lastIndexOf(10);
+        const actionRow = policy.components.map((child) => child.type).indexOf(1);
+        expect(actionRow).toBeGreaterThan(lastHeading);
     });
 
     it("never separates two headings with a bare blank line", async () => {

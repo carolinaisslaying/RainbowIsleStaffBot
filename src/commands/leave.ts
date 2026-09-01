@@ -105,13 +105,20 @@ export const leaveCommand: Command = {
                 return;
             }
             await defer(interaction, true);
-            await endLeave(client, config, active);
+            // The same card they are DMed, shown here as well. Composing a
+            // second, shorter version of it is how the two drift apart.
+            const welcome = await endLeave(
+                client,
+                config,
+                active,
+                { kind: "member" },
+                interaction.guildId
+            );
             await respond(
                 interaction,
-                noticeCard(
+                welcome ?? noticeCard(
                     "Welcome back",
-                    "Your leave is closed and your ranks have been restored. Run " +
-                        `${cmd("shift start", interaction.guildId)} when you are ready.`,
+                    "Your leave is closed and your ranks have been restored.",
                     { ephemeral: true, colour: COLOUR.approved }
                 )
             );

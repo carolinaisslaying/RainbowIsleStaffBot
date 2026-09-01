@@ -18,12 +18,24 @@ import { log } from "../log.js";
 
 /**
  * Candidates in tiers, most specific first. The first tier with anything on
- * disk wins, so the container uses the two directories it installed and a
+ * disk wins, so the container uses the directories it installed and a
  * developer's machine falls back to somewhere its own fonts actually live.
+ *
+ * Debian ships Inter as OTF, under `opentype/inter`, and only DejaVu under
+ * `truetype`. Naming just the truetype pair here was a silent failure and not
+ * an obvious one: `truetype/dejavu` exists, so the tier matched on that alone,
+ * Inter was never in the font database, and every card rendered in the fallback
+ * face while `defaultFontFamily` still said "Inter". The Dockerfile asserts
+ * these paths at build time so the next packaging change fails the build rather
+ * than quietly changing how every image looks.
  */
 const TIERS: string[][] = [
-    ["/usr/share/fonts/truetype/inter", "/usr/share/fonts/truetype/dejavu"],
-    ["/usr/share/fonts/truetype"],
+    [
+        "/usr/share/fonts/opentype/inter",
+        "/usr/share/fonts/truetype/inter",
+        "/usr/share/fonts/truetype/dejavu"
+    ],
+    ["/usr/share/fonts/opentype", "/usr/share/fonts/truetype"],
     ["/usr/share/fonts"],
     ["/System/Library/Fonts/Supplemental", "/System/Library/Fonts"],
     ["/Library/Fonts"]
@@ -38,13 +50,17 @@ export interface FontOptions {
 function resolve(): FontOptions {
     for (const tier of TIERS) {
         const present = tier.filter((directory) => existsSync(directory));
-        if (present.length > 0) {
-            return {
-                loadSystemFonts: false,
-                fontDirs: present,
-                defaultFontFamily: "Inter"
-            };
-        }
+        if (present.length === 0) continue;
+
+        // Said out loud at startup, because the way this breaks is that it
+        // keeps working: a missing directory costs a typeface, not an error,
+        // and the images stay perfectly legible in the wrong face.
+        log.info(`Fonts loaded from ${present.join(", ")}`);
+        return {
+            loadSystemFonts: false,
+            fontDirs: present,
+            defaultFontFamily: "Inter"
+        };
     }
 
     log.warn(

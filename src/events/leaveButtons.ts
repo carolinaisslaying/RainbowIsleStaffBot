@@ -5,14 +5,27 @@ import { decideLeave, findLeave } from "../domain/leave.js";
 import { ensureStaff, findStaffById } from "../domain/staff.js";
 import { fetchPublicMember, resolveTier, isExecutive } from "../domain/permissions.js";
 import { tryDm } from "../discord/roles.js";
-import { activateLeave } from "../services/leaveService.js";
-import { errorCard, leaveRequestCard, noticeCard } from "../render/cards.js";
+import { staffDisplayName } from "../discord/displayName.js";
+import {
+    activateLeave,
+    endLeave,
+    leaveCardFor,
+    rememberLeaveCard
+} from "../services/leaveService.js";
+import { errorCard, leaveEndConfirmCard, noticeCard } from "../render/cards.js";
 import { respond, sendOptions } from "../discord/respond.js";
 import { audit } from "../domain/audit.js";
 import { ts } from "../time/format.js";
 import { COLOUR } from "../render/theme.js";
 
-/** Executive only may decide leave. */
+/**
+ * Every button on a leave card. Executive only, all of them.
+ *
+ * The card walks one record from "pending" to "back" without ever posting a
+ * second message: a decision replaces the decision buttons, an active leave
+ * offers the one action left on it, and each state re-renders through
+ * `leaveCardFor` so the colour and the buttons cannot disagree with the record.
+ */
 export async function handleLeaveButton(
     client: Client,
     config: StaffBotConfig,
@@ -31,6 +44,87 @@ export async function handleLeaveButton(
         await respond(interaction, errorCard("That leave request no longer exists."));
         return;
     }
+
+    if (action === "endCancel") {
+        await interaction.update(
+            sendOptions(
+                noticeCard("Left running", "Nothing changed. The leave is still in force.", {
+                    colour: COLOUR.settled
+                })
+            ) as never
+        );
+        return;
+    }
+
+    if (action === "end") {
+        // Ask before acting. Ending someone's leave restores their ranks,
+        // restarts assessment and tells them they are back, all at once and all
+        // to somebody who is not in the room.
+        if (leave.status !== "active" && leave.status !== "approved") {
+            await respond(
+                interaction,
+                errorCard(`That leave is **${leave.status}**, so there is nothing to end.`)
+            );
+            return;
+        }
+        const subject = await findStaffById(leave.staffId);
+        await respond(
+            interaction,
+            leaveEndConfirmCard({
+                leaveId: leaveId.toHexString(),
+                displayName: subject
+                    ? `**${await staffDisplayName(
+                          client,
+                          config,
+                          subject.discordId,
+                          "This member"
+                      )}** (<@${subject.discordId}>)`
+                    : "This member",
+                endDate: leave.endDate,
+                active: leave.status === "active"
+            })
+        );
+        return;
+    }
+
+    if (action === "endConfirm") {
+        // Re-checked on the second click rather than trusted from the first:
+        // the state can have moved between the two, and the confirmation card
+        // is ephemeral and can be sat on for as long as anyone likes.
+        if (leave.status !== "active" && leave.status !== "approved") {
+            await interaction.update(
+                sendOptions(
+                    errorCard(`That leave is already **${leave.status}**. Nothing was changed.`)
+                ) as never
+            );
+            return;
+        }
+
+        await interaction.deferUpdate();
+        const executive = await ensureStaff(interaction.user.id);
+        await endLeave(client, config, leave, {
+            kind: "executive",
+            discordId: interaction.user.id,
+            staffId: executive._id
+        });
+
+        await interaction.editReply(
+            sendOptions(
+                noticeCard(
+                    leave.status === "active" ? "They are back" : "Leave cancelled",
+                    (leave.status === "active"
+                        ? "Their ranks are restored and they have been told they are back."
+                        : "The leave will not start. Their ranks were never set aside.") +
+                        "\n\nThe request card in this channel now shows the outcome.",
+                    { colour: COLOUR.approved }
+                )
+            ) as never
+        );
+        return;
+    }
+
+    if (action !== "approve" && action !== "decline") return;
+
     if (leave.status !== "pending") {
         await respond(interaction, errorCard(`That request is already **${leave.status}**.`));
         return;
@@ -81,23 +175,21 @@ export async function handleLeaveButton(
     }
 
     // Start date already passed: activate immediately rather than waiting for
-    // the next boundary sweep.
+    // the next boundary sweep. Re-read afterwards so the card is drawn from
+    // what the record now says rather than from what it said a moment ago.
     if (approved && decided.startDate <= new Date()) {
         await activateLeave(client, config, decided);
     }
 
-    // The log card keeps every detail it had and swaps its buttons for the
-    // decision, so the channel reads as a record rather than as a stub.
-    const card = leaveRequestCard({
-        leaveId: leaveId.toHexString(),
-        displayName: `<@${subject?.discordId ?? "unknown"}>`,
-        startDate: leave.startDate,
-        endDate: leave.endDate,
-        reason: leave.reason,
-        decided:
-            `**${approved ? "Approved" : "Declined"}** by <@${interaction.user.id}> ` +
-            `${ts(new Date(), "R")}`
-    });
+    const current = (await findLeave(leaveId)) ?? decided;
 
-    await interaction.editReply(sendOptions(card) as never);
+    await interaction.editReply(sendOptions(await leaveCardFor(client, config, current)) as never);
+
+    // The card this button sits on is the one just edited. Records created
+    // before the location was stored learn it here, so a later end can still
+    // find the card and take it to its final state, whether that end comes from
+    // the scheduler, from `/leave end`, or from the button above.
+    if (!current.logMessageId) {
+        await rememberLeaveCard(leaveId, interaction.channelId, interaction.message.id);
+    }
 }

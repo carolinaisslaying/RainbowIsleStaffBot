@@ -7,6 +7,7 @@ import { defer, respond } from "../discord/respond.js";
 import { formatDuration, ts } from "../time/format.js";
 import { publicGuildName } from "../discord/guildNames.js";
 import { cmd } from "../discord/commandMentions.js";
+import { staffDisplayName } from "../discord/displayName.js";
 
 /** When an away shift closes itself, from the moment the pause opened. */
 function autoEndAt(pausedFrom: Date, config: { autoEndAfterAwayMinutes: number }): Date {
@@ -24,13 +25,24 @@ export const shiftCommand: Command = {
             sub.setName("status").setDescription("Check your current shift")
         ),
 
-    async execute({ client, config, interaction, staff, member }) {
+    async execute({ client, config, interaction, staff }) {
         const sub = interaction.options.getSubcommand();
-        const displayName = member?.displayName ?? interaction.user.username;
+        const displayName = await staffDisplayName(
+            client,
+            config,
+            interaction.user.id,
+            interaction.user.username
+        );
 
         if (sub === "start") {
             await defer(interaction, true);
-            const result = await beginShift(client, config, staff, displayName);
+            const result = await beginShift(
+                client,
+                config,
+                staff,
+                displayName,
+                interaction.guildId
+            );
             await respond(interaction, result.card);
             return;
         }

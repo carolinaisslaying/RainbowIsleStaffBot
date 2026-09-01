@@ -1,4 +1,13 @@
-import { ContainerBuilder, type Client } from "discord.js";
+import {
+    ActionRowBuilder,
+    AttachmentBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    ContainerBuilder,
+    FileBuilder,
+    MessageFlags,
+    type Client
+} from "discord.js";
 import {
     CONFIG_KEYS,
     DEFAULT_CONFIG,
@@ -8,7 +17,15 @@ import {
     type KeyGroup,
     type StaffBotConfig
 } from "../config/guildConfig.js";
-import { containersMessage, separator, text, type RenderedMessage } from "./cards.js";
+import { exportConfig, type ConfigChange, type ImportReport } from "../config/configTransfer.js";
+import {
+    V2_FLAGS,
+    containersMessage,
+    noticeCard,
+    separator,
+    text,
+    type RenderedMessage
+} from "./cards.js";
 import { COLOUR } from "./theme.js";
 
 /**
@@ -223,5 +240,136 @@ export function configViewCard(
         "calendar"
     ]);
 
+    // The two transfer buttons ride on the policy block rather than on the
+    // status block at the top. Someone reading down the card has seen what the
+    // settings are by the time they reach a control that replaces all of them.
+    policy.addSeparatorComponents(separator());
+    policy.addActionRowComponents(
+        new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder()
+                .setCustomId("config:export:now")
+                .setLabel("Export as JSON")
+                .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder()
+                .setCustomId("config:import:open")
+                .setLabel("Import JSON")
+                .setStyle(ButtonStyle.Secondary)
+        )
+    );
+
     return containersMessage([statusContainer(config, setCommand), wiring, policy]);
+}
+
+/** The export, as a file rather than as a wall of text in the channel. */
+export function configExportCard(config: StaffBotConfig): RenderedMessage {
+    const json = Buffer.from(exportConfig(config), "utf8");
+    const fileName = `staffbot-config-${new Date().toISOString().slice(0, 10)}.json`;
+    const attachment = new AttachmentBuilder(json, { name: fileName });
+
+    const container = new ContainerBuilder()
+        .setAccentColor(COLOUR.admin)
+        .addTextDisplayComponents(
+            text(
+                "### Configuration export\n" +
+                    "Every key and its current value. Paste it back through **Import JSON** to " +
+                    "restore this setup, or paste part of it into another deployment to copy " +
+                    "the policy without the server and role ids.\n\n" +
+                    "-# Only you can see this file. It holds no tokens or secrets, only ids " +
+                    "and settings, but it does name every role and channel the bot touches."
+            )
+        )
+        .addFileComponents(new FileBuilder().setURL(`attachment://${fileName}`));
+
+    return {
+        components: [container],
+        files: [attachment],
+        flags: V2_FLAGS | MessageFlags.Ephemeral
+    };
+}
+
+function changeLine(change: ConfigChange, guildNames: Map<string, string>): string {
+    const show = (value: unknown): string => {
+        if (Array.isArray(value)) {
+            return value.length === 0
+                ? "*nothing*"
+                : value.map((id) => mentionFor(change.key, String(id), guildNames)).join(" ");
+        }
+        if (value === "") return "*nothing*";
+        return CONFIG_KEYS[change.key].target === "plain"
+            ? `**${String(value)}**`
+            : mentionFor(change.key, String(value), guildNames);
+    };
+    return (
+        `**${change.key}**${change.relocating ? " *(moves the bot)*" : ""}\n` +
+        `-# ${show(change.from)} to ${show(change.to)}`
+    );
+}
+
+/**
+ * What the paste would do, before it does any of it.
+ *
+ * An import can rewrite where the bot lives and which roles mean what, so the
+ * whole of it is shown as a before and after list first. Keys already holding
+ * the value they name are counted rather than listed: they are the bulk of a
+ * full file and none of the decision.
+ */
+export function configImportCard(
+    report: ImportReport,
+    token: string,
+    guildNames: Map<string, string>
+): RenderedMessage {
+    if (!report.ok) {
+        return noticeCard(
+            "Nothing was imported",
+            report.problems.join("\n") +
+                (report.unchanged.length > 0
+                    ? `\n\n-# ${report.unchanged.length} other key(s) already match.`
+                    : ""),
+            { colour: COLOUR.adverse, ephemeral: true }
+        );
+    }
+
+    const relocating = report.changes.filter((change) => change.relocating);
+
+    const container = new ContainerBuilder()
+        .setAccentColor(relocating.length > 0 ? COLOUR.adverse : COLOUR.pending)
+        .addTextDisplayComponents(
+            text(
+                `### Apply ${report.changes.length} change(s)?\n` +
+                    report.changes
+                        .map((change) => changeLine(change, guildNames))
+                        .join("\n") +
+                    (report.unchanged.length > 0
+                        ? `\n\n-# ${report.unchanged.length} other key(s) already match and ` +
+                          "are left alone."
+                        : "")
+            )
+        );
+
+    if (relocating.length > 0) {
+        container.addSeparatorComponents(separator());
+        container.addTextDisplayComponents(
+            text(
+                "**This moves the bot to another server.** Commands are registered per server, " +
+                    "so they will disappear from this one and appear in the new one on the next " +
+                    "restart. Make sure the bot is already in that server and holds a role " +
+                    "above everything it manages."
+            )
+        );
+    }
+
+    container.addActionRowComponents(
+        new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`config:apply:${token}`)
+                .setLabel(`Apply ${report.changes.length} change(s)`)
+                .setStyle(relocating.length > 0 ? ButtonStyle.Danger : ButtonStyle.Success),
+            new ButtonBuilder()
+                .setCustomId(`config:discard:${token}`)
+                .setLabel("Discard")
+                .setStyle(ButtonStyle.Secondary)
+        )
+    );
+
+    return { components: [container], files: [], flags: V2_FLAGS | MessageFlags.Ephemeral };
 }

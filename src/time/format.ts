@@ -26,6 +26,17 @@ export function formatDuration(ms: number): string {
     return `${hours} h ${minutes} min`;
 }
 
+/**
+ * "4 days", "1 day", "less than a day". For spans measured in days rather than
+ * in shift hours: `formatDuration` renders a fortnight of leave as "336 h",
+ * which is accurate and unreadable.
+ */
+export function formatDays(ms: number): string {
+    const days = Math.round(ms / 86_400_000);
+    if (days < 1) return "less than a day";
+    return `${days} ${days === 1 ? "day" : "days"}`;
+}
+
 /** "120 minutes" / "1 minute". Activity minutes are always spelled out. */
 export function formatMinutes(minutes: number): string {
     return `${minutes} ${minutes === 1 ? "minute" : "minutes"}`;

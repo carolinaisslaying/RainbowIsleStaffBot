@@ -7,7 +7,8 @@ import { findLeave, purgeLeaveRecord } from "../domain/leave.js";
 import { exemptionsLostByPurging, holdsUnrestoredRoles } from "../domain/leavePurge.js";
 import { findStaffById } from "../domain/staff.js";
 import { fetchPublicMember, isExecutive, resolveTier } from "../domain/permissions.js";
-import { errorCard, leaveRequestCard, noticeCard, purgeConfirmCard } from "../render/cards.js";
+import { errorCard, noticeCard, purgeConfirmCard } from "../render/cards.js";
+import { leaveCardFor } from "../services/leaveService.js";
 import { respond, sendOptions } from "../discord/respond.js";
 import { ts } from "../time/format.js";
 import { cmd } from "../discord/commandMentions.js";
@@ -134,9 +135,9 @@ async function askForConfirmation(
                     `the **${leave.removedRoles.length}** role` +
                     `${leave.removedRoles.length === 1 ? "" : "s"} the bot set aside for them. ` +
                     "Purging it would leave them stripped with nothing saying what to give " +
-                    `back.\n\nEnd the leave first — ${cmd("leave end", interaction.guildId)}, ` +
-                    `or wait for it to close on ${leave.endDate ? ts(leave.endDate, "D") : "its own"} ` +
-                    `— then purge.` +
+                    `back.\n\nEnd the leave first with ${cmd("leave end", interaction.guildId)}, ` +
+                    `or wait for it to close on ${leave.endDate ? ts(leave.endDate, "D") : "its own"}. ` +
+                    `Purge it after that.` +
                     (subject ? `\n\n-# Member: <@${subject.discordId}>` : "")
             )
         );
@@ -262,7 +263,7 @@ async function purge(
         return;
     }
 
-    await editLogCard(client, entry, leave, subject?.discordId ?? null, interaction.user.id);
+    await editLogCard(client, config, entry, leave, interaction.user.id);
 
     const exemptionNote =
         leave.status === "ended" || leave.status === "active"
@@ -286,9 +287,9 @@ async function purge(
 /** Rewrite the card in the log channel so the record does not go quiet. */
 async function editLogCard(
     client: Client,
+    config: StaffBotConfig,
     entry: PendingPurge,
     leave: Awaited<ReturnType<typeof findLeave>>,
-    subjectId: string | null,
     executiveId: string
 ): Promise<void> {
     if (!leave) return;
@@ -297,24 +298,9 @@ async function editLogCard(
         if (!channel || !channel.isTextBased()) return;
         const message = await channel.messages.fetch(entry.messageId);
 
-        const decider = leave.decidedBy ? await findStaffById(leave.decidedBy) : null;
-        const decided =
-            leave.status === "declined"
-                ? `**Declined**${decider ? ` by <@${decider.discordId}>` : ""}`
-                : leave.decidedAt
-                  ? `**Approved**${decider ? ` by <@${decider.discordId}>` : ""} ` +
-                    `${ts(leave.decidedAt, "R")}`
-                  : null;
-
         await message.edit(
             sendOptions(
-                leaveRequestCard({
-                    leaveId: leave._id.toHexString(),
-                    displayName: subjectId ? `<@${subjectId}>` : "an unknown member",
-                    startDate: leave.startDate,
-                    endDate: leave.endDate,
-                    reason: leave.reason,
-                    decided,
+                await leaveCardFor(client, config, leave, {
                     purged: `Purged by <@${executiveId}> ${ts(new Date(), "R")}.`
                 })
             ) as never

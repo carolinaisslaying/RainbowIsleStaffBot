@@ -12,8 +12,8 @@ import { parsePhrase, type PhraseConstraints } from "./naturalDate.js";
  * arrangement about the future.
  *
  * ISO dates keep working exactly as they did, and keep their old behaviour of
- * meaning precisely what they say — including a date in the past, which is
- * refused later by name rather than being quietly moved.
+ * meaning what they say, a date in the past included. Those are refused later
+ * by name rather than moved without saying so.
  */
 
 export interface WallClockInput {
@@ -116,8 +116,8 @@ function satisfies(date: CalendarDate, wanted: PhraseConstraints): boolean {
 /**
  * Turn constraints into the one date they describe.
  *
- * An exact phrase — a full calendar date, or a count of days from today — is
- * taken at its word. Everything else is a forward search from today, stopping
+ * An exact phrase is taken at its word: a full calendar date, or a count of
+ * days from today. Everything else is a forward search from today, stopping
  * at the first date that satisfies every constraint *and* has not already gone.
  * That second condition is what makes "Tuesday at 9am", typed on a Tuesday
  * afternoon, mean next Tuesday rather than a moment this morning.

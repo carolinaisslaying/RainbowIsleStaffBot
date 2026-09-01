@@ -1,7 +1,29 @@
+# The build context is sent to the daemon in full before anything runs, so
+# everything the image cannot use is latency on every single build.
+.git
+.github
 node_modules
 dist
-.git
+
+# Secrets. The bot reads these from the environment at runtime; a copy baked
+# into a layer would outlive the container and survive a `docker history`.
 .env
+.env.*
+
+# Tests are type-checked by vitest and never shipped. tsconfig.json excludes
+# test/ anyway, so a copy in the context would only invalidate build layers.
 test
+vitest.config.*
+coverage
+
+# Documentation, editor state and the compose files themselves: none of them
+# are read by a build.
 *.md
-!package.json
+.vscode
+.idea
+Dockerfile
+.dockerignore
+docker-compose*.yml
+docker-compose*.yaml
+*.log
+.DS_Store

@@ -26,6 +26,12 @@ export const COLOUR = {
     adverse: 0xff453a,
     /** Finished and filed, no action left. */
     settled: 0x8e8e93,
+    /**
+     * Running right now, and will end by itself. Active leave, which is neither
+     * a decision awaiting a human nor an outcome: it is a state the member is
+     * in. Blue rather than another amber so it cannot be mistaken for pending.
+     */
+    inProgress: 0x0a84ff,
     /** Reports and analysis. */
     report: 0x40c8e0,
     /** Configuration and administration. */
@@ -49,9 +55,9 @@ export const FONT_STACK = "Inter, DejaVu Sans, sans-serif";
  * Apple's material is a property of the *container*, not of the contents. The
  * rings on a Watch face are flat, vivid and sit on black; what is made of glass
  * is the panel they sit in. An earlier pass had this backwards and built each
- * ring out of nine concentric strokes -- track, two rims, filament, inner edge,
- * sheen, three halo layers -- which at three rings is twenty-seven concentric
- * circles and reads as a camera lens rather than as a Watch.
+ * ring out of nine concentric strokes: track, two rims, filament, inner edge,
+ * sheen, three halo layers. At three rings that is twenty-seven concentric
+ * circles, and it reads as a camera lens rather than as a Watch.
  *
  * The panel is near black, and deliberately much darker than the Discord
  * container behind it, which is about #2b2d31 in dark mode. That is the fix for
@@ -62,10 +68,13 @@ export const FONT_STACK = "Inter, DejaVu Sans, sans-serif";
  */
 export const SURFACE = {
     /** Panel ground. Near black, with a barely there lift towards the top. */
-    panelTop: "#17181c",
-    panelBottom: "#0e0f12",
-    /** The hairline where the panel catches the light. Almost nothing. */
-    rimLight: "rgba(255,255,255,0.07)",
+    panelTop: "#191a1f",
+    panelBottom: "#0d0e11",
+    /** The specular sheet over the upper part of the panel. Glass, in one value. */
+    sheen: 0.055,
+    /** The rim, brighter where the pane turns towards the light. */
+    rimTop: 0.13,
+    rimBottom: 0.04,
     /** How much of its own colour a ring lends the panel behind it. */
     washMax: 0.16,
     /** An unlit track: the ring's own colour, dimmed, never grey and never white. */
