@@ -212,6 +212,20 @@ until your minute count happens to move.
 picker rather than saying "saved", so it reads as two choices instead of two refusals. Adding
 `ringFace` means every existing member is asked once on their next command.
 
+**Review charts.** `render/trend.ts` draws two, both pure string functions like the others.
+`trendSvg` plots a member's last six fortnights as bars against a dashed requirement line, because
+"0 of 240" reads identically whether somebody has always been at zero or fell off a cliff, and those
+are opposite decisions. `spreadSvg` plots everybody's minutes for the fortnight, sorted, because
+whether 120 is bad depends on what the rest of the team managed and the queue cannot say — it only
+lists the people who fell short. **One hue (`#2e9fb8`), never a status palette**: the requirement
+line carries met-versus-below geometrically, so colour never has to. That is deliberate — red
+against green is ΔE 7.9 under deuteranopia, inside the band that is only legal with a second
+encoding, and height against a labelled line is an encoding that survives greyscale. Below the line
+is drawn as an absence rather than in red, because a red bar is a verdict the Executive has not
+reached yet. The requirement is always included in the scale, so the line is never off the top of a
+chart where everybody missed it. Exempt fortnights are drawn as a full-height absence labelled
+"leave", never as a zero somebody earned.
+
 **Images.** `ringsSvg` / `ringCardSvg` / `heatmapSvg` are pure string functions, exported separately
 from the `render*` wrappers so tests assert on markup without invoking resvg. Ring elements carry
 semantic classes (`ring-track`, `ring-progress`, `ring-overlay`), which is what the tests count.

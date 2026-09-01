@@ -40,6 +40,12 @@ import {
 import { claimFortnightAnnouncement, sendFortnightOutcome } from "./notifications.js";
 import { labelDate, labelWindow, formatMinutes, ts } from "../time/format.js";
 import { sendOptions } from "../discord/respond.js";
+import {
+    renderSpread,
+    renderTrend,
+    type SpreadEntry,
+    type TrendPoint
+} from "../render/trend.js";
 import { COLOUR } from "../render/theme.js";
 import { log } from "../log.js";
 import { staffDisplayName } from "../discord/displayName.js";
@@ -198,12 +204,34 @@ export async function postReviewQueue(
 
     // The header first, so it sits above the rows on a first posting.
     const existing = await findReview(index);
+
+    // Every member assessed, not just the ones below: the point of the chart is
+    // to say whether this was a bad fortnight for two people or for everybody.
+    const everyone = await assessmentsForFortnight(index);
+    const spreadEntries = everyone
+        .filter((entry) => entry.status !== "exempt")
+        .map((entry) => ({
+            minutes: entry.totalMinutes,
+            below: entry.status === "below"
+        }));
+
     const header = reviewHeaderCard({
         fortnightIndex: index,
         windowLabel: label,
         headline: queueHeadline(counts, config.fortnightRequiredMinutes),
         remaining: counts.remaining,
-        rehearsal: options.rehearsal ?? false
+        rehearsal: options.rehearsal ?? false,
+        spread:
+            spreadEntries.length > 0
+                ? {
+                      png: renderSpread({
+                          entries: spreadEntries,
+                          requiredMinutes: config.fortnightRequiredMinutes,
+                          title: "Everyone this fortnight"
+                      }),
+                      alt: describeSpread(spreadEntries, config.fortnightRequiredMinutes)
+                  }
+                : null
     });
 
     let headerMessageId = existing?.headerMessageId ?? null;
@@ -284,6 +312,7 @@ export async function reviewRowFor(
 
     const decider = assessment.reviewedBy ? await findStaffById(assessment.reviewedBy) : null;
     const issued = warnings.find((warning) => warning.assessmentId.equals(assessment._id));
+    const trend = await trendFor(assessment.staffId, index, config);
 
     const decidedLine =
         assessment.reviewOutcome && assessment.reviewedAt
@@ -327,6 +356,16 @@ export async function reviewRowFor(
                   : null,
         departed,
         rehearsal: assessment.rehearsal === true,
+        trend: trend.points.length > 0
+            ? {
+                  png: renderTrend({
+                      points: trend.points,
+                      requiredMinutes: config.fortnightRequiredMinutes,
+                      title: "Recent fortnights"
+                  }),
+                  alt: trend.alt
+              }
+            : null,
         // A recompute can lift somebody above the requirement after they were
         // decided. The figures move; the decision is a human's and stays put,
         // flagged so a human can reopen it if they want to.
@@ -407,4 +446,71 @@ export async function chaseUnworkedQueues(
     }
 
     return sent;
+}
+
+
+/**
+ * The member's last six fortnights, oldest first, ready to plot.
+ *
+ * Oldest first because a chart of time reads left to right, while
+ * `assessmentHistory` returns newest first for the text line. Exempt fortnights
+ * are kept and marked rather than dropped: a gap in the row would read as a
+ * fortnight nobody measured, when in fact it is one they were excused from.
+ */
+async function trendFor(
+    staffId: ObjectId,
+    currentIndex: number,
+    config: StaffBotConfig
+): Promise<{ points: TrendPoint[]; alt: string }> {
+    const history = await assessmentHistory(staffId, 6);
+    const points: TrendPoint[] = history
+        .slice()
+        .reverse()
+        .map((entry) => ({
+            label: labelDate(entry.windowStart, config.accountingTimezone),
+            minutes: entry.totalMinutes,
+            exempt: entry.status === "exempt",
+            current: entry.fortnightIndex === currentIndex
+        }));
+
+    return { points, alt: describeTrend(points, config.fortnightRequiredMinutes) };
+}
+
+/**
+ * The chart in words, for the alt text.
+ *
+ * A screen reader gets the shape, not a list of numbers: the shape is what the
+ * chart is for, and the figures are already in the card above it.
+ */
+function describeTrend(points: TrendPoint[], required: number): string {
+    if (points.length === 0) return "No earlier fortnight to compare against.";
+    const measured = points.filter((point) => !point.exempt);
+    const met = measured.filter((point) => point.minutes >= required).length;
+    const exempt = points.length - measured.length;
+
+    return (
+        `Their last ${points.length} fortnights against a ${required} minute requirement: ` +
+        `${met} met, ${measured.length - met} below` +
+        (exempt > 0 ? `, ${exempt} on leave` : "") +
+        `. Most recent first to last: ` +
+        points
+            .map((point) =>
+                point.exempt ? `${point.label} on leave` : `${point.label} ${point.minutes}`
+            )
+            .join(", ") +
+        "."
+    );
+}
+
+function describeSpread(entries: SpreadEntry[], required: number): string {
+    const below = entries.filter((entry) => entry.below).length;
+    const total = entries.reduce((sum, entry) => sum + entry.minutes, 0);
+    const median = [...entries].sort((left, right) => left.minutes - right.minutes)[
+        Math.floor(entries.length / 2)
+    ];
+    return (
+        `${entries.length} members assessed against a ${required} minute requirement. ` +
+        `${below} below the line. Median ${median?.minutes ?? 0} minutes, ` +
+        `${Math.round(total / entries.length)} on average.`
+    );
 }

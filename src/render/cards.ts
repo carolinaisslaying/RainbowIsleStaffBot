@@ -384,6 +384,8 @@ export interface ReviewRowInput {
     rehearsal: boolean;
     /** Set when a recompute has moved them above the requirement since. */
     contradiction: string | null;
+    /** Their recent fortnights, drawn. Omitted while there is nothing to plot. */
+    trend?: { png: Buffer; alt: string } | null;
 }
 
 const REVIEW_OUTCOME_COLOUR: Record<ReviewOutcome, number> = {
@@ -455,6 +457,19 @@ export function reviewRowCard(row: ReviewRowInput): ContainerBuilder {
         container.addTextDisplayComponents(text(`-# ${row.contradiction}`));
     }
 
+    // Above the buttons, because it is what the buttons are about: whether this
+    // fortnight is a pattern or a one-off is the decision, and "0 of 240" reads
+    // the same either way.
+    if (row.trend) {
+        container.addMediaGalleryComponents(
+            new MediaGalleryBuilder().addItems(
+                new MediaGalleryItemBuilder()
+                    .setURL(`attachment://${trendFileName(row.assessmentId)}`)
+                    .setDescription(row.trend.alt)
+            )
+        );
+    }
+
     if (row.buttons.length > 0) {
         container.addActionRowComponents(
             new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -471,9 +486,24 @@ export function reviewRowCard(row: ReviewRowInput): ContainerBuilder {
     return container;
 }
 
+export function trendFileName(assessmentId: string): string {
+    return `trend-${assessmentId}.png`;
+}
+
 /** The row as its own message, which is how it is actually posted. */
 export function reviewRowMessage(row: ReviewRowInput): RenderedMessage {
-    return { components: [reviewRowCard(row)], files: [], flags: V2_FLAGS };
+    return {
+        components: [reviewRowCard(row)],
+        files: row.trend
+            ? [
+                  new AttachmentBuilder(row.trend.png, {
+                      name: trendFileName(row.assessmentId),
+                      description: row.trend.alt
+                  })
+              ]
+            : [],
+        flags: V2_FLAGS
+    };
 }
 
 export interface ReviewHeaderInput {
@@ -482,6 +512,8 @@ export interface ReviewHeaderInput {
     headline: string;
     remaining: number;
     rehearsal: boolean;
+    /** How the whole team did this fortnight. Omitted when nobody was assessed. */
+    spread?: { png: Buffer; alt: string } | null;
 }
 
 /**
@@ -504,6 +536,18 @@ export function reviewHeaderCard(input: ReviewHeaderInput): RenderedMessage {
             )
         );
 
+    // Whether 120 minutes is bad depends on what everybody else managed, and the
+    // queue below cannot say: it only ever lists the people who fell short.
+    if (input.spread) {
+        container.addMediaGalleryComponents(
+            new MediaGalleryBuilder().addItems(
+                new MediaGalleryItemBuilder()
+                    .setURL(`attachment://${SPREAD_FILE}`)
+                    .setDescription(input.spread.alt)
+            )
+        );
+    }
+
     if (input.remaining > 0) {
         container.addActionRowComponents(
             new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -515,8 +559,21 @@ export function reviewHeaderCard(input: ReviewHeaderInput): RenderedMessage {
         );
     }
 
-    return { components: [container], files: [], flags: V2_FLAGS };
+    return {
+        components: [container],
+        files: input.spread
+            ? [
+                  new AttachmentBuilder(input.spread.png, {
+                      name: SPREAD_FILE,
+                      description: input.spread.alt
+                  })
+              ]
+            : [],
+        flags: V2_FLAGS
+    };
 }
+
+const SPREAD_FILE = "fortnight-spread.png";
 
 /**
  * The second click on deciding a whole queue at once.
