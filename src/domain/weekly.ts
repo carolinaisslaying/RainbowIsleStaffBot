@@ -244,6 +244,19 @@ export async function computeStreak(
 }
 
 /** Weeks with no rollup between the anchor-ish past and the current week. */
+/**
+ * Whether the database holds no weekly rollup at all.
+ *
+ * A first boot and eight weeks of downtime look identical to
+ * `missingWeekWindows`: both leave every week in the lookback without a
+ * rollup. This is what tells them apart, and it is asked before anything is
+ * rebuilt, because rebuilding is what stops it being true.
+ */
+export async function hasNoWeeklyRollups(): Promise<boolean> {
+    const one = await collections.weeklyStats().findOne({}, { projection: { _id: 1 } });
+    return one === null;
+}
+
 export async function missingWeekWindows(
     config: StaffBotConfig,
     lookbackWeeks: number,

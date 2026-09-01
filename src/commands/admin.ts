@@ -9,6 +9,7 @@ import { rebuildWeek, weekWindowFor, currentWeekStats } from "../domain/weekly.j
 import { recomputeCounts } from "../domain/activity.js";
 import {
     currentFortnightIndex,
+    isAssessableFortnight,
     fortnightIndexForWeek,
     windowForIndex
 } from "../domain/assessments.js";
@@ -45,6 +46,12 @@ export const adminCommand: Command = {
                     option
                         .setName("fortnight")
                         .setDescription("Fortnight index. Defaults to the last closed one.")
+                        .setRequired(false)
+                )
+                .addBooleanOption((option) =>
+                    option
+                        .setName("rehearse")
+                        .setDescription("Post the card without telling anyone. For testing.")
                         .setRequired(false)
                 )
         )
@@ -137,7 +144,29 @@ export const adminCommand: Command = {
                 return;
             }
 
-            await runFortnightAssessment(client, config, index);
+            // A rehearsal can be asked for per run as well as set in config, so
+            // a fortnight can be tried out without switching the whole
+            // deployment into a dry run and back.
+            const rehearse = interaction.options.getBoolean("rehearse") ?? undefined;
+            const plan = await runFortnightAssessment(client, config, index, {
+                dryRun: rehearse
+            });
+
+            if (plan === "silent") {
+                await respond(
+                    interaction,
+                    errorCard(
+                        !isAssessableFortnight(index)
+                            ? `Fortnight ${index} is before the anchor this cycle counts ` +
+                              "from, so it is not a fortnight of it. Nothing was assessed."
+                            : `Fortnight ${index} has already been announced. The figures ` +
+                              "have been refreshed and nobody was notified again. Pass " +
+                              "`rehearse: true` to repost the card."
+                    )
+                );
+                return;
+            }
+
             const summary = await fortnightSummary(index);
 
             await audit("admin.assess", {
@@ -148,11 +177,16 @@ export const adminCommand: Command = {
             await respond(
                 interaction,
                 noticeCard(
-                    `Fortnight ${index} assessed`,
+                    plan === "rehearse"
+                        ? `Fortnight ${index} rehearsed`
+                        : `Fortnight ${index} assessed`,
                     `${labelWindow(window.week1Start, window.end, config.accountingTimezone)}\n` +
                         `${summary.met} met, ${summary.below} below, ${summary.exempt} exempt, ` +
                         `${summary.total} assessed.\n\n` +
-                        "The review card is up. An Executive decides each outcome.",
+                        (plan === "rehearse"
+                            ? "The card is up and marked as a rehearsal. Nobody was DMed and " +
+                              "the fortnight can still be announced for real later."
+                            : "The review card is up. An Executive decides each outcome."),
                     { ephemeral: true }
                 )
             );

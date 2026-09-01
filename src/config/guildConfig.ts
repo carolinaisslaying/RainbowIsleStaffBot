@@ -34,6 +34,7 @@ export interface StaffBotConfig {
     weeklyActiveDaysTarget: number;
     amberThresholdPercent: number;
     softRingsEnabled: boolean;
+    assessmentDryRun: boolean;
 
     awayAfterMinutes: number;
     autoEndAfterAwayMinutes: number;
@@ -212,6 +213,14 @@ export const CONFIG_KEYS: Record<keyof StaffBotConfig, KeySpec> = {
         importance: "optional",
         group: "targets"
     },
+    assessmentDryRun: {
+        kind: "boolean",
+        description: "Rehearse fortnight reviews without telling anyone",
+        target: "plain",
+        importance: "optional",
+        group: "targets",
+        consequence: "Reviews are rehearsals: cards post, nobody is DMed, nothing is issued"
+    },
     awayAfterMinutes: {
         kind: "number",
         description: "Silence duration before marking as Away",
@@ -319,6 +328,7 @@ export const DEFAULT_CONFIG: StaffBotConfig = {
     weeklyActiveDaysTarget: 3,
     amberThresholdPercent: 75,
     softRingsEnabled: true,
+    assessmentDryRun: false,
     awayAfterMinutes: 20,
     autoEndAfterAwayMinutes: 30,
     maxShiftHours: 12,

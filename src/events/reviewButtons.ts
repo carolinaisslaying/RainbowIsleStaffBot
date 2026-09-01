@@ -1,7 +1,12 @@
 import { MessageFlags, type ButtonInteraction, type Client } from "discord.js";
 import type { ObjectId } from "mongodb";
 import type { StaffBotConfig } from "../config/guildConfig.js";
-import { findAssessment, issueWarning, recordReview } from "../domain/assessments.js";
+import {
+    findAssessment,
+    isAssessableFortnight,
+    issueWarning,
+    recordReview
+} from "../domain/assessments.js";
 import { ensureStaff, findStaffById } from "../domain/staff.js";
 import { fetchPublicMember, resolveTier, isExecutive } from "../domain/permissions.js";
 import { tryDm } from "../discord/roles.js";
@@ -62,6 +67,23 @@ export async function handleReviewButton(
         await respond(interaction, errorCard("That assessment no longer exists."));
         return;
     }
+    // The flood left live cards in the channel for fortnights that predate the
+    // anchor, and their buttons still work. Warning somebody for a fortnight
+    // that closed before the deployment existed is the one outcome of that
+    // incident that would be hard to take back, so the decision is refused at
+    // the point of the click and not only at the point of the posting.
+    if (!isAssessableFortnight(assessment.fortnightIndex)) {
+        await respond(
+            interaction,
+            errorCard(
+                `Fortnight ${assessment.fortnightIndex} is before the anchor this cycle counts ` +
+                    "from, so it is not a fortnight of it and there is nothing to decide. This " +
+                    "card was posted in error and can be ignored."
+            )
+        );
+        return;
+    }
+
     if (assessment.reviewOutcome) {
         await respond(
             interaction,

@@ -215,6 +215,19 @@ near-empty state.
 `week-close` at 00:05 in the accounting timezone. All are date-driven and idempotent, so a missed
 run self-heals.
 
+**Idempotent means the notifications too.** `fortnightAnchor` is the origin of the cycle, and
+`fortnightIndexFor` floors an unbounded division, so weeks before the anchor come back as *negative*
+indices. `isAssessableFortnight` (`domain/assessments.ts`) rejects them everywhere: at the close, at
+`/admin assess`, and on the review buttons, because a live card for fortnight -6 can still issue a
+real warning. A restart with a future anchor and an empty database once assessed fortnights -3 to -6
+and DMed every member about each. Two other guards came from the same incident: a database with no
+rollups at all is a **cold start**, not downtime (`hasNoWeeklyRollups` is asked *before* anything is
+rebuilt, and `backfillPlan` seeds those fortnights' receipts without announcing them), and every
+fortnight now claims a `deliveries` receipt (`claimFortnightAnnouncement`) before it DMs anyone, so
+re-running an assessment refreshes the figures without re-notifying the roster. `assessmentDryRun`,
+and `/admin assess rehearse: true`, post the card marked as a rehearsal, DM nobody and claim no
+receipt, so a rehearsal is repeatable and never spends the one real announcement.
+
 **Collections** (`src/db/client.ts`): `staff`, `activityDays`, `shifts`, `weeklyStats`,
 `fortnightAssessments`, `warnings`, `leave`, `demandBuckets`, `guildConfig`, `auditLog`,
 `deliveries`. Indexes are created in the same file. `demandBuckets` holds no user id and is never

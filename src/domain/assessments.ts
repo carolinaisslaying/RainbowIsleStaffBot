@@ -155,13 +155,80 @@ export async function assessFortnight(
     return saved;
 }
 
+/**
+ * Whether an index names a real fortnight of the cycle.
+ *
+ * `fortnightAnchor` is the origin the cycle counts from, and `fortnightIndexFor`
+ * floors an unbounded division, so weeks before the anchor come back as
+ * negative indices. Those are arithmetic, not fortnights: they describe windows
+ * that closed before the cycle began, and on a deployment whose anchor is still
+ * in the future that is every window there is. A restart assessed four of them,
+ * found every member at 0 of 240 because no data existed yet, and DMed all of
+ * them about it. There is no fortnight -6 to have an opinion about.
+ */
+export function isAssessableFortnight(index: number): boolean {
+    return index >= 0;
+}
+
 /** The fortnight a closing week completes, or null when it does not complete one. */
 export function closingFortnightIndex(
     closingWeek: WeekWindow,
     config: StaffBotConfig
 ): number | null {
     if (!weekClosesFortnight(closingWeek.start, config)) return null;
-    return fortnightIndexForWeek(closingWeek.start, config);
+    const index = fortnightIndexForWeek(closingWeek.start, config);
+    return isAssessableFortnight(index) ? index : null;
+}
+
+/** What a run of the assessment is allowed to send. */
+export type AnnouncementPlan =
+    /** Post the review card and DM each member their outcome. Once, ever. */
+    | "announce"
+    /** Post the card marked as a rehearsal. No DMs, no receipt, nothing issued. */
+    | "rehearse"
+    /** Compute and store, tell nobody. */
+    | "silent";
+
+/**
+ * Whether this run may speak, given the fortnight, the dry run and whether the
+ * fortnight has been announced before.
+ *
+ * A rehearsal deliberately ignores the receipt: the point of a dry run is to be
+ * repeatable. It writes no receipt either, so turning the dry run off later
+ * still announces the fortnight properly, exactly once.
+ */
+export function announcementPlan(options: {
+    index: number;
+    dryRun: boolean;
+    alreadyAnnounced: boolean;
+}): AnnouncementPlan {
+    if (!isAssessableFortnight(options.index)) return "silent";
+    if (options.dryRun) return "rehearse";
+    return options.alreadyAnnounced ? "silent" : "announce";
+}
+
+/**
+ * What the boot backfill may do about a fortnight it just rebuilt.
+ *
+ * Rebuilding a rollup is free: `weeklyStats` is derived and recomputing it
+ * writes the same numbers. Announcing is not, and `catchUpMissedWeeks` used to
+ * treat "no rollup exists for this week" as "the process was down when that
+ * week closed". On a first boot that is true of every week in the lookback, so
+ * a fresh deployment announced its own pre-history.
+ *
+ * A database with no rollups at all is a cold start, not eight weeks of
+ * downtime. Its fortnights are seeded: the receipt is written so they are never
+ * announced later either, and nobody is told about a fortnight that ended
+ * before the bot could measure it.
+ */
+export function backfillPlan(options: {
+    coldStart: boolean;
+    index: number;
+    alreadyAnnounced: boolean;
+}): "announce" | "seed" | "skip" {
+    if (!isAssessableFortnight(options.index)) return "skip";
+    if (options.alreadyAnnounced) return "skip";
+    return options.coldStart ? "seed" : "announce";
 }
 
 export function currentFortnightIndex(config: StaffBotConfig, now = new Date()): number {

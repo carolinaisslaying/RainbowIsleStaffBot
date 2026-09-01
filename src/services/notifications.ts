@@ -26,6 +26,19 @@ import { staffDisplayName } from "../discord/displayName.js";
  * container restarts and a recap must not be sent twice or dropped.
  */
 
+/**
+ * Claim the one announcement a fortnight gets.
+ *
+ * Returns false when it has already been announced. Assessments are re-run
+ * routinely, by `/admin recompute`, by the boot backfill and by paging through
+ * a review backlog, and every one of those used to DM every member their
+ * outcome again. The receipt is what makes "assessing twice refreshes the
+ * figures" true of the notifications as well as of the documents.
+ */
+export async function claimFortnightAnnouncement(index: number): Promise<boolean> {
+    return claim(`fortnight-announced:${index}`);
+}
+
 /** Claim a one-shot delivery. Returns false if it has already been sent. */
 async function claim(key: string): Promise<boolean> {
     try {

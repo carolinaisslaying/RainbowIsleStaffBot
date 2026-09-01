@@ -3,11 +3,14 @@ import { ObjectId } from "mongodb";
 import type { FortnightAssessmentDoc } from "../db/types.js";
 import type { StaffBotConfig } from "../config/guildConfig.js";
 import {
+    announcementPlan,
     assessFortnight,
     assessmentHistory,
     assessmentsForFortnight,
     belowThresholdFor,
-    windowForIndex
+    isAssessableFortnight,
+    windowForIndex,
+    type AnnouncementPlan
 } from "../domain/assessments.js";
 import { findStaffById } from "../domain/staff.js";
 import { staffChannel } from "./leaveService.js";
@@ -18,7 +21,7 @@ import {
     text,
     type TopLevelComponent
 } from "../render/cards.js";
-import { sendFortnightOutcome } from "./notifications.js";
+import { claimFortnightAnnouncement, sendFortnightOutcome } from "./notifications.js";
 import { ContainerBuilder } from "discord.js";
 import { labelWindow, formatMinutes } from "../time/format.js";
 import { cmd } from "../discord/commandMentions.js";
@@ -51,18 +54,54 @@ async function priorOutcomesLine(staffId: ObjectId, excludeIndex: number): Promi
         .join(", ");
 }
 
-/** Run the assessment for a closed fortnight and post the review card. */
+/**
+ * Run the assessment for a closed fortnight and post the review card.
+ *
+ * What it is allowed to *say* is decided once, up front, by `announcementPlan`.
+ * The figures are recomputed on every run by design; the DMs are not, and used
+ * not to know the difference. A restart with an empty database announced four
+ * fortnights of pre-history to everybody, and re-running an assessment to page
+ * through a review backlog re-notified every member each time.
+ */
 export async function runFortnightAssessment(
     client: Client,
     config: StaffBotConfig,
-    index: number
-): Promise<void> {
+    index: number,
+    options: { dryRun?: boolean } = {}
+): Promise<AnnouncementPlan> {
+    const dryRun = options.dryRun ?? config.assessmentDryRun;
+
+    if (!isAssessableFortnight(index)) {
+        // Nothing is computed either: the window predates the anchor, so every
+        // member would be measured over days the deployment did not exist for.
+        log.warn(
+            `Refusing to assess fortnight ${index}: it precedes the fortnight anchor, ` +
+                "so it is not a fortnight of this cycle."
+        );
+        return "silent";
+    }
+
     const assessments = await assessFortnight(index, config);
     const window = windowForIndex(index, config);
     const label = labelWindow(window.week1Start, window.end, config.accountingTimezone);
 
-    // Every member gets their own outcome, met or not.
-    for (const assessment of assessments) {
+    // Claimed before anything is sent, and never during a rehearsal: a dry run
+    // has to be repeatable, and must not consume the one announcement the
+    // fortnight gets for real.
+    const plan = announcementPlan({
+        index,
+        dryRun,
+        alreadyAnnounced: dryRun ? false : !(await claimFortnightAnnouncement(index))
+    });
+
+    if (plan === "silent") {
+        log.info(`Fortnight ${index} already announced; figures refreshed, nobody notified.`);
+        return plan;
+    }
+
+    // Every member gets their own outcome, met or not. A rehearsal tells none
+    // of them: the point is to read the card, not to wake the roster.
+    for (const assessment of plan === "rehearse" ? [] : assessments) {
         const staff = await findStaffById(assessment.staffId);
         if (!staff) continue;
 
@@ -90,14 +129,16 @@ export async function runFortnightAssessment(
         );
     }
 
-    await postReviewCard(client, config, index);
+    await postReviewCard(client, config, index, { rehearsal: plan === "rehearse" });
+    return plan;
 }
 
 /** One review card for the fortnight, listing every member below threshold. */
 export async function postReviewCard(
     client: Client,
     config: StaffBotConfig,
-    index: number
+    index: number,
+    options: { rehearsal?: boolean } = {}
 ): Promise<void> {
     // Rows already decided are dropped rather than reprinted. That is what makes
     // re-running the assessment a way to page through a backlog larger than one
@@ -117,7 +158,9 @@ export async function postReviewCard(
     if (below.length === 0) {
         await channel.send({
             ...noticeCard(
-                `Fortnight ${index} assessed`,
+                options.rehearsal
+                    ? `Fortnight ${index} rehearsed`
+                    : `Fortnight ${index} assessed`,
                 alreadyDecided > 0
                     ? `${label}. All ${alreadyDecided} member(s) below the requirement have been ` +
                       "reviewed. Nothing left to decide."
@@ -137,7 +180,12 @@ export async function postReviewCard(
                     `the ${config.fortnightRequiredMinutes} minute requirement` +
                     (alreadyDecided > 0 ? `, ${alreadyDecided} already reviewed` : "") +
                     ".\n" +
-                    "-# The bot issues no warnings. Each outcome below is an Executive decision."
+                    (options.rehearsal
+                        ? "-# **Rehearsal.** Nobody was told and nothing here has been " +
+                          "recorded against anyone. Turn off the assessment dry run to make a " +
+                          "review real."
+                        : "-# The bot issues no warnings. Each outcome below is an Executive " +
+                          "decision.")
             )
         );
 

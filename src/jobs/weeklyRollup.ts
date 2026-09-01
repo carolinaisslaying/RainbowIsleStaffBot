@@ -1,12 +1,14 @@
 import type { Client } from "discord.js";
 import type { StaffBotConfig } from "../config/guildConfig.js";
 import {
+    hasNoWeeklyRollups,
     missingWeekWindows,
     previousWeekWindow,
     rebuildWeekForAll
 } from "../domain/weekly.js";
-import { closingFortnightIndex } from "../domain/assessments.js";
+import { assessFortnight, backfillPlan, closingFortnightIndex } from "../domain/assessments.js";
 import { runFortnightAssessment } from "../services/assessmentService.js";
+import { claimFortnightAnnouncement } from "../services/notifications.js";
 import { log } from "../log.js";
 
 /**
@@ -45,17 +47,50 @@ export async function catchUpMissedWeeks(
     lookbackWeeks = 8,
     at = new Date()
 ): Promise<void> {
+    // Asked before anything is rebuilt, because rebuilding is what stops it
+    // being true. A database with no rollups at all is a first boot, not eight
+    // weeks of downtime, and the difference decides whether anyone is told.
+    const coldStart = await hasNoWeeklyRollups();
+
     const missing = await missingWeekWindows(config, lookbackWeeks, at);
     if (missing.length === 0) {
         log.info("No missing weekly rollups.");
         return;
     }
 
-    log.warn(`Rebuilding ${missing.length} missing weekly rollup(s) after downtime.`);
+    log.warn(
+        `Rebuilding ${missing.length} missing weekly rollup(s)` +
+            (coldStart ? " on a first boot; no reviews will be announced." : " after downtime.")
+    );
+
     for (const window of missing) {
+        // The rollup itself is always rebuilt. It is derived from raw activity
+        // and shifts, so recomputing it writes the same numbers and tells
+        // nobody anything.
         await rebuildWeekForAll(window, config, at);
+
         const fortnightIndex = closingFortnightIndex(window, config);
-        if (fortnightIndex !== null) {
+        if (fortnightIndex === null) continue;
+
+        const plan = backfillPlan({
+            coldStart,
+            index: fortnightIndex,
+            alreadyAnnounced: false
+        });
+
+        if (plan === "seed") {
+            // Store the figures, then spend the fortnight's one announcement
+            // without making it, so it is never announced later either.
+            await assessFortnight(fortnightIndex, config);
+            await claimFortnightAnnouncement(fortnightIndex);
+            log.info(
+                `Fortnight ${fortnightIndex} assessed on a first boot; nobody notified, ` +
+                    "and it will not be announced later."
+            );
+            continue;
+        }
+
+        if (plan === "announce") {
             await runFortnightAssessment(client, config, fortnightIndex);
         }
     }
