@@ -39,6 +39,11 @@ export async function claimFortnightAnnouncement(index: number): Promise<boolean
     return claim(`fortnight-announced:${index}`);
 }
 
+/** Claim the one team recap a week gets, for the same reason as the fortnight. */
+export async function claimTeamRecap(weekStart: Date): Promise<boolean> {
+    return claim(`team-recap:${weekStart.getTime()}`);
+}
+
 /** Claim a one-shot delivery. Returns false if it has already been sent. */
 async function claim(key: string): Promise<boolean> {
     try {

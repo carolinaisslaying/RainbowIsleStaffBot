@@ -212,6 +212,19 @@ until your minute count happens to move.
 picker rather than saying "saved", so it reads as two choices instead of two refusals. Adding
 `ringFace` means every existing member is asked once on their next command.
 
+**The recap is two things.** Each member gets their own ring card by DM, held until **their own
+local 09:00** on the week's first day, which is why the job ticks hourly rather than weekly;
+`deliverDueRecaps` claims a receipt per member per week. Separately, `services/teamRecapService.ts`
+posts **the team's week** to `recapChannelId` when the week closes: who closed their ring, the
+total against last week's, and the spread chart. `recapChannelId` was configurable from the
+beginning and nothing read it, so `/config view` offered a channel picker for a posting that did not
+exist. Members on leave for the whole week are counted separately and excluded from every average,
+or a week nobody was expected to work drags the team's figures down. The team recap claims its own
+receipt (`claimTeamRecap`) for the same reason the fortnight announcement does, and a **cold start
+spends the receipt without posting**, so a fresh deployment does not fill the channel with weeks
+that closed before it existed. `/admin recap` rehearses either: `team: true` for the channel
+posting, otherwise one member's DM. Neither claims a receipt, so the real ones still go out.
+
 **Review charts.** `render/trend.ts` draws two, both pure string functions like the others.
 `trendSvg` plots a member's last six fortnights as bars against a dashed requirement line, because
 "0 of 240" reads identically whether somebody has always been at zero or fell off a cliff, and those

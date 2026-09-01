@@ -233,8 +233,12 @@ export function spreadSvg(input: {
     const ceiling = peak * 1.15;
     const y = (value: number) => base - (value / ceiling) * PLOT_HEIGHT;
 
-    const slot = (plotRight - plotLeft) / sorted.length;
-    const barWidth = Math.max(3, Math.min(26, slot - 3));
+    // A small roster must not spread three bars across the full width: capping
+    // the slot and left-packing keeps two members looking like a chart rather
+    // than like marks floating in an empty panel.
+    const MAX_SLOT = 44;
+    const slot = Math.min(MAX_SLOT, (plotRight - plotLeft) / sorted.length);
+    const barWidth = Math.max(3, Math.min(30, slot - 3));
 
     const parts: string[] = [
         `<text x="${plotLeft}" y="${TITLE_BASELINE}" font-family="${FONT_STACK}" ` +

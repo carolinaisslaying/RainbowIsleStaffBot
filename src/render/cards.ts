@@ -789,6 +789,84 @@ export function scrubConfirmCard(input: {
 const EMOJI_SCRUB = "🗑️";
 
 /**
+ * The team's week, for the recap channel.
+ *
+ * Deliberately not a roster: the personal recap already tells each member their
+ * own figures, and a channel post repeating them is a leaderboard with extra
+ * steps, which the leaderboard already is. What a channel can say that a DM
+ * cannot is how the week went for everybody at once.
+ *
+ * No individual is named except the longest streak, which is the one figure
+ * that is unambiguously good news and reads as recognition rather than as a
+ * ranking.
+ */
+export function teamRecapCard(input: {
+    windowLabel: string;
+    headline: string;
+    totalMinutes: string;
+    medianMinutes: number;
+    meanMinutes: number;
+    targetMinutes: number;
+    topStreak: { mention: string; weeks: number } | null;
+    spread: { png: Buffer; alt: string } | null;
+    rehearsal: boolean;
+}): RenderedMessage {
+    const container = new ContainerBuilder()
+        .setAccentColor(COLOUR.report)
+        .addTextDisplayComponents(
+            text(
+                `## ${emojiForColour(COLOUR.report)} The week in review\n` +
+                    `${input.windowLabel}\n${input.headline}\n` +
+                    `-# ${input.totalMinutes} between everyone. Median ` +
+                    `${input.medianMinutes} min, average ${input.meanMinutes}, against a ` +
+                    `${input.targetMinutes} minute target.`
+            )
+        );
+
+    if (input.spread) {
+        container.addMediaGalleryComponents(
+            new MediaGalleryBuilder().addItems(
+                new MediaGalleryItemBuilder()
+                    .setURL(`attachment://${TEAM_RECAP_FILE}`)
+                    .setDescription(input.spread.alt)
+            )
+        );
+    }
+
+    if (input.topStreak && input.topStreak.weeks > 1) {
+        container.addTextDisplayComponents(
+            text(
+                `-# Longest run going: ${input.topStreak.mention}, ` +
+                    `${input.topStreak.weeks} weeks unbroken.`
+            )
+        );
+    }
+
+    container.addTextDisplayComponents(
+        text(
+            input.rehearsal
+                ? "-# **Rehearsal.** This was not posted to the recap channel."
+                : "-# Everyone has their own figures by direct message."
+        )
+    );
+
+    return {
+        components: [container],
+        files: input.spread
+            ? [
+                  new AttachmentBuilder(input.spread.png, {
+                      name: TEAM_RECAP_FILE,
+                      description: input.spread.alt
+                  })
+              ]
+            : [],
+        flags: V2_FLAGS
+    };
+}
+
+const TEAM_RECAP_FILE = "team-week.png";
+
+/**
  * The leave request as it appears in the log channel, in each of the three
  * states it passes through.
  *

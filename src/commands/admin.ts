@@ -11,7 +11,12 @@ import {
 } from "../render/cards.js";
 import { defer, respond } from "../discord/respond.js";
 import { listActiveStaff, findStaffByDiscordId } from "../domain/staff.js";
-import { rebuildWeek, weekWindowFor, currentWeekStats } from "../domain/weekly.js";
+import {
+    rebuildWeek,
+    weekWindowFor,
+    currentWeekStats,
+    previousWeekWindow
+} from "../domain/weekly.js";
 import { recomputeCounts } from "../domain/activity.js";
 import {
     currentFortnightIndex,
@@ -24,6 +29,7 @@ import { shiftHistory } from "../domain/shifts.js";
 import { audit } from "../domain/audit.js";
 import { scrubPreview } from "../domain/scrub.js";
 import { rehearseRecap } from "../services/notifications.js";
+import { buildTeamRecap } from "../services/teamRecapService.js";
 import { cmd } from "../discord/commandMentions.js";
 import { weekStartFor, nextWeekStart, DAY_MS } from "../time/calendar.js";
 import { formatDuration, labelWindow, ts } from "../time/format.js";
@@ -72,6 +78,12 @@ export const adminCommand: Command = {
                     option
                         .setName("user")
                         .setDescription("Whose recap. Defaults to your own.")
+                        .setRequired(false)
+                )
+                .addBooleanOption((option) =>
+                    option
+                        .setName("team")
+                        .setDescription("Preview the team recap for the channel instead")
                         .setRequired(false)
                 )
         )
@@ -228,6 +240,29 @@ export const adminCommand: Command = {
 
         if (sub === "recap") {
             await defer(interaction, true);
+
+            // The team recap is the channel posting; a rehearsal renders it
+            // here and posts nothing, and claims no receipt, so the real one
+            // still goes out when the week closes.
+            if (interaction.options.getBoolean("team")) {
+                const week = previousWeekWindow(new Date(), config);
+                const card = await buildTeamRecap(client, config, week, true);
+                if (!card) {
+                    await respond(
+                        interaction,
+                        errorCard(
+                            "There are no weekly rollups for the week that just closed, so " +
+                                "there is nothing to summarise."
+                        )
+                    );
+                    return;
+                }
+                await respond(interaction, {
+                    ...card,
+                    flags: card.flags | MessageFlags.Ephemeral
+                });
+                return;
+            }
 
             const who = interaction.options.getUser("user");
             const subject = who ? await findStaffByDiscordId(who.id) : staff;

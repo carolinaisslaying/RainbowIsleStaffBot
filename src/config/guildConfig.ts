@@ -157,11 +157,11 @@ export const CONFIG_KEYS: Record<keyof StaffBotConfig, KeySpec> = {
     },
     recapChannelId: {
         kind: "string",
-        description: "Weekly recap postings",
+        description: "The team's week, posted when the week closes",
         target: "channel",
         importance: "optional",
         group: "channels",
-        consequence: "Recaps still arrive by DM"
+        consequence: "No team summary is posted; members still get their own by DM"
     },
     weeklyTargetMinutes: {
         kind: "number",

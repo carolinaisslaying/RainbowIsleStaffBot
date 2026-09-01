@@ -8,7 +8,8 @@ import {
 } from "../domain/weekly.js";
 import { assessFortnight, backfillPlan, closingFortnightIndex } from "../domain/assessments.js";
 import { runFortnightAssessment } from "../services/assessmentService.js";
-import { claimFortnightAnnouncement } from "../services/notifications.js";
+import { claimFortnightAnnouncement, claimTeamRecap } from "../services/notifications.js";
+import { postTeamRecap } from "../services/teamRecapService.js";
 import { log } from "../log.js";
 
 /**
@@ -25,6 +26,17 @@ export async function closeWeek(
     const closing = previousWeekWindow(at, config);
     await rebuildWeekForAll(closing, config, at);
     log.info(`Closed week starting ${closing.start.toISOString()}`);
+
+    // The team's week, once. Claimed against a receipt like the fortnight
+    // announcement, so a rebuild refreshes the figures without posting again.
+    try {
+        if (await postTeamRecap(client, config, closing)) {
+            log.info("Posted the team recap for the closed week.");
+        }
+    } catch (error) {
+        // A recap nobody could post must not stop the assessment that follows.
+        log.error("Team recap failed to post", error);
+    }
 
     const fortnightIndex = closingFortnightIndex(closing, config);
     if (fortnightIndex === null) {
@@ -68,6 +80,20 @@ export async function catchUpMissedWeeks(
         // and shifts, so recomputing it writes the same numbers and tells
         // nobody anything.
         await rebuildWeekForAll(window, config, at);
+
+        // The team recap follows the same rule as the fortnight announcement:
+        // a first boot spends the receipt without posting, so a fresh
+        // deployment does not fill the recap channel with eight weeks of
+        // history that closed before it existed.
+        if (coldStart) {
+            await claimTeamRecap(window.start);
+        } else {
+            try {
+                await postTeamRecap(client, config, window);
+            } catch (error) {
+                log.error("Team recap failed to post during catch-up", error);
+            }
+        }
 
         const fortnightIndex = closingFortnightIndex(window, config);
         if (fortnightIndex === null) continue;
