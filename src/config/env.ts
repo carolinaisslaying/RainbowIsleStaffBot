@@ -95,4 +95,27 @@ export function assertEnvironment(): void {
     if (missing.length > 0) {
         throw new Error(`Missing required environment variables: ${missing.join(", ")}`);
     }
+
+    // A malformed port parsed to NaN and `listen(NaN)` binds an arbitrary free
+    // port, so the API came up somewhere nobody could guess and the operator
+    // read "listening" in the log. Fail here instead: startup validation is
+    // where a misconfigured deployment is supposed to stop.
+    const port = env.apiPort;
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+        throw new Error(
+            `API_PORT must be a whole number from 1 to 65535, not ${JSON.stringify(
+                process.env.API_PORT
+            )}`
+        );
+    }
+
+    // The two guilds are different servers by definition. Pointing both at one
+    // makes every "is this the staff server" check answer yes, which quietly
+    // publishes shift figures, warnings and leave into the community server.
+    if (process.env.PUBLIC_GUILD_ID === process.env.STAFF_GUILD_ID) {
+        throw new Error(
+            "PUBLIC_GUILD_ID and STAFF_GUILD_ID are the same. They are two different servers; " +
+                "with one id every staff-only surface answers in the community server."
+        );
+    }
 }

@@ -2,9 +2,47 @@ import { ObjectId } from "mongodb";
 import { collections } from "../db/client.js";
 import type { StaffDoc } from "../db/types.js";
 import { audit } from "./audit.js";
+import { LruCache } from "../util/cache.js";
+
+/**
+ * Discord ID to staff record, cached.
+ *
+ * `messageCreate` asks this of every message in a 110,000 member server, before
+ * it knows whether the author is staff at all, so almost every call is a miss
+ * that costs a round trip to Mongo. Misses are cached too — that is the whole
+ * point, since they are the common case — but only briefly, so somebody who
+ * joins the department is picked up without a restart.
+ *
+ * Every write that changes who a Discord ID resolves to invalidates it:
+ * `ensureStaff`, `relinkStaff` and `setStaffActive`.
+ *
+ * Both hits and misses also expire, which is the belt to that braces. The other
+ * writers here — `setTimezone`, `setRingFace`, `setLeaderboardOptOut` — take a
+ * staffId and have no Discord ID to invalidate by, so a document they edit
+ * would otherwise be served stale from a cached hit indefinitely. A short life
+ * means any such gap heals itself within a minute instead of lasting until a
+ * restart. The hot path still avoids essentially every query it used to make:
+ * one lookup per member per minute against one per message.
+ */
+const HIT_TTL_MS = 60_000;
+const MISS_TTL_MS = 60_000;
+const staffByDiscordId = new LruCache<string, { doc: StaffDoc | null; at: number }>(2000);
+
+export function forgetStaffLookup(discordId?: string): void {
+    if (discordId === undefined) staffByDiscordId.clear();
+    else staffByDiscordId.delete(discordId);
+}
 
 export async function findStaffByDiscordId(discordId: string): Promise<StaffDoc | null> {
-    return collections.staff().findOne({ discordId });
+    const cached = staffByDiscordId.get(discordId);
+    if (cached) {
+        const age = Date.now() - cached.at;
+        if (age < (cached.doc === null ? MISS_TTL_MS : HIT_TTL_MS)) return cached.doc;
+    }
+
+    const doc = await collections.staff().findOne({ discordId });
+    staffByDiscordId.set(discordId, { doc, at: Date.now() });
+    return doc;
 }
 
 export async function findStaffById(staffId: ObjectId): Promise<StaffDoc | null> {
@@ -60,6 +98,10 @@ export async function ensureStaff(discordId: string): Promise<StaffDoc> {
         { upsert: true, returnDocument: "after" }
     );
     if (!result) throw new Error(`Failed to upsert staff record for ${discordId}`);
+    // The record now exists, or its contents moved. Either way the cached
+    // answer for this ID is out of date, and a cached miss would keep a
+    // brand-new member unrecognised until it expired.
+    forgetStaffLookup(discordId);
     return result;
 }
 
@@ -101,10 +143,15 @@ export async function setLeaderboardOptOut(
 }
 
 export async function setStaffActive(staffId: ObjectId, active: boolean): Promise<void> {
-    await collections.staff().updateOne(
+    const result = await collections.staff().findOneAndUpdate(
         { _id: staffId },
-        { $set: { active, updatedAt: new Date() } }
+        { $set: { active, updatedAt: new Date() } },
+        { returnDocument: "after" }
     );
+    // `active` is read off the cached document by reviewRowFor to decide whether
+    // somebody has departed, so a stale copy would draw a departed member as
+    // present and offer buttons that refuse.
+    if (result) forgetStaffLookup(result.discordId);
     await audit(active ? "staff.reactivated" : "staff.deactivated", {
         targetStaffId: staffId
     });
@@ -138,6 +185,10 @@ export async function relinkStaff(
         },
         { returnDocument: "after" }
     );
+
+    // Both IDs change meaning: the old one stops resolving, the new one starts.
+    forgetStaffLookup(oldDiscordId);
+    forgetStaffLookup(newDiscordId);
 
     await audit("staff.relink", {
         actorId,

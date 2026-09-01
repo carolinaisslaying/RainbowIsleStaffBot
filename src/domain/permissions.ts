@@ -106,6 +106,22 @@ export function tierOf(member: GuildMember | null, config: StaffBotConfig): Tier
 }
 
 /**
+ * Said once per admin per process, not once per interaction.
+ *
+ * The escape hatch is meant to be visible, and it was: a warning on every
+ * command a seeded admin ran. On a deployment where the admin is also the
+ * working Executive that is a warning per click, which buries every warning
+ * that means something. Once is loud enough to notice and quiet enough to
+ * leave the rest of the log readable.
+ */
+const announcedBootstrapUse = new Set<string>();
+
+/** Test seam. The set is process-lifetime state, and a test is a process. */
+export function forgetBootstrapAnnouncements(): void {
+    announcedBootstrapUse.clear();
+}
+
+/**
  * The tier check every handler should use.
  *
  * Resolves roles in the public guild, then falls back to the bootstrap list.
@@ -121,10 +137,13 @@ export function resolveTier(
     const fromRoles = tierOf(member, config);
     if (fromRoles === "executive") return fromRoles;
     if (isBootstrapAdmin(userId)) {
-        log.warn(
-            `Granting Executive to ${userId} via BOOTSTRAP_ADMIN_IDS. Set executiveRoles ` +
-                "with /config set so this is no longer needed."
-        );
+        if (!announcedBootstrapUse.has(userId)) {
+            announcedBootstrapUse.add(userId);
+            log.warn(
+                `Granting Executive to ${userId} via BOOTSTRAP_ADMIN_IDS. Set executiveRoles ` +
+                    "with /config set so this is no longer needed. Said once per restart."
+            );
+        }
         return "executive";
     }
     return fromRoles;

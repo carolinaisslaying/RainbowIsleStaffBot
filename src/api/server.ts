@@ -82,21 +82,35 @@ async function staffSummary(discordId: string) {
     };
 }
 
-async function assessmentsBetween(from: Date, to: Date) {
+/**
+ * Bounded on purpose. An unpaginated read of every assessment ever written
+ * grows without limit and is one request away from being the largest thing this
+ * process has ever held in memory. The caller asks for a page; the response
+ * says whether there is more.
+ */
+const ASSESSMENT_PAGE_DEFAULT = 500;
+const ASSESSMENT_PAGE_MAX = 2000;
+
+async function assessmentsBetween(from: Date, to: Date, limit: number, skip: number) {
     const docs = await collections
         .fortnightAssessments()
         .find({ windowStart: { $gte: from }, windowEnd: { $lte: to } })
-        .sort({ fortnightIndex: 1 })
+        .sort({ fortnightIndex: 1, _id: 1 })
+        .skip(skip)
+        // One more than asked for, so "is there another page" is answered
+        // without a second count over the same filter.
+        .limit(limit + 1)
         .toArray();
 
-    const staffIds = [...new Set(docs.map((doc) => doc.staffId.toHexString()))];
+    const staffIds = [...new Set(docs.slice(0, limit).map((doc) => doc.staffId.toHexString()))];
     const staff = await collections
         .staff()
         .find({ _id: { $in: staffIds.map((id) => new ObjectId(id)) } })
         .toArray();
     const discordIds = new Map(staff.map((doc) => [doc._id.toHexString(), doc.discordId]));
 
-    return docs.map((doc) => ({
+    const page = docs.slice(0, limit);
+    return { hasMore: docs.length > limit, rows: page.map((doc) => ({
         staffId: doc.staffId.toHexString(),
         discordId: discordIds.get(doc.staffId.toHexString()) ?? null,
         fortnightIndex: doc.fortnightIndex,
@@ -109,7 +123,28 @@ async function assessmentsBetween(from: Date, to: Date) {
         status: doc.status,
         reviewOutcome: doc.reviewOutcome,
         reviewedAt: doc.reviewedAt
-    }));
+    })) };
+}
+
+/**
+ * Page arguments, validated rather than coerced. `Number("abc")` is NaN and NaN
+ * compares false against every bound, so a bad limit would otherwise sail
+ * through and land in `.limit(NaN)`.
+ */
+export function parsePaging(
+    rawLimit: string | null,
+    rawSkip: string | null
+): { ok: true; limit: number; skip: number } | { ok: false; error: string } {
+    const limit = rawLimit === null ? ASSESSMENT_PAGE_DEFAULT : Number(rawLimit);
+    const skip = rawSkip === null ? 0 : Number(rawSkip);
+
+    if (!Number.isInteger(limit) || limit < 1 || limit > ASSESSMENT_PAGE_MAX) {
+        return { ok: false, error: `limit must be a whole number from 1 to ${ASSESSMENT_PAGE_MAX}` };
+    }
+    if (!Number.isInteger(skip) || skip < 0) {
+        return { ok: false, error: "skip must be a whole number, zero or more" };
+    }
+    return { ok: true, limit, skip };
 }
 
 export function startApiServer(): ReturnType<typeof createServer> | null {
@@ -153,12 +188,28 @@ export function startApiServer(): ReturnType<typeof createServer> | null {
                         json(response, 400, { error: "from and to must be ISO instants" });
                         return;
                     }
-                    json(response, 200, { assessments: await assessmentsBetween(from, to) });
-                    return;
-                }
 
-                if (url.pathname === "/api/webhooks/test" && request.method === "POST") {
-                    json(response, 200, { ok: true, receivedAt: new Date().toISOString() });
+                    const paging = parsePaging(
+                        url.searchParams.get("limit"),
+                        url.searchParams.get("skip")
+                    );
+                    if (!paging.ok) {
+                        json(response, 400, { error: paging.error });
+                        return;
+                    }
+
+                    const result = await assessmentsBetween(
+                        from,
+                        to,
+                        paging.limit,
+                        paging.skip
+                    );
+                    json(response, 200, {
+                        assessments: result.rows,
+                        limit: paging.limit,
+                        skip: paging.skip,
+                        hasMore: result.hasMore
+                    });
                     return;
                 }
 
