@@ -192,10 +192,35 @@ export async function postReviewQueue(
     index: number,
     options: { rehearsal?: boolean } = {}
 ): Promise<void> {
+    const below = await refreshQueueHeader(client, config, index, options);
+    if (below === null) return;
+
+    for (const assessment of below) {
+        await upsertReviewRow(client, config, assessment, index, options.rehearsal ?? false);
+    }
+}
+
+/**
+ * Redraw the header alone, and hand back the rows it counted.
+ *
+ * Split out because a decision changes the header on every click but changes
+ * one row, and a bulk run changes the header repeatedly while it works. Redoing
+ * every row each time is a Discord edit per member per decision, which on a
+ * queue of any size is slow enough that the card looks stuck.
+ *
+ * Returns null when there is nowhere to post, so callers stop rather than
+ * carrying on and failing once per row.
+ */
+export async function refreshQueueHeader(
+    client: Client,
+    config: StaffBotConfig,
+    index: number,
+    options: { rehearsal?: boolean } = {}
+): Promise<FortnightAssessmentDoc[] | null> {
     const channel = await staffChannel(client, config, config.reportChannelId);
     if (!channel) {
         log.warn("No reportChannelId configured; skipping the fortnight review queue.");
-        return;
+        return null;
     }
 
     const below = await belowThresholdFor(index);
@@ -253,9 +278,7 @@ export async function postReviewQueue(
     // No rows at all still gets a header, which reads "nothing to review". A
     // separate "assessed" notice for that case was a second message saying the
     // same thing.
-    for (const assessment of below) {
-        await upsertReviewRow(client, config, assessment, index, options.rehearsal ?? false);
-    }
+    return below;
 }
 
 /** Draw one member's row, editing its own message if it already has one. */

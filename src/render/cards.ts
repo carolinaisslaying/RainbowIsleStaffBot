@@ -882,6 +882,81 @@ export function teamRecapCard(input: {
 const TEAM_RECAP_FILE = "team-week.png";
 
 /**
+ * A bulk run, while it is running.
+ *
+ * A queue of twelve is twelve records, twelve direct messages and twelve card
+ * edits, which is long enough that a card saying nothing reads as a card that
+ * has died. This is edited as the run goes, so the person who pressed the
+ * button can see it moving and knows which names are already done if something
+ * fails halfway.
+ */
+export function reviewBulkProgressCard(input: {
+    outcome: string;
+    done: number;
+    total: number;
+    skipped: number;
+    finished: boolean;
+    /** Names, once it is over. Left out while running: the list only churns. */
+    doneNames?: string[];
+    skippedNames?: string[];
+    reason?: string;
+    /** Rows decided by somebody else between the confirmation and the run. */
+    movedOn?: number;
+}): RenderedMessage {
+    const bar = progressBar(input.done + input.skipped, input.total);
+
+    const lines = input.finished
+        ? [
+              `**${input.done}** ${input.done === 1 ? "row" : "rows"} ${input.outcome}.`,
+              ...(input.doneNames && input.doneNames.length > 0
+                  ? [input.doneNames.join(", ")]
+                  : []),
+              ...(input.skippedNames && input.skippedNames.length > 0
+                  ? [
+                        "",
+                        `**Skipped ${input.skipped}.** ${input.skippedNames.join(", ")}. You ` +
+                            "cannot warn yourself, and somebody who has left cannot be warned."
+                    ]
+                  : []),
+              ...(input.movedOn && input.movedOn > 0
+                  ? [
+                        "",
+                        `-# ${input.movedOn} ${input.movedOn === 1 ? "row was" : "rows were"} ` +
+                            "decided by somebody else while you were typing, so " +
+                            `${input.movedOn === 1 ? "it was" : "they were"} left alone.`
+                    ]
+                  : []),
+              ...(input.reason ? ["", `**Recorded against each:** ${input.reason}`] : [])
+          ]
+        : [
+              `${bar}`,
+              `Working through ${input.total}: **${input.done + input.skipped}** done.`,
+              "-# Each one writes a record and, where it applies, sends a message. " +
+                  "Leave this open."
+          ];
+
+    return noticeCard(
+        input.finished
+            ? `${input.done} ${input.done === 1 ? "row" : "rows"} ${input.outcome}`
+            : `Deciding ${input.total} rows`,
+        lines.join("\n"),
+        {
+            ephemeral: true,
+            colour: input.finished ? COLOUR.approved : COLOUR.pending
+        }
+    );
+}
+
+/** Twelve cells, because a bar that is mostly rounding error tells you nothing. */
+function progressBar(done: number, total: number): string {
+    const cells = 12;
+    const filled = total === 0 ? cells : Math.round((done / total) * cells);
+    return "▰".repeat(filled) + "▱".repeat(Math.max(0, cells - filled));
+}
+
+
+
+/**
  * The leave request as it appears in the log channel, in each of the three
  * states it passes through.
  *

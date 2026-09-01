@@ -245,7 +245,9 @@ export function reviewBulkModal(
 ): ModalBuilder {
     const prompt = DECISION_PROMPT[action] ?? DECISION_PROMPT.dismiss;
     return new ModalBuilder()
-        .setCustomId(`${REVIEW_BULK_MODAL}:${fortnightIndex}:${action}`)
+// The count the confirmation showed rides along, so the run can say
+        // whether the set moved while the modal was open.
+        .setCustomId(`${REVIEW_BULK_MODAL}:${fortnightIndex}:${action}:${count}`)
         .setTitle(`${prompt.title} \u00d7 ${count}`.slice(0, 45))
         .addTextDisplayComponents(
             new TextDisplayBuilder().setContent(

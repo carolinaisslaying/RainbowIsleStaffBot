@@ -22,8 +22,13 @@ import { ensureStaff, findStaffById } from "../domain/staff.js";
 import { fetchPublicMember, resolveTier, isExecutive } from "../domain/permissions.js";
 import { audit } from "../domain/audit.js";
 import { tryDm } from "../discord/roles.js";
-import { postReviewQueue } from "../services/assessmentService.js";
-import { errorCard, noticeCard, warningDmCard } from "../render/cards.js";
+import { refreshQueueHeader, upsertReviewRow } from "../services/assessmentService.js";
+import {
+    errorCard,
+    noticeCard,
+    reviewBulkProgressCard,
+    warningDmCard
+} from "../render/cards.js";
 import { FIELD_REASON, REVIEW_BULK_MODAL, REVIEW_DECISION_MODAL } from "../render/modals.js";
 import { defer, respond } from "../discord/respond.js";
 import { labelWindow } from "../time/format.js";
@@ -107,7 +112,20 @@ export async function handleReviewModal(
             actor._id,
             interaction.user.id
         );
-        await postReviewQueue(client, config, assessment.fortnightIndex, {
+        // The row that changed, then the header's count. Redrawing every other
+        // row rewrites cards nobody touched and makes one decision cost a
+        // Discord edit per member in the queue.
+        const decided = await findAssessment(assessment._id);
+        if (decided) {
+            await upsertReviewRow(
+                client,
+                config,
+                decided,
+                decided.fortnightIndex,
+                decided.rehearsal === true
+            );
+        }
+        await refreshQueueHeader(client, config, assessment.fortnightIndex, {
             rehearsal: assessment.rehearsal === true
         });
         await respond(
@@ -122,8 +140,10 @@ export async function handleReviewModal(
 
     if (namespace !== REVIEW_BULK_MODAL) return;
 
+    const [, , , expectedRaw] = interaction.customId.split(":");
     const fortnightIndex = Number(first);
     const action = second as Exclude<ReviewAction, "reopen">;
+    const expected = Number(expectedRaw);
     if (!isAssessableFortnight(fortnightIndex)) {
         await respond(interaction, errorCard("That fortnight is not one this cycle counts."));
         return;
@@ -135,8 +155,46 @@ export async function handleReviewModal(
         (row) => !row.reviewOutcome
     );
 
+    // The confirmation named a set, and a modal can sit open while somebody
+    // else works the queue. Acting on the current set is right; letting the
+    // reader think they acted on the set they read is not, so the difference is
+    // reported rather than quietly absorbed.
+    const movedOn =
+        Number.isFinite(expected) && expected > 0 ? expected - remaining.length : 0;
+
     const done: string[] = [];
     const skipped: string[] = [];
+
+    // The card is edited as the run goes rather than once at the end. Twelve
+    // rows is twelve records, twelve messages and twelve card edits, which is
+    // long enough that a reply saying nothing reads as one that has died.
+    //
+    // Throttled, because editing an interaction reply once per row on a long
+    // queue is a rate limit waiting to happen and nobody can read it that fast
+    // anyway. The first and last edits always go.
+    let lastTick = 0;
+    const tick = async (finished: boolean): Promise<void> => {
+        const now = Date.now();
+        if (!finished && now - lastTick < 1500) return;
+        lastTick = now;
+        try {
+            await respond(
+                interaction,
+                reviewBulkProgressCard({
+                    outcome: OUTCOME_FOR[action],
+                    done: done.length,
+                    skipped: skipped.length,
+                    total: remaining.length,
+                    finished: false
+                })
+            );
+        } catch (error) {
+            // Progress is a courtesy. Losing it must not stop the run.
+            log.debug("Could not update bulk progress", error);
+        }
+    };
+
+    await tick(false);
 
     for (const row of remaining) {
         const subject = await findStaffById(row.staffId);
@@ -162,13 +220,29 @@ export async function handleReviewModal(
                 interaction.user.id
             );
             done.push(`<@${subject?.discordId ?? "unknown"}>`);
+
+            // The row's own card, straight away, so the channel shows the run
+            // moving rather than changing all at once when it finishes.
+            const decided = await findAssessment(row._id);
+            if (decided) {
+                await upsertReviewRow(
+                    client,
+                    config,
+                    decided,
+                    fortnightIndex,
+                    decided.rehearsal === true
+                );
+            }
         } catch (error) {
             log.error(`Bulk ${action} failed for assessment ${row._id.toHexString()}`, error);
             skipped.push(`<@${subject?.discordId ?? "unknown"}>`);
         }
+        await tick(false);
     }
 
-    await postReviewQueue(client, config, fortnightIndex, {
+    // The header once at the end. It carries a count, and a count that ticks
+    // down in the channel is a dozen edits nobody is watching.
+    await refreshQueueHeader(client, config, fortnightIndex, {
         rehearsal: remaining[0]?.rehearsal === true
     });
 
@@ -179,19 +253,17 @@ export async function handleReviewModal(
 
     await respond(
         interaction,
-        noticeCard(
-            `${done.length} ${done.length === 1 ? "row" : "rows"} decided`,
-            (done.length > 0 ? `${OUTCOME_FOR[action]}: ${done.join(", ")}.\n\n` : "") +
-                (skipped.length > 0
-                    ? `Skipped: ${skipped.join(", ")}. You cannot warn yourself, and a ` +
-                      "member who has left cannot be warned.\n\n"
-                    : "") +
-                `Reason recorded against each: ${reason}`,
-            {
-                colour: done.length > 0 ? COLOUR.approved : COLOUR.adverse,
-                ephemeral: true
-            }
-        )
+        reviewBulkProgressCard({
+            outcome: OUTCOME_FOR[action],
+            done: done.length,
+            skipped: skipped.length,
+            total: remaining.length,
+            finished: true,
+            doneNames: done,
+            skippedNames: skipped,
+            reason,
+            movedOn: movedOn > 0 ? movedOn : 0
+        })
     );
 }
 

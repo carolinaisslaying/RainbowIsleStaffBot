@@ -96,6 +96,14 @@ their cards in the review channel**, optionally rehearsing it again straight aft
 posted beside the last run's leftovers is read against them. It says on the confirmation how many of
 the records came from a rehearsal and how many are real.
 
+**A bulk decision reports as it runs.** Twelve rows is twelve records, twelve DMs and twelve card
+edits, so the ephemeral reply is edited as it goes (throttled to 1.5s, first and last always sent)
+and each row's own card is redrawn the moment it is decided. `refreshQueueHeader` is split from
+`postReviewQueue` for this: the header carries the count and changes on every decision, while the
+rows do not, and redrawing all of them per click costs a Discord edit per member in the queue. The
+modal's customId carries the count the confirmation showed, so a run that finds fewer rows says how
+many somebody else decided while it sat open rather than quietly absorbing the difference.
+
 **Two guilds.** Roles live in the public guild; commands answer in the staff guild or in DMs.
 `resolveTierAllowingLeave` in `interactionCreate.ts` re-grants Staff tier to members whose
 department role was removed by active leave, or they could not run `/leave end`.
