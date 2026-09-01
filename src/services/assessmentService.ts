@@ -518,20 +518,20 @@ function describeSpread(entries: SpreadEntry[], required: number): string {
 
 
 /**
- * Delete a fortnight's review from the channel: the header and every row card.
+ * Delete a review from the channel: every row card, and the header above them.
  *
- * A rehearsal leaves real messages behind, and re-running one posts a second
- * set beside the first because the records remember where their cards are. So
- * clearing a rehearsal means clearing the channel too, or the next run is read
- * against the leftovers of the last one.
+ * Takes the assessments rather than a fortnight index, because the caller is
+ * about to delete those documents and the documents are the only record of
+ * where their cards are. Looking them up afterwards returns nothing and leaves
+ * a channel full of orphaned cards for members whose records no longer exist,
+ * which is exactly what happened the first time this was written.
  *
  * Best effort per message, as `updateLeaveCard` is: a card somebody already
  * deleted by hand must not stop the rest from going.
  */
 export async function deleteReviewMessages(
     client: Client,
-    config: StaffBotConfig,
-    index: number
+    assessments: FortnightAssessmentDoc[]
 ): Promise<number> {
     let removed = 0;
 
@@ -547,14 +547,17 @@ export async function deleteReviewMessages(
         }
     };
 
-    for (const assessment of await assessmentsForFortnight(index)) {
+    for (const assessment of assessments) {
         if (assessment.reviewChannelId && assessment.reviewMessageId) {
             await drop(assessment.reviewChannelId, assessment.reviewMessageId);
         }
     }
 
-    const review = await findReview(index);
-    if (review) {
+    // One header per fortnight, and a purge can span several of them: clearing
+    // every pre-anchor fortnight at once is four headers, not one.
+    for (const index of new Set(assessments.map((entry) => entry.fortnightIndex))) {
+        const review = await findReview(index);
+        if (!review) continue;
         await drop(review.headerChannelId, review.headerMessageId);
         // The header's location goes with it, so a re-run posts a fresh one
         // rather than trying to edit a message that is no longer there.

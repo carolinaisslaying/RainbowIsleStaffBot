@@ -49,18 +49,23 @@ export interface ScrubResult {
 }
 
 /**
- * Remove them, audit row first.
+ * Write down what is about to go, before any of it goes.
  *
- * The audit write is not wrapped in `audit()`, which deliberately swallows its
- * own failures: here a failed audit has to stop the delete, exactly as it does
- * on the leave purge path.
+ * Split from the deleting so a caller can interleave work between the two: the
+ * review's cards in the channel have to be removed while the documents that
+ * know where they are still exist, and they must not be removed before the
+ * audit row lands either. Audit, then the channel, then the documents.
+ *
+ * The write is not wrapped in `audit()`, which deliberately swallows its own
+ * failures: here a failed audit has to stop the delete, exactly as it does on
+ * the leave purge path.
  */
-export async function scrub(
+export async function recordScrubIntent(
     target: ScrubTarget,
     actorId: string,
     reason: string
-): Promise<ScrubResult> {
-    if (target.assessments.length === 0) return { assessments: 0, warnings: 0 };
+): Promise<ScrubReceipt> {
+    if (target.assessments.length === 0) return { auditedAt: new Date(), records: 0 };
 
     await collections.auditLog().insertOne({
         _id: new ObjectId(),
@@ -78,16 +83,59 @@ export async function scrub(
                 requiredMinutes: entry.requiredMinutes,
                 status: entry.status,
                 reviewOutcome: entry.reviewOutcome,
-                reviewNote: entry.reviewNote
+                reviewNote: entry.reviewNote,
+                rehearsal: entry.rehearsal === true,
+                reviewChannelId: entry.reviewChannelId ?? null,
+                reviewMessageId: entry.reviewMessageId ?? null
             })),
             warnings: target.warnings.map((entry) => ({
                 id: entry._id.toHexString(),
                 staffId: entry.staffId.toHexString(),
                 issuedAt: entry.issuedAt,
-                note: entry.note
+                note: entry.note,
+                rehearsal: entry.rehearsal === true
             }))
         }
     });
+
+    return { auditedAt: new Date(), records: target.assessments.length };
+}
+
+/**
+ * Proof that the audit row landed.
+ *
+ * `deleteScrubbed` demands one, so the ordering is a type error to get wrong
+ * rather than a comment somebody has to notice. The leave purge learned the
+ * same lesson by writing the audit row before deleting and aborting if it
+ * failed; this makes the sequence unskippable instead of conventional.
+ */
+export interface ScrubReceipt {
+    auditedAt: Date;
+    records: number;
+}
+
+export interface ScrubResult {
+    assessments: number;
+    warnings: number;
+}
+
+/**
+ * Remove them. The receipt is the point: it can only come from a successful
+ * audit write, so there is no way to reach this function without one.
+ */
+export async function deleteScrubbed(
+    target: ScrubTarget,
+    receipt: ScrubReceipt
+): Promise<ScrubResult> {
+    if (target.assessments.length === 0) return { assessments: 0, warnings: 0 };
+
+    // The audit row describes a set of records; deleting a different set would
+    // leave the log describing something that did not happen.
+    if (receipt.records !== target.assessments.length) {
+        throw new Error(
+            "Scrub target changed after it was audited; nothing was deleted."
+        );
+    }
 
     const warnings = await collections
         .warnings()

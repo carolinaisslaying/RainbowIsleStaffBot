@@ -6,7 +6,7 @@ import {
     deleteReviewMessages,
     runFortnightAssessment
 } from "../services/assessmentService.js";
-import { scrub, scrubPreview } from "../domain/scrub.js";
+import { deleteScrubbed, recordScrubIntent, scrubPreview } from "../domain/scrub.js";
 import { errorCard, noticeCard } from "../render/cards.js";
 import { respond, sendOptions } from "../discord/respond.js";
 import { COLOUR } from "../render/theme.js";
@@ -70,18 +70,23 @@ export async function handleScrubButton(
     }
 
     try {
-        const result = await scrub(
+        // Three steps, in this order and no other.
+        //
+        // The audit row first, because nothing user-visible may disappear
+        // untraced and it carries where every card was. Then the cards, while
+        // the documents that know their locations still exist: deleting the
+        // documents first leaves a channel full of orphaned cards for members
+        // whose records are gone. Then the documents.
+        const receipt = await recordScrubIntent(
             target,
             interaction.user.id,
             fortnight === null
                 ? "Assessments for fortnights before the anchor, written by a boot against an empty database"
-                : `Assessments for fortnight ${fortnight}, removed by an Executive`
+                : `Assessments and cards for fortnight ${fortnight}`
         );
 
-        // The channel goes with the records. A re-run that posted beside the
-        // last run's leftovers would be read against them.
-        const messages =
-            fortnight === null ? 0 : await deleteReviewMessages(client, config, fortnight);
+        const messages = await deleteReviewMessages(client, target.assessments);
+        const result = await deleteScrubbed(target, receipt);
 
         let rerunNote = "";
         if (action === "goRerun" && fortnight !== null) {

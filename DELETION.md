@@ -45,8 +45,13 @@ before anything is removed.
   streak or leaderboard position move.
 - Deletes the review's **messages** as well: the header and every row card, so a
   re-run is read on its own rather than against what is left of the last one.
-- Writes the audit row **first**, with every record embedded, and abandons the
-  delete if that write fails. The preview is taken again on the second click
+  The cards are removed from the records held in memory, **before** those
+  records are deleted, because the record is the only thing that knows where
+  its card is.
+- Writes the audit row **first**, with every record embedded including where
+  each card was, and abandons the delete if that write fails. `deleteScrubbed`
+  requires the receipt `recordScrubIntent` returns, so the order is a type
+  error to get wrong rather than a convention. The preview is taken again on the second click
   rather than trusted from the first, and so is the permission.
 
 ## The one command that deletes
