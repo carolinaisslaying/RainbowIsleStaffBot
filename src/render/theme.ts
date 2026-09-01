@@ -44,36 +44,34 @@ export const COLOUR = {
 export const FONT_STACK = "Inter, DejaVu Sans, sans-serif";
 
 /**
- * The glass vocabulary.
+ * The surface vocabulary.
  *
- * Apple's material is a lens: it bends the light behind it, catches a hard
- * specular edge where it curves, and drops a soft shadow because it sits above
- * the surface rather than on it. None of that is available for free here. These
- * images composite onto a Discord card, so there is no backdrop to sample and
- * no `backdrop-filter` in SVG to sample it with.
+ * Apple's material is a property of the *container*, not of the contents. The
+ * rings on a Watch face are flat, vivid and sit on black; what is made of glass
+ * is the panel they sit in. An earlier pass had this backwards and built each
+ * ring out of nine concentric strokes -- track, two rims, filament, inner edge,
+ * sheen, three halo layers -- which at three rings is twenty-seven concentric
+ * circles and reads as a camera lens rather than as a Watch.
  *
- * So the light is drawn rather than borrowed. Every ring is a lit tube: a
- * frosted channel with a bright inner rim and a dark outer one, a saturated
- * filament inside it, and that filament's own colour blurred underneath as the
- * glow escaping the glass. The values below are the whole vocabulary, and
- * nothing in the renderers invents its own.
+ * The panel is near black, and deliberately much darker than the Discord
+ * container behind it, which is about #2b2d31 in dark mode. That is the fix for
+ * the card reading as a box inside a box: the old panel sat a few percent off
+ * its surround with a faint border, which looks like a mistake. A panel this
+ * much darker reads as a screen inset into the card on purpose, and it is what
+ * lets the ring colours be as saturated as they are on a Watch.
  */
-export const GLASS = {
-    /** The empty channel: glass with nothing lit behind it. */
-    frost: "rgba(255,255,255,0.085)",
-    /** Where the tube curves towards the light, at ten o'clock. */
-    rimLight: "rgba(255,255,255,0.55)",
-    /** The far edge of the same curve. */
-    rimShade: "rgba(0,0,0,0.38)",
-    /** The sheen laid across the whole surface. */
-    sheen: "rgba(255,255,255,0.30)",
-    /** Panel ground, top and bottom of a vertical fall. */
-    substrateTop: "#16171c",
-    substrateBottom: "#0b0c10",
-    /** The frosted sheet itself. */
-    pane: "rgba(255,255,255,0.055)",
-    paneRim: "rgba(255,255,255,0.14)",
-    /** Text on glass. */
-    text: "#f5f6f8",
-    textMuted: "#9ea0a8"
+export const SURFACE = {
+    /** Panel ground. Near black, with a barely there lift towards the top. */
+    panelTop: "#17181c",
+    panelBottom: "#0e0f12",
+    /** The hairline where the panel catches the light. Almost nothing. */
+    rimLight: "rgba(255,255,255,0.07)",
+    /** How much of its own colour a ring lends the panel behind it. */
+    washMax: 0.16,
+    /** An unlit track: the ring's own colour, dimmed, never grey and never white. */
+    trackAlpha: 0.19,
+    text: "#f2f3f5",
+    textMuted: "#9b9ea6",
+    /** Rails under the legend rows. */
+    rail: "rgba(255,255,255,0.08)"
 } as const;

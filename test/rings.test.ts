@@ -126,7 +126,7 @@ describe("ring rendering", () => {
         // and is expected to differ, as is the lens it sits on, which is sized
         // from the length of that figure.
         const rings = (svg: string) =>
-            ["ring-bloom", "ring-track", "ring-progress", "ring-overlay", "ring-sheen"]
+            ["ring-track", "ring-progress", "ring-overlay"]
                 .flatMap((name) => parts(svg, name))
                 .join("|");
         const wild = ringsSvg({
@@ -180,28 +180,48 @@ describe("ring legibility", () => {
         );
     });
 
-    it("uses one neutral track for every ring rather than a dark tint each", () => {
-        // Whatever the track material is, all three rings must share it: the old
-        // per-ring tints are what made an empty card look like a dark smudge.
-        const strokes = parts(ringsSvg(base), "ring-track").map(
-            (element) => /stroke="([^"]+)"/.exec(element)?.[1]
-        );
-        expect(strokes).toHaveLength(3);
-        expect(new Set(strokes).size).toBe(1);
+    it("gives each ring a track in its own colour, dimmed", () => {
+        // This reverses an older rule that made all three tracks one neutral
+        // grey, because per-ring tints "made an empty card look like a dark
+        // smudge". They did, on the mid-dark panel of the time. The panel is
+        // near black now, which is what the Watch puts its rings on, and at
+        // that contrast a dimmed tint of each ring's own colour reads as three
+        // distinct empty rings rather than as one grey bullseye.
+        const tracks = parts(ringsSvg(base), "ring-track");
+        const strokes = tracks.map((element) => /stroke="([^"]+)"/.exec(element)?.[1]);
+        expect(strokes).toEqual(["#ff453a", "#0a84ff", "#bf5af2"]);
+
+        // Dimmed by opacity rather than by mixing a darker colour, so an empty
+        // ring is unmistakably the same hue as the one that will fill it.
+        for (const track of tracks) {
+            expect(track).toContain('stroke-opacity="0.19"');
+        }
     });
 
-    it("casts no light from a ring with nothing in it", () => {
-        // The glow is the filament seen through the glass. An unlit filament
-        // glows no more than an empty channel does.
-        expect(parts(ringsSvg(base), "ring-bloom")).toHaveLength(0);
-        expect(
-            parts(ringsSvg({ ...base, activityMinutes: 60 }), "ring-bloom")
-        ).toHaveLength(1);
+    it("draws a ring as a track and an arc, and nothing else", () => {
+        // The whole failure of the previous design: nine strokes per ring, so
+        // three rings were twenty-seven concentric circles and read as a camera
+        // lens. A ring at rest is one circle; a ring in progress is two.
+        const empty = ringsSvg({ ...base, softRingsEnabled: false });
+        expect(empty.match(/<circle|<path/g)).toHaveLength(1);
+
+        const running = ringsSvg({
+            ...base,
+            activityMinutes: 60,
+            softRingsEnabled: false
+        });
+        expect(running.match(/<circle|<path/g)).toHaveLength(2);
     });
 
-    it("lets leave recede rather than glow", () => {
-        // Grey but lit is louder than coloured but quiet, which says the
-        // opposite of what being on leave means.
+    it("keeps the readout inside the hole it sits in", () => {
+        // The centre hole is 55 across. Four characters at the two digit size
+        // overlap the innermost ring.
+        expect(ringsSvg({ ...base, activityMinutes: 60 })).toContain('font-size="26"');
+        expect(ringsSvg({ ...base, activityMinutes: 120 })).toContain('font-size="20"');
+        expect(ringsSvg({ ...base, activityMinutes: 1_200 })).toContain('font-size="15"');
+    });
+
+    it("lets leave recede into grey", () => {
         const away = ringsSvg({
             ...base,
             activityMinutes: 104,
@@ -209,8 +229,11 @@ describe("ring legibility", () => {
             activeDays: 3,
             state: "leave"
         });
-        expect(parts(away, "ring-bloom")).toHaveLength(0);
         expect(parts(away, "ring-progress")).toHaveLength(3);
+        // No ring keeps its own hue while the member is away.
+        for (const colour of ["#ff453a", "#0a84ff", "#bf5af2"]) {
+            expect(away).not.toContain(colour);
+        }
     });
 
     it("names a font the runtime image actually installs", () => {
