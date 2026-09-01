@@ -41,6 +41,50 @@ export function arcPath(
     ].join(" ");
 }
 
+/**
+ * Half a round cap, measured as an angle at this radius.
+ *
+ * A round cap is a semicircle of radius `strokeWidth / 2` stuck on each end of
+ * the path, so a path drawn from 0 to the true angle overhangs it by that much.
+ * Everything about compensating for the caps is this one number.
+ */
+export function capAngle(radius: number, strokeWidth: number): number {
+    if (radius <= 0) return 0;
+    return ((strokeWidth / 2) / radius) * (180 / Math.PI);
+}
+
+/**
+ * An arc that *ends* on the angle it is given, drawn with round caps.
+ *
+ * The Watch's rings have round ends, and this codebase has always insisted the
+ * drawing agree with the figure printed beside it. Those two are only in
+ * conflict if the path is drawn naively: pull each end in by half a cap and the
+ * cap's centre lands on the true angle, so the ring both looks right and stops
+ * where it says it stops.
+ *
+ * Below two caps' width there is no arc left to draw, only the caps themselves.
+ * A dot is drawn at the midpoint instead, which is what a Watch ring does at
+ * one percent, rather than nothing or a blob overhanging its own figure.
+ */
+export function cappedArcPath(
+    centreX: number,
+    centreY: number,
+    radius: number,
+    startAngle: number,
+    sweepDegrees: number,
+    strokeWidth: number
+): string {
+    const half = capAngle(radius, strokeWidth);
+    const sweep = Math.min(sweepDegrees, 359.999);
+
+    if (sweep <= half * 2) {
+        const midpoint = polarToCartesian(centreX, centreY, radius, startAngle + sweep / 2);
+        return `M ${round(midpoint.x)} ${round(midpoint.y)} L ${round(midpoint.x)} ${round(midpoint.y)}`;
+    }
+
+    return arcPath(centreX, centreY, radius, startAngle + half, sweep - half * 2);
+}
+
 export function round(value: number): number {
     return Math.round(value * 100) / 100;
 }

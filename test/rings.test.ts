@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ringStateFor } from "../src/domain/rings.js";
 import { ringsSvg, describeRings } from "../src/render/rings.js";
+import { cappedArcPath, capAngle, polarToCartesian } from "../src/render/svg.js";
 
 const base = { weeklyTargetMinutes: 120, amberThresholdPercent: 75, onLeave: false };
 
@@ -54,6 +55,13 @@ describe("ring state thresholds", () => {
     });
 });
 
+/** Elements the renderer labels, so tests can name parts rather than count tags. */
+function parts(svg: string, className: string): string[] {
+    return [...svg.matchAll(new RegExp(`<(\\w+) class="${className}"[^>]*>`, "g"))].map(
+        (match) => match[0]
+    );
+}
+
 describe("ring rendering", () => {
     const input = {
         activityMinutes: 104,
@@ -68,26 +76,27 @@ describe("ring rendering", () => {
 
     it("emits three tracks plus three progress arcs when soft rings are on", () => {
         const svg = ringsSvg(input);
-        expect(svg.match(/<circle/g)?.length).toBe(3); // three tracks, no ring complete
-        expect(svg.match(/<path/g)?.length).toBe(3);
+        expect(parts(svg, "ring-track")).toHaveLength(3);
+        expect(parts(svg, "ring-progress")).toHaveLength(3);
     });
 
     it("draws the outer ring alone at the same diameter when soft rings are off", () => {
         const svg = ringsSvg({ ...input, softRingsEnabled: false });
-        expect(svg.match(/<circle/g)?.length).toBe(1);
+        expect(parts(svg, "ring-track")).toHaveLength(1);
         expect(svg).toContain('width="200" height="200"');
         expect(ringsSvg(input)).toContain('width="200" height="200"');
     });
 
     it("draws a complete ring as a circle, not a zero length arc", () => {
+        // An SVG arc sweeping a whole turn has coincident endpoints and renders
+        // as nothing, so a finished ring has to become a circle.
         const svg = ringsSvg({
             ...input,
             activityMinutes: 120,
             softRingsEnabled: false,
             state: "green"
         });
-        expect(svg.match(/<circle/g)?.length).toBe(2); // track plus filled ring
-        expect(svg.match(/<path/g) ?? []).toHaveLength(0);
+        expect(parts(svg, "ring-progress")[0]).toMatch(/^<circle/);
     });
 
     it("adds one lighter overlay arc for overachievement", () => {
@@ -97,7 +106,8 @@ describe("ring rendering", () => {
             softRingsEnabled: false,
             state: "green"
         });
-        expect(svg.match(/<path/g)?.length).toBe(1);
+        expect(parts(svg, "ring-overlay")).toHaveLength(1);
+        expect(parts(svg, "ring-overlay")[0]).toMatch(/^<path/);
     });
 
     it("draws a full extra lap as a circle, since a 360 degree arc draws nothing", () => {
@@ -107,16 +117,18 @@ describe("ring rendering", () => {
             softRingsEnabled: false,
             state: "green"
         });
-        // Track, completed first lap, and the overlay lap: three circles, no arc.
-        expect(svg.match(/<circle/g)?.length).toBe(3);
-        expect(svg.match(/<path/g) ?? []).toHaveLength(0);
+        expect(parts(svg, "ring-progress")[0]).toMatch(/^<circle/);
+        expect(parts(svg, "ring-overlay")[0]).toMatch(/^<circle/);
     });
 
     it("caps the overlay at one extra revolution", () => {
-        // Geometry only. The <title> and the centre readout both quote the raw
-        // figures and are expected to differ; the claim is about the arcs.
-        const geometry = (svg: string) =>
-            svg.replace(/<title>[\s\S]*?<\/title>/, "").replace(/<text[\s\S]*?<\/text>/g, "");
+        // The claim is about the rings alone. The readout quotes the raw figure
+        // and is expected to differ, as is the lens it sits on, which is sized
+        // from the length of that figure.
+        const rings = (svg: string) =>
+            ["ring-bloom", "ring-track", "ring-progress", "ring-overlay", "ring-sheen"]
+                .flatMap((name) => parts(svg, name))
+                .join("|");
         const wild = ringsSvg({
             ...input,
             activityMinutes: 12_000,
@@ -129,7 +141,7 @@ describe("ring rendering", () => {
             softRingsEnabled: false,
             state: "green"
         });
-        expect(geometry(wild)).toBe(geometry(twice));
+        expect(rings(wild)).toBe(rings(twice));
     });
 
     it("always states the numbers alongside the colour", () => {
@@ -157,8 +169,8 @@ describe("ring legibility", () => {
     it("still draws three tracks when everything is at zero", () => {
         // An empty ring must read as empty, not as broken.
         const svg = ringsSvg(base);
-        expect(svg.match(/<circle/g)?.length).toBe(3);
-        expect(svg.match(/<path/g) ?? []).toHaveLength(0);
+        expect(parts(svg, "ring-track")).toHaveLength(3);
+        expect(parts(svg, "ring-progress")).toHaveLength(0);
     });
 
     it("puts the outer figure in the centre so a zero ring still says something", () => {
@@ -169,22 +181,107 @@ describe("ring legibility", () => {
     });
 
     it("uses one neutral track for every ring rather than a dark tint each", () => {
-        // Whatever the track colour is, all three rings must share it: the old
+        // Whatever the track material is, all three rings must share it: the old
         // per-ring tints are what made an empty card look like a dark smudge.
-        const strokes = [...ringsSvg(base).matchAll(/stroke="(#[0-9a-f]{6})"/gi)].map(
-            (match) => match[1]
+        const strokes = parts(ringsSvg(base), "ring-track").map(
+            (element) => /stroke="([^"]+)"/.exec(element)?.[1]
         );
         expect(strokes).toHaveLength(3);
         expect(new Set(strokes).size).toBe(1);
     });
 
-    it("names a font the runtime image actually installs", () => {
-        expect(ringsSvg(base)).toContain("DejaVu Sans");
+    it("casts no light from a ring with nothing in it", () => {
+        // The glow is the filament seen through the glass. An unlit filament
+        // glows no more than an empty channel does.
+        expect(parts(ringsSvg(base), "ring-bloom")).toHaveLength(0);
+        expect(
+            parts(ringsSvg({ ...base, activityMinutes: 60 }), "ring-bloom")
+        ).toHaveLength(1);
     });
 
-    it("ends progress arcs on the exact angle, with no rounded overhang", () => {
-        const svg = ringsSvg({ ...base, activityMinutes: 60, state: "red" });
-        expect(svg).toContain('stroke-linecap="butt"');
-        expect(svg).not.toContain('stroke-linecap="round"');
+    it("lets leave recede rather than glow", () => {
+        // Grey but lit is louder than coloured but quiet, which says the
+        // opposite of what being on leave means.
+        const away = ringsSvg({
+            ...base,
+            activityMinutes: 104,
+            shiftHours: 6,
+            activeDays: 3,
+            state: "leave"
+        });
+        expect(parts(away, "ring-bloom")).toHaveLength(0);
+        expect(parts(away, "ring-progress")).toHaveLength(3);
+    });
+
+    it("names a font the runtime image actually installs", () => {
+        expect(ringsSvg(base)).toContain("DejaVu Sans");
+        expect(ringsSvg(base)).toContain("Inter");
+    });
+});
+
+describe("round caps that still land on the figure", () => {
+    // A round cap is a semicircle of half the stroke width stuck on each end,
+    // so a naive path overhangs the angle it was asked for. The rings are drawn
+    // the way the Watch draws them; the drawing still has to agree with the
+    // number printed in the middle of it.
+
+    const RADIUS = 87;
+    const STROKE = 18;
+
+    function endOf(path: string): { x: number; y: number } {
+        const match = /A [\d.]+ [\d.]+ 0 [01] 1 ([-\d.]+) ([-\d.]+)/.exec(path);
+        if (!match) throw new Error(`no arc in ${path}`);
+        return { x: Number(match[1]), y: Number(match[2]) };
+    }
+
+    it("pulls each end in by exactly half a cap", () => {
+        const half = capAngle(RADIUS, STROKE);
+        // Half of an 18 wide stroke at radius 87 is a shade under six degrees.
+        expect(half).toBeCloseTo(5.93, 2);
+
+        const path = cappedArcPath(100, 100, RADIUS, 0, 180, STROKE);
+        const drawnEnd = endOf(path);
+        const trueEnd = polarToCartesian(100, 100, RADIUS, 180 - half);
+        expect(drawnEnd.x).toBeCloseTo(trueEnd.x, 1);
+        expect(drawnEnd.y).toBeCloseTo(trueEnd.y, 1);
+    });
+
+    it("puts the cap's centre on the angle the figure describes", () => {
+        // The visible tip is the drawn end plus half a cap, which is the whole
+        // point: 75 percent has to end at three o'clock and not past it.
+        const half = capAngle(RADIUS, STROKE);
+        const path = cappedArcPath(100, 100, RADIUS, 0, 270, STROKE);
+        const drawnEnd = endOf(path);
+        const capCentre = polarToCartesian(100, 100, RADIUS, 270 - half);
+        expect(drawnEnd.x).toBeCloseTo(capCentre.x, 1);
+        expect(drawnEnd.y).toBeCloseTo(capCentre.y, 1);
+
+        // And that cap centre is three o'clock, to within a rounding place.
+        const threeOClock = polarToCartesian(100, 100, RADIUS, 270);
+        expect(
+            Math.hypot(capCentre.x - threeOClock.x, capCentre.y - threeOClock.y)
+        ).toBeLessThan(STROKE / 2 + 1);
+    });
+
+    it("draws a dot rather than nothing when the sweep is shorter than its caps", () => {
+        // One percent of a ring is narrower than the cap itself. The Watch shows
+        // a small nub there; drawing an arc would show nothing at all.
+        const path = cappedArcPath(100, 100, RADIUS, 0, 3.6, STROKE);
+        expect(path).not.toContain("A ");
+        expect(path).toMatch(/^M [\d.]+ [\d.]+ L [\d.]+ [\d.]+$/);
+    });
+
+    it("gives every progress arc round ends", () => {
+        const svg = ringsSvg({
+            activityMinutes: 60,
+            activityTarget: 120,
+            shiftHours: 0,
+            shiftTarget: 8,
+            activeDays: 0,
+            activeDaysTarget: 4,
+            state: "red",
+            softRingsEnabled: false
+        });
+        expect(parts(svg, "ring-progress")[0]).toContain('stroke-linecap="round"');
     });
 });
