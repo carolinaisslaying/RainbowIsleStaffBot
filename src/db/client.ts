@@ -7,6 +7,7 @@ import type {
     DeliveryDoc,
     DemandBucketDoc,
     FortnightAssessmentDoc,
+    FortnightReviewDoc,
     GuildConfigDoc,
     LeaveDoc,
     ShiftDoc,
@@ -56,7 +57,8 @@ export const collections = {
     demandBuckets: () => db().collection<DemandBucketDoc>("demandBuckets"),
     guildConfig: () => db().collection<GuildConfigDoc>("guildConfig"),
     auditLog: () => db().collection<AuditLogDoc>("auditLog"),
-    deliveries: () => db().collection<DeliveryDoc>("deliveries")
+    deliveries: () => db().collection<DeliveryDoc>("deliveries"),
+    fortnightReviews: () => db().collection<FortnightReviewDoc>("fortnightReviews")
 };
 
 async function ensureIndexes(target: Db): Promise<void> {
@@ -101,6 +103,11 @@ async function ensureIndexes(target: Db): Promise<void> {
 
     const deliveries = target.collection<DeliveryDoc>("deliveries");
     await deliveries.createIndex({ at: -1 });
+
+    // Keyed by the fortnight index itself, so no unique index is needed: the
+    // _id is the key, and posting a queue twice upserts rather than duplicates.
+    const reviews = target.collection<FortnightReviewDoc>("fortnightReviews");
+    await reviews.createIndex({ postedAt: -1 });
 
     const audit = target.collection<AuditLogDoc>("auditLog");
     await audit.createIndex({ at: -1 });

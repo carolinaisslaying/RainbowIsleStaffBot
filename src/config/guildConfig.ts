@@ -35,6 +35,8 @@ export interface StaffBotConfig {
     amberThresholdPercent: number;
     softRingsEnabled: boolean;
     assessmentDryRun: boolean;
+    warningExpiryDays: number;
+    reviewReminderDays: number;
 
     awayAfterMinutes: number;
     autoEndAfterAwayMinutes: number;
@@ -221,6 +223,24 @@ export const CONFIG_KEYS: Record<keyof StaffBotConfig, KeySpec> = {
         group: "targets",
         consequence: "Reviews are rehearsals: cards post, nobody is DMed, nothing is issued"
     },
+    warningExpiryDays: {
+        kind: "number",
+        description: "Days before a warning stops counting towards the total",
+        target: "plain",
+        importance: "optional",
+        group: "timings",
+        min: 1,
+        max: 3650
+    },
+    reviewReminderDays: {
+        kind: "number",
+        description: "Days before an unworked review queue is chased once",
+        target: "plain",
+        importance: "optional",
+        group: "timings",
+        min: 1,
+        max: 90
+    },
     awayAfterMinutes: {
         kind: "number",
         description: "Silence duration before marking as Away",
@@ -329,6 +349,8 @@ export const DEFAULT_CONFIG: StaffBotConfig = {
     amberThresholdPercent: 75,
     softRingsEnabled: true,
     assessmentDryRun: false,
+    warningExpiryDays: 180,
+    reviewReminderDays: 3,
     awayAfterMinutes: 20,
     autoEndAfterAwayMinutes: 30,
     maxShiftHours: 12,

@@ -99,7 +99,36 @@ export interface FortnightAssessmentDoc {
     reviewedBy: ObjectId | null;
     reviewOutcome: ReviewOutcome | null;
     reviewedAt: Date | null;
+    /** Why the Executive decided what they decided. Their words, not generated. */
     reviewNote: string | null;
+    /**
+     * Where this member's row card lives, so every later state edits that one
+     * message instead of posting a second one about the same fortnight. Same
+     * role as logChannelId/logMessageId on LeaveDoc.
+     */
+    reviewChannelId?: string | null;
+    reviewMessageId?: string | null;
+    /**
+     * Written by a rehearsal. Filtered out of every read that feeds a real
+     * decision. A rehearsal exercises the real write path because one that
+     * skips the writes tests nothing, which only works if nothing real ever
+     * reads what it wrote.
+     */
+    rehearsal?: boolean;
+}
+
+/**
+ * The header above a fortnight's row cards, and the fortnight's own review
+ * state. Keyed by the fortnight index rather than by an ObjectId so posting a
+ * queue twice is an upsert and never a duplicate.
+ */
+export interface FortnightReviewDoc {
+    _id: number;
+    headerChannelId: string;
+    headerMessageId: string;
+    postedAt: Date;
+    /** When the one reminder was sent. Null until it is, and never reset. */
+    remindedAt: Date | null;
 }
 
 export interface WarningDoc {
@@ -110,6 +139,8 @@ export interface WarningDoc {
     issuedAt: Date;
     note: string;
     acknowledgedAt: Date | null;
+    /** Written by a rehearsal, and never counted against anyone. */
+    rehearsal?: boolean;
 }
 
 export type LeaveStatus = "pending" | "approved" | "declined" | "active" | "ended";
