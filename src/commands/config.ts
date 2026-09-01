@@ -5,14 +5,27 @@ import {
     DEFAULT_CONFIG,
     cachedConfig,
     isArrayKey,
+    isKey,
     loadConfig,
     parseConfigValue,
     setConfigValue,
     type StaffBotConfig
 } from "../config/guildConfig.js";
 import { isExecutive } from "../domain/permissions.js";
+import {
+    configWarnings,
+    historyChangeWarning,
+    rewritesHistory
+} from "../config/configGuards.js";
+import { collections } from "../db/client.js";
 import { errorCard, noticeCard } from "../render/cards.js";
-import { configViewCard, renderValue, resolveGuildNames, setupStatus } from "../render/configCards.js";
+import {
+    configHistoryConfirmCard,
+    configViewCard,
+    renderValue,
+    resolveGuildNames,
+    setupStatus
+} from "../render/configCards.js";
 import { defer, respond } from "../discord/respond.js";
 import { cmd } from "../discord/commandMentions.js";
 import { audit } from "../domain/audit.js";
@@ -30,10 +43,6 @@ const WEEKDAYS = [
     "Friday",
     "Saturday"
 ];
-
-function isKey(value: string): value is keyof StaffBotConfig {
-    return (KEY_NAMES as string[]).includes(value);
-}
 
 /**
  * Roles and channels live in the community server, while /config runs in the
@@ -394,6 +403,37 @@ export const configCommand: Command = {
             await respond(interaction, errorCard(`**${rawKey}**: ${parsed.error}`));
             return;
         }
+
+        // weekStartDay and accountingTimezone decide where every week and
+        // fortnight boundary falls, for every record ever written — not just
+        // from here on. Changing one reindexes the lot, so stored rollups and
+        // assessments stop matching the calendar and past verdicts move. That
+        // is worth a second click, the same way ending somebody's leave is.
+        //
+        // Everything else applies immediately; this is two keys, not a habit.
+        if (rewritesHistory(rawKey) && String(parsed.value) !== String(previous)) {
+            await defer(interaction, true);
+            const [weeklyStats, assessments] = await Promise.all([
+                collections.weeklyStats().estimatedDocumentCount(),
+                collections.fortnightAssessments().estimatedDocumentCount()
+            ]);
+            await respond(
+                interaction,
+                configHistoryConfirmCard({
+                    key: rawKey,
+                    value: String(parsed.value),
+                    body: historyChangeWarning({
+                        key: rawKey,
+                        currentValue: String(previous),
+                        newValue: String(parsed.value),
+                        weeklyStats,
+                        assessments
+                    })
+                })
+            );
+            return;
+        }
+
         await applyChange(rawKey, parsed.value, previous, interaction, staff, client);
 
         if (spec.kind === "timezone" || spec.kind === "weekday" || spec.kind === "isoDate") {
@@ -404,7 +444,7 @@ export const configCommand: Command = {
     }
 };
 
-async function applyChange(
+export async function applyChange(
     key: keyof StaffBotConfig,
     value: unknown,
     previous: unknown,
@@ -430,6 +470,18 @@ async function applyChange(
         ? "Every required setting now has a value."
         : `Still needed: ${status.missingRequired.map((item) => `**${item}**`).join(", ")}.`;
 
+    // Everything the document now says that will not do what its author
+    // expects. Shown after the change rather than instead of it: the write
+    // already happened, and policy is theirs to set. See config/configGuards.ts.
+    const warnings = configWarnings(fresh, new Date());
+    const warningBlock =
+        warnings.length === 0
+            ? ""
+            : "\n\n" +
+              warnings
+                  .map((warning) => `⚠️ **${String(warning.key)}** — ${warning.text}`)
+                  .join("\n\n");
+
     await respond(
         interaction,
         noticeCard(
@@ -437,8 +489,9 @@ async function applyChange(
             `**${key}**\n` +
                 `Was ${renderValue(key, before, guildNames)}\n` +
                 `Now ${renderValue(key, fresh, guildNames)}\n\n` +
-                `${nextStep}\n\n` +
-                "-# Past assessments keep the target in force when an Executive made them. " +
+                `${nextStep}` +
+                warningBlock +
+                "\n\n-# Past assessments keep the target in force when an Executive made them. " +
                 "Changing a threshold here leaves those outcomes alone.",
             { ephemeral: true }
         )

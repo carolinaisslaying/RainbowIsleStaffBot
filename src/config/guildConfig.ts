@@ -315,6 +315,17 @@ export function keysInGroup(group: KeyGroup): (keyof StaffBotConfig)[] {
     );
 }
 
+/**
+ * Whether a string names a configuration key.
+ *
+ * Lives here beside CONFIG_KEYS rather than in the command, because the button
+ * that confirms a change validates the key it was handed in a customId and must
+ * reach the same answer as the command that drew it.
+ */
+export function isKey(value: string): value is keyof StaffBotConfig {
+    return Object.prototype.hasOwnProperty.call(CONFIG_KEYS, value);
+}
+
 export function isArrayKey(key: keyof StaffBotConfig): boolean {
     return CONFIG_KEYS[key].kind === "stringArray";
 }

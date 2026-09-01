@@ -244,16 +244,33 @@ describe("shipped defaults", () => {
 });
 
 describe("the configuration viewer", () => {
+    /**
+     * Locate a container by what it says rather than by where it sits.
+     *
+     * The card grew a warnings block between the status and the settings, and
+     * every test here indexed the containers positionally, so a card that got
+     * one container longer failed three assertions about content that had not
+     * moved. Position is not what any of these tests are about.
+     */
+    const containerSaying = (
+        card: { components: { toJSON(): unknown }[] },
+        needle: string
+    ): { components: { type: number }[] } => {
+        const found = card.components
+            .map((component) => component.toJSON() as { components: { type: number }[] })
+            .find((json) => JSON.stringify(json).includes(needle));
+        if (!found) throw new Error(`No container mentions ${needle}`);
+        return found;
+    };
+
     it("puts a divider between every heading instead of blank lines", async () => {
         const { configViewCard } = await import("../src/render/configCards.js");
         const card = configViewCard(DEFAULT_CONFIG, NAMES, "/config set");
 
         // Servers, Roles, Channels in one container; Targets, Timings, Calendar
         // in the next. Three headings each means two dividers between them.
-        for (const index of [1, 2]) {
-            const json = card.components[index].toJSON() as {
-                components: { type: number }[];
-            };
+        for (const heading of ["### Servers", "### Targets"]) {
+            const json = containerSaying(card, heading);
             const headings = json.components.filter((child) => child.type === 10);
             expect(headings).toHaveLength(3);
 
@@ -272,14 +289,14 @@ describe("the configuration viewer", () => {
     it("offers export and import at the foot of the card, after the settings", async () => {
         const { configViewCard } = await import("../src/render/configCards.js");
         const card = configViewCard(DEFAULT_CONFIG, NAMES, "/config set");
-        const json = JSON.stringify(card.components[2].toJSON());
+        const policy = containerSaying(card, "### Targets");
+        const json = JSON.stringify(policy);
 
         expect(json).toContain("config:export:now");
         expect(json).toContain("config:import:open");
         // Below the settings, not above them: somebody reading down the card
         // has seen what is configured before reaching a control that replaces
         // all of it.
-        const policy = card.components[2].toJSON() as { components: { type: number }[] };
         const lastHeading = policy.components.map((child) => child.type).lastIndexOf(10);
         const actionRow = policy.components.map((child) => child.type).indexOf(1);
         expect(actionRow).toBeGreaterThan(lastHeading);

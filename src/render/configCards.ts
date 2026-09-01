@@ -18,6 +18,7 @@ import {
     type StaffBotConfig
 } from "../config/guildConfig.js";
 import { exportConfig, type ConfigChange, type ImportReport } from "../config/configTransfer.js";
+import { configWarnings } from "../config/configGuards.js";
 import {
     V2_FLAGS,
     containersMessage,
@@ -27,6 +28,7 @@ import {
     type RenderedMessage
 } from "./cards.js";
 import { COLOUR } from "./theme.js";
+import { emojiForColour } from "./emoji.js";
 
 /**
  * The configuration viewer.
@@ -257,7 +259,63 @@ export function configViewCard(
         )
     );
 
-    return containersMessage([statusContainer(config, setCommand), wiring, policy]);
+    // Settings that parse, validate, and still will not do what their author
+    // expects: a cycle whose anchor has not arrived, a requirement nobody can
+    // reach, a shift that ends before the member is marked Away. A card that
+    // lists every key and none of their consequences is a card that reads as
+    // healthy while the bot assesses nobody.
+    const warnings = configWarnings(config, new Date());
+    const containers = [statusContainer(config, setCommand), wiring, policy];
+
+    if (warnings.length > 0) {
+        const problems = new ContainerBuilder()
+            .setAccentColor(COLOUR.pending)
+            .addTextDisplayComponents(
+                text(
+                    `### ${emojiForColour(COLOUR.pending)} Worth knowing\n` +
+                        warnings
+                            .map((warning) => `**${String(warning.key)}**\n${warning.text}`)
+                            .join("\n\n")
+                )
+            );
+        // Second, under the setup status: what is missing matters before what
+        // is set oddly, and both matter before the full listing.
+        containers.splice(1, 0, problems);
+    }
+
+    return containersMessage(containers);
+}
+
+/**
+ * The second click on a key that moves every boundary ever recorded.
+ *
+ * `weekStartDay` and `accountingTimezone` are the only two keys that reach
+ * backwards. Everything else applies from now on, and applies immediately.
+ */
+export function configHistoryConfirmCard(input: {
+    key: string;
+    value: string;
+    body: string;
+}): RenderedMessage {
+    const container = new ContainerBuilder()
+        .setAccentColor(COLOUR.pending)
+        .addTextDisplayComponents(
+            text(`### ${emojiForColour(COLOUR.pending)} This moves every week ever recorded\n${input.body}`)
+        )
+        .addActionRowComponents(
+            new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`config:setConfirm:${input.key}|${input.value}`)
+                    .setLabel("Change it anyway")
+                    .setStyle(ButtonStyle.Danger),
+                new ButtonBuilder()
+                    .setCustomId("config:setCancel:none")
+                    .setLabel("Leave it alone")
+                    .setStyle(ButtonStyle.Secondary)
+            )
+        );
+
+    return { components: [container], files: [], flags: V2_FLAGS };
 }
 
 /** The export, as a file rather than as a wall of text in the channel. */
