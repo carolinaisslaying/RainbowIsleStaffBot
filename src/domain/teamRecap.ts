@@ -16,6 +16,8 @@ import type { RingState } from "../db/types.js";
 
 export interface TeamWeekRow {
     activityMinutes: number;
+    shiftMs: number;
+    activeDays: number;
     ringState: RingState;
     onLeave: boolean;
 }
@@ -29,6 +31,9 @@ export interface TeamWeek {
     totalMinutes: number;
     medianMinutes: number;
     meanMinutes: number;
+    /** Team totals for the two soft rings, summed the same way. */
+    totalShiftMs: number;
+    totalActiveDays: number;
     /** Against the previous week's total. Null when there is no previous week. */
     deltaPercent: number | null;
 }
@@ -46,6 +51,8 @@ export function summariseTeamWeek(
         closed: counted.filter((row) => row.ringState === "green").length,
         onLeave: rows.length - counted.length,
         totalMinutes,
+        totalShiftMs: counted.reduce((sum, row) => sum + row.shiftMs, 0),
+        totalActiveDays: counted.reduce((sum, row) => sum + row.activeDays, 0),
         medianMinutes: median(minutes),
         meanMinutes: counted.length === 0 ? 0 : Math.round(totalMinutes / counted.length),
         // A previous week of zero has no percentage to be a change from, so it

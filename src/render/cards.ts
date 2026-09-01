@@ -820,11 +820,11 @@ export function teamRecapCard(input: {
     windowLabel: string;
     headline: string;
     totalMinutes: string;
-    medianMinutes: number;
-    meanMinutes: number;
-    targetMinutes: number;
+    /** Every member's target, added up. What the team collectively owed. */
+    teamTargetMinutes: string;
     topStreak: { mention: string; weeks: number } | null;
-    spread: { png: Buffer; alt: string } | null;
+    /** The team's own rings. Never a mark per member: see teamRecapService. */
+    rings: { png: Buffer; alt: string } | null;
     rehearsal: boolean;
 }): RenderedMessage {
     const container = new ContainerBuilder()
@@ -833,18 +833,17 @@ export function teamRecapCard(input: {
             text(
                 `## ${emojiForColour(COLOUR.report)} The week in review\n` +
                     `${input.windowLabel}\n${input.headline}\n` +
-                    `-# ${input.totalMinutes} between everyone. Median ` +
-                    `${input.medianMinutes} min, average ${input.meanMinutes}, against a ` +
-                    `${input.targetMinutes} minute target.`
+                    `-# ${input.totalMinutes} between everyone, against ` +
+                    `${input.teamTargetMinutes} owed by the team as a whole.`
             )
         );
 
-    if (input.spread) {
+    if (input.rings) {
         container.addMediaGalleryComponents(
             new MediaGalleryBuilder().addItems(
                 new MediaGalleryItemBuilder()
                     .setURL(`attachment://${TEAM_RECAP_FILE}`)
-                    .setDescription(input.spread.alt)
+                    .setDescription(input.rings.alt)
             )
         );
     }
@@ -868,11 +867,11 @@ export function teamRecapCard(input: {
 
     return {
         components: [container],
-        files: input.spread
+        files: input.rings
             ? [
-                  new AttachmentBuilder(input.spread.png, {
+                  new AttachmentBuilder(input.rings.png, {
                       name: TEAM_RECAP_FILE,
-                      description: input.spread.alt
+                      description: input.rings.alt
                   })
               ]
             : [],

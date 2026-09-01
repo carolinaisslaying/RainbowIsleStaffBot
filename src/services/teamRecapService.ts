@@ -8,7 +8,8 @@ import { findStaffById } from "../domain/staff.js";
 import { staffChannel } from "./leaveService.js";
 import { claimTeamRecap } from "./notifications.js";
 import { teamRecapCard, type RenderedMessage } from "../render/cards.js";
-import { renderSpread } from "../render/trend.js";
+import { describeRings, renderRingCard } from "../render/rings.js";
+import { ringStateFor } from "../domain/rings.js";
 import { formatMinutes, labelWindow } from "../time/format.js";
 import { log } from "../log.js";
 
@@ -47,6 +48,8 @@ export async function buildTeamRecap(
     const summary = summariseTeamWeek(
         rows.map((row) => ({
             activityMinutes: row.activityMinutes,
+            shiftMs: row.shiftMs,
+            activeDays: row.activeDays,
             ringState: row.ringState,
             onLeave: row.onLeave
         })),
@@ -65,33 +68,52 @@ export async function buildTeamRecap(
         }
     }
 
-    const entries = rows
-        .filter((row) => !row.onLeave)
-        .map((row) => ({
-            minutes: row.activityMinutes,
-            below: row.activityMinutes < config.weeklyTargetMinutes
-        }));
+    // The team's own rings, drawn by the same renderer that draws a member's.
+    //
+    // Not a bar per person. A chart with one mark per member is a ranking
+    // whether or not it carries names: in a room of fifteen, the short bar on
+    // the right is somebody everyone can work out, and the recap channel is
+    // read by the whole team rather than by the Executives deciding about them.
+    // The fortnight review keeps its per-member chart, because that card is a
+    // decision queue and already names the people on it.
+    //
+    // Targets are the individual ones multiplied by the head count actually
+    // expected to work, so the ring reads as "the team, together, against what
+    // was asked of it" and a week with people on leave is not scored against
+    // work nobody owed.
+    const ringsInput = {
+        activityMinutes: summary.totalMinutes,
+        activityTarget: Math.max(1, config.weeklyTargetMinutes * summary.counted),
+        shiftHours: summary.totalShiftMs / 3_600_000,
+        shiftTarget: Math.max(1, config.weeklyShiftTargetHours * summary.counted),
+        activeDays: summary.totalActiveDays,
+        activeDaysTarget: Math.max(1, config.weeklyActiveDaysTarget * summary.counted),
+        state: ringStateFor({
+            activityMinutes: summary.totalMinutes,
+            weeklyTargetMinutes: Math.max(1, config.weeklyTargetMinutes * summary.counted),
+            amberThresholdPercent: config.amberThresholdPercent,
+            onLeave: false
+        }),
+        softRingsEnabled: config.softRingsEnabled,
+        // No face: a face is a member's own choice and the team is not a
+        // member. The default is the only honest one here.
+        face: null
+    };
 
     return teamRecapCard({
         windowLabel: labelWindow(week.start, week.end, config.accountingTimezone),
         headline: teamRecapHeadline(summary),
         totalMinutes: formatMinutes(summary.totalMinutes),
-        medianMinutes: summary.medianMinutes,
-        meanMinutes: summary.meanMinutes,
-        targetMinutes: config.weeklyTargetMinutes,
+        // The team's target, not each member's. A per-member figure invites the
+        // reader to work out who was under it, which is what this card is
+        // deliberately not for.
+        teamTargetMinutes: formatMinutes(config.weeklyTargetMinutes * summary.counted),
         topStreak,
-        spread:
-            entries.length > 0
+        rings:
+            summary.counted > 0
                 ? {
-                      png: renderSpread({
-                          entries,
-                          requiredMinutes: config.weeklyTargetMinutes,
-                          title: "Everyone this week"
-                      }),
-                      alt:
-                          `${entries.length} members against a ${config.weeklyTargetMinutes} ` +
-                          `minute weekly target. ${summary.closed} closed their ring. ` +
-                          `Median ${summary.medianMinutes} minutes.`
+                      png: renderRingCard(ringsInput),
+                      alt: `The team's week, as rings. ${describeRings(ringsInput)}`
                   }
                 : null,
         rehearsal

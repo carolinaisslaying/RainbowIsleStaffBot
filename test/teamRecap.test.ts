@@ -4,6 +4,8 @@ import type { TeamWeekRow } from "../src/domain/teamRecap.js";
 
 const row = (minutes: number, extra: Partial<TeamWeekRow> = {}): TeamWeekRow => ({
     activityMinutes: minutes,
+    shiftMs: minutes * 60_000,
+    activeDays: minutes > 0 ? 3 : 0,
     ringState: minutes >= 120 ? "green" : "red",
     onLeave: false,
     ...extra
@@ -51,6 +53,23 @@ describe("summarising the team's week", () => {
     it("survives an empty roster", () => {
         const week = summariseTeamWeek([], null);
         expect(week).toMatchObject({ counted: 0, closed: 0, totalMinutes: 0, meanMinutes: 0 });
+    });
+
+    it("sums the soft rings over the same people as the outer one", () => {
+        // The rings are drawn against targets multiplied by the counted head
+        // count, so a member excluded from one total and not another would put
+        // the team above its own target for a week it did not earn.
+        const week = summariseTeamWeek(
+            [
+                row(120),
+                row(120),
+                row(0, { onLeave: true, ringState: "leave", shiftMs: 999, activeDays: 9 })
+            ],
+            null
+        );
+        expect(week.counted).toBe(2);
+        expect(week.totalActiveDays).toBe(6);
+        expect(week.totalShiftMs).toBe(120 * 60_000 * 2);
     });
 });
 

@@ -232,7 +232,13 @@ picker rather than saying "saved", so it reads as two choices instead of two ref
 local 09:00** on the week's first day, which is why the job ticks hourly rather than weekly;
 `deliverDueRecaps` claims a receipt per member per week. Separately, `services/teamRecapService.ts`
 posts **the team's week** to `recapChannelId` when the week closes: who closed their ring, the
-total against last week's, and the spread chart. `recapChannelId` was configurable from the
+total against last week's, and **the team's own rings**, drawn by `renderRingCard` with each
+member's targets multiplied by the head count expected to work. Deliberately not a mark per member:
+a chart with one bar per person is a ranking whether or not it carries names, and in a room of
+fifteen the short bar on the right is somebody everyone can identify. The recap channel is read by
+the whole team; the fortnight review keeps its per-member chart because that card is a decision
+queue that already names the people on it. For the same reason the card quotes the team's combined
+target rather than a median or an average, which invite the reader to work out who sits under them. `recapChannelId` was configurable from the
 beginning and nothing read it, so `/config view` offered a channel picker for a posting that did not
 exist. Members on leave for the whole week are counted separately and excluded from every average,
 or a week nobody was expected to work drags the team's figures down. The team recap claims its own
