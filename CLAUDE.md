@@ -104,6 +104,18 @@ pressing Next would otherwise publish every hidden row to the channel.
 **Nothing user-facing names a file, a repository or an environment variable.** The cards are read by
 Moderators. Operator detail belongs in `log.*`, which is where it now lives.
 
+**Emoji come from the colour, not from the call site.** `render/emoji.ts` maps each `COLOUR` value
+to one mark and `noticeCard` prefixes the title with it, so the forty-odd cards that already declare
+their state by accent get the matching emoji for free and the two cannot drift. Two pairs of roles
+share a value (green is `approved` and `onShift`, amber `pending` and `away`); the commoner meaning
+wins the default and the shift cards pass `emoji:` themselves. One mark, leading the title, never in
+body copy: these cards are read by Moderators deciding something.
+
+**A card's claim and its own caveat live in one function.** `leaderboardVisibility` returns the whole
+footnote. It used to return "Nobody is hidden from the leaderboard" without checking, while
+`commands/leaderboard.ts` appended a count of the members it had just left out, so the card denied
+and reported the same fact in consecutive sentences. Callers use `.note` as it comes.
+
 **Config transfer.** `/config view` carries **Export as JSON** and **Import JSON**.
 `config/configTransfer.ts` holds both, as pure functions over a config object. Import applies only
 the keys the paste names, which makes a partial paste a feature (copy policy between deployments

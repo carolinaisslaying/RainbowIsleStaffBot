@@ -7,6 +7,7 @@ import { findLeave, purgeLeaveRecord } from "../domain/leave.js";
 import { exemptionsLostByPurging, holdsUnrestoredRoles } from "../domain/leavePurge.js";
 import { findStaffById } from "../domain/staff.js";
 import { fetchPublicMember, isExecutive, resolveTier } from "../domain/permissions.js";
+import { EMOJI } from "../render/emoji.js";
 import { errorCard, noticeCard, purgeConfirmCard } from "../render/cards.js";
 import { leaveCardFor } from "../services/leaveService.js";
 import { respond, sendOptions } from "../discord/respond.js";
@@ -180,7 +181,7 @@ function alreadyGoneCard() {
     return noticeCard(
         "Already purged",
         "That leave record is no longer in the database.",
-        { colour: COLOUR.settled }
+        { colour: COLOUR.settled, emoji: EMOJI.purge }
     );
 }
 
@@ -278,7 +279,7 @@ async function purge(
                 "Purged",
                 `The leave record is gone from the database.\n\nThe audit log holds what it ` +
                     `said, including the reason given, and is the only way back.${exemptionNote}`,
-                { colour: COLOUR.settled }
+                { colour: COLOUR.settled, emoji: EMOJI.purge }
             )
         ) as never
     );

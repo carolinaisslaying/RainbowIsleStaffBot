@@ -193,7 +193,6 @@ export async function renderLeaderboard(
         viewerIndex >= 0 ? await toView(ranked[viewerIndex], viewerIndex + 1) : null;
 
     const optedOut = entries.filter((entry) => entry.staff.leaderboardOptOut).length;
-    const hiddenFromViewer = entries.length - visible.length;
 
     // The viewer's own rings ride along with their pinned row, so the card
     // answers "where am I" and "how am I doing" in one glance.
@@ -233,14 +232,15 @@ export async function renderLeaderboard(
         // Who can read this card, said on the card. The old footnote described
         // the roster; this describes the room, which is the thing somebody about
         // to screenshot it needs to know.
+        //
+        // The whole sentence comes back from one call. A second clause used to
+        // be appended here whenever rows had been left out, which contradicted
+        // the sentence it was appended to: the card said nobody was hidden and
+        // then counted the hidden in the same breath.
         footnote: leaderboardVisibility({
             privileged,
             viewerHidden: viewer.leaderboardOptOut,
             hiddenCount: optedOut
-        }).note +
-            (!privileged && hiddenFromViewer > 0
-                ? ` ${hiddenFromViewer} member(s) have hidden themselves and are not listed; ` +
-                  "their minutes still count."
-                : "")
+        }).note
     });
 }

@@ -15,6 +15,7 @@ describe("where a leaderboard may be posted", () => {
         });
         expect(seen.ephemeral).toBe(false);
         expect(seen.note).toContain("Everyone in this channel");
+        expect(seen.note).toContain("Every Moderator is listed");
     });
 
     it("still posts in the channel for a Lead when nobody is hidden", () => {
@@ -35,7 +36,7 @@ describe("where a leaderboard may be posted", () => {
         });
         expect(seen.ephemeral).toBe(true);
         expect(seen.note).toContain("Only you can see this");
-        expect(seen.note).toContain("2 member(s)");
+        expect(seen.note).toContain("2 Moderators");
     });
 
     it("goes private for a member who hid themselves", () => {
@@ -57,7 +58,7 @@ describe("where a leaderboard may be posted", () => {
             hiddenCount: 3
         });
         expect(seen.ephemeral).toBe(true);
-        expect(seen.note).toContain("3 member(s)");
+        expect(seen.note).toContain("3 Moderators");
         expect(seen.note).toContain("your own row");
     });
 
@@ -87,5 +88,91 @@ describe("where a leaderboard may be posted", () => {
         expect(
             leaderboardVisibility({ privileged: false, viewerHidden: true, hiddenCount: 1 }).note
         ).not.toContain("screenshot");
+    });
+
+    /**
+     * The card used to contradict itself in the space of two sentences: the
+     * public branch claimed nobody was hidden while the caller stapled on a
+     * count of the people it had just left out. The claim and the count are one
+     * decision, so they are made in one place.
+     */
+    it("does not claim nobody is hidden when somebody is", () => {
+        const seen = leaderboardVisibility({
+            privileged: false,
+            viewerHidden: false,
+            hiddenCount: 1
+        });
+        expect(seen.ephemeral).toBe(false);
+        expect(seen.note).toContain("Everyone in this channel");
+        expect(seen.note).not.toContain("Every Moderator is listed");
+        expect(seen.note).toContain("One Moderator");
+        expect(seen.note).toContain("minutes still count");
+    });
+
+    it("counts the omitted in plain words rather than in a parenthesis", () => {
+        const seen = leaderboardVisibility({
+            privileged: false,
+            viewerHidden: false,
+            hiddenCount: 4
+        });
+        expect(seen.note).toContain("4 Moderators");
+        expect(seen.note).toContain("are not listed");
+    });
+
+    it("tells a hidden member that others are missing from their copy too", () => {
+        // Their own row is why the card went private. It is not the only row
+        // the roster is short of, and the earlier wording never said so.
+        const seen = leaderboardVisibility({
+            privileged: false,
+            viewerHidden: true,
+            hiddenCount: 3
+        });
+        expect(seen.note).toContain("you have hidden yourself");
+        expect(seen.note).toContain("2 Moderators");
+    });
+
+    it("says nothing about others when the hidden member is the only one", () => {
+        const seen = leaderboardVisibility({
+            privileged: false,
+            viewerHidden: true,
+            hiddenCount: 1
+        });
+        expect(seen.note).toContain("you have hidden yourself");
+        expect(seen.note).not.toMatch(/Moderators/);
+    });
+
+    it("never writes member(s), which reads as a placeholder", () => {
+        for (const privileged of [true, false]) {
+            for (const viewerHidden of [true, false]) {
+                for (const hiddenCount of [0, 1, 2, 5]) {
+                    const seen = leaderboardVisibility({
+                        privileged,
+                        viewerHidden,
+                        hiddenCount
+                    });
+                    expect(seen.note).not.toContain("(s)");
+                }
+            }
+        }
+    });
+
+    it("never both denies and reports a hidden roster on the same card", () => {
+        // The two sentences that used to be concatenated.
+        for (const privileged of [true, false]) {
+            for (const viewerHidden of [true, false]) {
+                for (const hiddenCount of [0, 1, 2, 5]) {
+                    const seen = leaderboardVisibility({
+                        privileged,
+                        viewerHidden,
+                        hiddenCount
+                    });
+                    const denies = seen.note.includes("Every Moderator is listed");
+                    const reports = /not listed|hidden themselves|hidden yourself/.test(
+                        seen.note
+                    );
+                    expect(denies && reports).toBe(false);
+                }
+            }
+        }
     });
 });

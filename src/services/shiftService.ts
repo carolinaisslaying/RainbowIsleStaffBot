@@ -21,6 +21,7 @@ import { noticeCard, ringCard, shiftSummaryCard, type RenderedMessage } from "..
 import { audit } from "../domain/audit.js";
 import { log } from "../log.js";
 import { formatDuration, ts } from "../time/format.js";
+import { EMOJI } from "../render/emoji.js";
 import { COLOUR } from "../render/theme.js";
 import { publicGuildName } from "../discord/guildNames.js";
 import { cmd } from "../discord/commandMentions.js";
@@ -200,7 +201,7 @@ export async function goAway(
                 `${ts(autoEndAt, "t")}. That is ${config.autoEndAfterAwayMinutes} minutes from ` +
                 "now, and it closes your shift for you: nothing is lost, and the minutes you " +
                 "already earned are already counted.",
-            { colour: COLOUR.away }
+            { colour: COLOUR.away, emoji: EMOJI.away }
         )
     });
 
@@ -228,7 +229,7 @@ export async function comeBack(
         ...noticeCard(
             "Welcome back",
             "You are available again and your availability role is back. Minutes are counting.",
-            { colour: COLOUR.onShift }
+            { colour: COLOUR.onShift, emoji: EMOJI.welcome }
         )
     });
 

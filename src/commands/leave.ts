@@ -9,6 +9,7 @@ import {
 import { findStaffById } from "../domain/staff.js";
 import { isLeadOrAbove } from "../domain/permissions.js";
 import { endLeave } from "../services/leaveService.js";
+import { EMOJI } from "../render/emoji.js";
 import { containersMessage, errorCard, noticeCard, text } from "../render/cards.js";
 import { leaveExtendModal, leaveRequestModal } from "../render/modals.js";
 import { defer, respond } from "../discord/respond.js";
@@ -119,7 +120,7 @@ export const leaveCommand: Command = {
                 welcome ?? noticeCard(
                     "Welcome back",
                     "Your leave is closed and your ranks have been restored.",
-                    { ephemeral: true, colour: COLOUR.approved }
+                    { ephemeral: true, colour: COLOUR.approved, emoji: EMOJI.welcome }
                 )
             );
             return;

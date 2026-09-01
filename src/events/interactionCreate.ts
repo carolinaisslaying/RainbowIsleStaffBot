@@ -27,6 +27,7 @@ import {
     type Tier
 } from "../domain/permissions.js";
 import { pendingOrApprovedLeaveFor } from "../domain/leave.js";
+import { EMOJI } from "../render/emoji.js";
 import { errorCard, faceSetupCard, noticeCard, timezoneSetupCard } from "../render/cards.js";
 import { FACES, faceFor } from "../render/faces.js";
 import { respond, sendOptions } from "../discord/respond.js";
@@ -361,7 +362,7 @@ async function routeButton(client: Client, interaction: import("discord.js").But
                     `**${zone}**. You can use every other command now.\n\n` +
                         "-# Display only: your totals, rings, leaderboard position and " +
                         "compliance outcomes are the same UTC weeks as everyone else's.",
-                    { colour: COLOUR.approved }
+                    { colour: COLOUR.approved, emoji: EMOJI.clock }
                 )
             ) as never
         );

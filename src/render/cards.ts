@@ -25,6 +25,7 @@ import {
 } from "./rings.js";
 import { describeFaces, renderFacePicker } from "./facePicker.js";
 import { formatDuration, formatMinutes, percent, ts } from "../time/format.js";
+import { emojiForColour } from "./emoji.js";
 import { COLOUR } from "./theme.js";
 
 /**
@@ -62,15 +63,25 @@ export function separator(large = false): SeparatorBuilder {
         .setSpacing(large ? SeparatorSpacingSize.Large : SeparatorSpacingSize.Small);
 }
 
-/** A plain notice. Used for refusals, confirmations and errors. */
+/**
+ * A plain notice. Used for refusals, confirmations and errors.
+ *
+ * The leading emoji comes from the colour rather than from the caller, so the
+ * forty-odd cards that already say what state they are in by their accent get
+ * the matching mark for free and cannot drift from it. `emoji` overrides that
+ * for the handful of cards whose state the palette does not distinguish: a
+ * shift starting and leave being approved are both green.
+ */
 export function noticeCard(
     title: string,
     body: string,
-    options: { colour?: number; ephemeral?: boolean } = {}
+    options: { colour?: number; ephemeral?: boolean; emoji?: string } = {}
 ): RenderedMessage {
+    const colour = options.colour ?? COLOUR.admin;
+    const mark = options.emoji ?? emojiForColour(colour);
     const container = new ContainerBuilder()
-        .setAccentColor(options.colour ?? COLOUR.admin)
-        .addTextDisplayComponents(text(`### ${title}\n${body}`));
+        .setAccentColor(colour)
+        .addTextDisplayComponents(text(`### ${mark} ${title}\n${body}`));
 
     return {
         components: [container],
@@ -446,13 +457,17 @@ export function leaveRequestCard(options: {
     outcome?: string | null;
     purged?: string | null;
 }): RenderedMessage {
+    // A purged record is grey whatever state it was decided in, so the mark
+    // follows the colour the card is actually drawn in rather than the status
+    // it still reports.
+    const colour = options.purged ? COLOUR.settled : LEAVE_STATUS_COLOUR[options.status];
+
     const container = new ContainerBuilder()
-        .setAccentColor(
-            options.purged ? COLOUR.settled : LEAVE_STATUS_COLOUR[options.status]
-        )
+        .setAccentColor(colour)
         .addTextDisplayComponents(
             text(
-                `## Leave request\n**${options.displayName}**\n` +
+                `## ${emojiForColour(colour)} Leave request\n` +
+                    `**${options.displayName}**\n` +
                     `-# ${LEAVE_STATUS_LABEL[options.status]}\n` +
                     `From ${ts(options.startDate, "f")} ` +
                     `to ${options.endDate ? ts(options.endDate, "f") : "**open ended**"}` +

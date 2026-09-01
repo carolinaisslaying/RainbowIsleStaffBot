@@ -18,6 +18,7 @@ import { audit } from "../domain/audit.js";
 import { leaveRequestCard, noticeCard, type RenderedMessage } from "../render/cards.js";
 import { log } from "../log.js";
 import { formatDays, ts } from "../time/format.js";
+import { EMOJI } from "../render/emoji.js";
 import { COLOUR } from "../render/theme.js";
 import { cmd } from "../discord/commandMentions.js";
 import { staffDisplayName } from "../discord/displayName.js";
@@ -290,7 +291,7 @@ export async function endLeave(
                     "they did not come back:\n" +
                     errors.map((roleId) => `- **${roleNames.get(roleId) ?? roleId}**`).join("\n") +
                     "\n\nGrant the current equivalents by hand.",
-                { colour: COLOUR.adverse }
+                { colour: COLOUR.adverse, emoji: EMOJI.warning }
             )
         });
     }
@@ -374,7 +375,10 @@ function welcomeBackCard(options: {
         `Run ${cmd("shift start", options.guildId)} when you are ready to go on shift.`
     );
 
-    return noticeCard("Welcome back", lines.join("\n"), { colour: COLOUR.approved });
+    return noticeCard("Welcome back", lines.join("\n"), {
+        colour: COLOUR.approved,
+        emoji: EMOJI.welcome
+    });
 }
 
 /**

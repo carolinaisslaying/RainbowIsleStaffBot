@@ -9,6 +9,7 @@ import {
     zoneWallClock
 } from "../time/timezones.js";
 import { findStaffByDiscordId } from "../domain/staff.js";
+import { EMOJI } from "../render/emoji.js";
 import { errorCard, noticeCard, timezoneConfirmCard } from "../render/cards.js";
 import { isLeadOrAbove } from "../domain/permissions.js";
 import { ts } from "../time/format.js";
@@ -132,7 +133,7 @@ export const timezoneCommand: Command = {
                     `Current local time there is ${ts(new Date(), "F")}.\n\n` +
                     "-# Timezone changes what you see and nothing more. Totals, rings, " +
                     "leaderboard position and compliance run on the same UTC weeks for everyone.",
-                { ephemeral: true }
+                { ephemeral: true, emoji: EMOJI.clock }
             )
         );
     }

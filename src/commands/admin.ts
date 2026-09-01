@@ -1,6 +1,7 @@
 import { SlashCommandBuilder, ContainerBuilder } from "discord.js";
 import type { Command } from "./types.js";
 import { isExecutive, isLeadOrAbove } from "../domain/permissions.js";
+import { EMOJI } from "../render/emoji.js";
 import { containersMessage, errorCard, noticeCard, text } from "../render/cards.js";
 import { defer, respond } from "../discord/respond.js";
 import { listActiveStaff, findStaffByDiscordId } from "../domain/staff.js";
@@ -114,7 +115,7 @@ export const adminCommand: Command = {
                         `Checked ${counts.scanned} day bitmaps and corrected ${counts.corrected} ` +
                         "popcount caches.\n\n" +
                         "-# Rollups rebuild from raw activity and shifts, which this leaves untouched.",
-                    { ephemeral: true }
+                    { ephemeral: true, emoji: EMOJI.recompute }
                 )
             );
             return;

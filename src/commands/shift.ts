@@ -2,6 +2,7 @@ import { SlashCommandBuilder } from "discord.js";
 import type { Command } from "./types.js";
 import { getOpenShift, openPauseOf, stateOf } from "../domain/shifts.js";
 import { beginShift, finishShift } from "../services/shiftService.js";
+import { EMOJI } from "../render/emoji.js";
 import { noticeCard } from "../render/cards.js";
 import { defer, respond } from "../discord/respond.js";
 import { formatDuration, ts } from "../time/format.js";
@@ -92,7 +93,7 @@ export const shiftCommand: Command = {
                         : `\nYou have ${config.autoEndAfterAwayMinutes} minutes of being away ` +
                           "before a shift ends itself, so stepping out briefly costs you " +
                           "nothing."),
-                { ephemeral: true }
+                { ephemeral: true, emoji: state === "away" ? EMOJI.away : EMOJI.onShift }
             )
         );
     }
