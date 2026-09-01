@@ -22,6 +22,8 @@ export const LEAVE_REQUEST_MODAL = "leaveRequest";
 export const LEAVE_EXTEND_MODAL = "leaveExtend";
 
 export const CONFIG_IMPORT_MODAL = "configImport";
+export const REVIEW_DECISION_MODAL = "reviewDecision";
+export const REVIEW_BULK_MODAL = "reviewBulk";
 
 export const FIELD_START = "start";
 export const FIELD_END = "end";
@@ -171,6 +173,97 @@ export function configImportModal(): ModalBuilder {
                         .setMinLength(2)
                         .setMaxLength(4000)
                         .setPlaceholder('{ "weeklyTargetMinutes": 120 }')
+                )
+        );
+}
+
+
+/**
+ * The reason behind a review decision.
+ *
+ * Every outcome asks for one, including dismissing and reopening. A warning
+ * nobody explained is a warning nobody can appeal, and a reopen with no reason
+ * is indistinguishable from a mistake. The prompt changes with the action, so
+ * the field asks the question the Executive is actually answering rather than
+ * a generic "reason".
+ */
+const DECISION_PROMPT: Record<string, { title: string; label: string; hint: string }> = {
+    warn: {
+        title: "Issue a warning",
+        label: "Why this warning?",
+        hint: "The member is sent these words. Say what they got wrong and what you expect."
+    },
+    excuse: {
+        title: "Excuse the fortnight",
+        label: "Why excuse it?",
+        hint: "The member is sent these words. Say what you took into account."
+    },
+    dismiss: {
+        title: "Dismiss the shortfall",
+        label: "Why dismiss it?",
+        hint: "Kept on the record for the next Executive who reads it. The member is not told."
+    },
+    reopen: {
+        title: "Reopen this decision",
+        label: "Why reopen it?",
+        hint: "Any warning it issued is deleted and the member is told it has been withdrawn."
+    }
+};
+
+export function reviewDecisionModal(
+    assessmentId: string,
+    action: string,
+    displayName: string
+): ModalBuilder {
+    const prompt = DECISION_PROMPT[action] ?? DECISION_PROMPT.dismiss;
+    return new ModalBuilder()
+        .setCustomId(`${REVIEW_DECISION_MODAL}:${assessmentId}:${action}`)
+        .setTitle(prompt.title.slice(0, 45))
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(`-# About **${displayName}**.`)
+        )
+        .addLabelComponents(
+            new LabelBuilder()
+                .setLabel(prompt.label)
+                .setDescription(prompt.hint)
+                .setTextInputComponent(
+                    new TextInputBuilder()
+                        .setCustomId(FIELD_REASON)
+                        .setStyle(TextInputStyle.Paragraph)
+                        .setRequired(true)
+                        .setMinLength(4)
+                        .setMaxLength(1000)
+                )
+        );
+}
+
+/** One reason, recorded against every row the bulk action touches. */
+export function reviewBulkModal(
+    fortnightIndex: number,
+    action: string,
+    count: number
+): ModalBuilder {
+    const prompt = DECISION_PROMPT[action] ?? DECISION_PROMPT.dismiss;
+    return new ModalBuilder()
+        .setCustomId(`${REVIEW_BULK_MODAL}:${fortnightIndex}:${action}`)
+        .setTitle(`${prompt.title} \u00d7 ${count}`.slice(0, 45))
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(
+                `-# Recorded against **${count}** ${count === 1 ? "row" : "rows"} at once, ` +
+                    "and against each of those members individually."
+            )
+        )
+        .addLabelComponents(
+            new LabelBuilder()
+                .setLabel(prompt.label)
+                .setDescription(prompt.hint)
+                .setTextInputComponent(
+                    new TextInputBuilder()
+                        .setCustomId(FIELD_REASON)
+                        .setStyle(TextInputStyle.Paragraph)
+                        .setRequired(true)
+                        .setMinLength(4)
+                        .setMaxLength(1000)
                 )
         );
 }

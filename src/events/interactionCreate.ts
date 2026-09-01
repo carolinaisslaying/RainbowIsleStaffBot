@@ -32,7 +32,9 @@ import { errorCard, faceSetupCard, noticeCard, timezoneSetupCard } from "../rend
 import { FACES, faceFor } from "../render/faces.js";
 import { respond, sendOptions } from "../discord/respond.js";
 import { COLOUR } from "../render/theme.js";
-import { handleReviewButton } from "./reviewButtons.js";
+import { handleReviewBulkButton, handleReviewButton } from "./reviewButtons.js";
+import { handleReviewModal } from "./reviewModals.js";
+import { handleWarningButton } from "./warningButtons.js";
 import { handleLeaveButton } from "./leaveButtons.js";
 import { handleLeaveModal } from "./leaveModals.js";
 import { handleLeaveConfirmButton } from "./leaveConfirm.js";
@@ -41,7 +43,11 @@ import {
     handleConfigButton,
     handleConfigImportModal
 } from "./configTransferButtons.js";
-import { CONFIG_IMPORT_MODAL } from "../render/modals.js";
+import {
+    CONFIG_IMPORT_MODAL,
+    REVIEW_BULK_MODAL,
+    REVIEW_DECISION_MODAL
+} from "../render/modals.js";
 import { renderLeaderboard, type LeaderboardScope } from "../commands/leaderboard.js";
 import { canonicaliseTimezone } from "../time/timezones.js";
 import { publicGuildName, staffGuildName } from "../discord/guildNames.js";
@@ -265,6 +271,16 @@ async function routeModal(
         return;
     }
 
+    // Review decisions carry their reason in a modal, so they arrive here as
+    // well. Routed before leave, which is the fallthrough.
+    if (
+        interaction.customId.startsWith(`${REVIEW_DECISION_MODAL}:`) ||
+        interaction.customId.startsWith(`${REVIEW_BULK_MODAL}:`)
+    ) {
+        await handleReviewModal(client, config, interaction);
+        return;
+    }
+
     await handleLeaveModal(
         client,
         config,
@@ -302,6 +318,14 @@ async function routeButton(client: Client, interaction: import("discord.js").But
 
     if (namespace === "review") {
         await handleReviewButton(client, config, interaction, new ObjectId(first), second);
+        return;
+    }
+    if (namespace === "reviewBulk") {
+        await handleReviewBulkButton(client, config, interaction, Number(first), second);
+        return;
+    }
+    if (namespace === "warning") {
+        await handleWarningButton(client, config, interaction, new ObjectId(first), second);
         return;
     }
     if (namespace === "leave") {

@@ -14,7 +14,7 @@ import {
     ThumbnailBuilder
 } from "discord.js";
 import type { APIMessageTopLevelComponent, JSONEncodable } from "discord.js";
-import type { LeaveStatus, RingState } from "../db/types.js";
+import type { LeaveStatus, ReviewOutcome, RingState } from "../db/types.js";
 import { cmd } from "../discord/commandMentions.js";
 import { RING_STATE_COLOUR, RING_STATE_LABEL } from "../domain/rings.js";
 import {
@@ -25,6 +25,7 @@ import {
 } from "./rings.js";
 import { describeFaces, renderFacePicker } from "./facePicker.js";
 import { formatDuration, formatMinutes, percent, ts } from "../time/format.js";
+import type { ReviewAction } from "../domain/review.js";
 import { emojiForColour } from "./emoji.js";
 import { COLOUR } from "./theme.js";
 
@@ -368,47 +369,312 @@ export interface ReviewRowInput {
     week2Minutes: number;
     totalMinutes: number;
     requiredMinutes: number;
+    /** Plain English history. Never a fortnight index. */
     priorOutcomes: string;
-    decided: string | null;
+    /** What the next warning would be. Surfaced, never acted on. */
+    warningWeight: string;
+    /** Which buttons to draw, decided by domain/review.ts. */
+    buttons: ReviewAction[];
+    outcome: ReviewOutcome | null;
+    /** Who decided, when, and why. The card is the log, so this stays on it. */
+    decidedLine: string | null;
+    reason: string | null;
+    acknowledgedLine: string | null;
+    departed: boolean;
+    rehearsal: boolean;
+    /** Set when a recompute has moved them above the requirement since. */
+    contradiction: string | null;
 }
 
-/** Review card: one Container per member, decision buttons routed by custom ID. */
+const REVIEW_OUTCOME_COLOUR: Record<ReviewOutcome, number> = {
+    warned: COLOUR.pending,
+    excused: COLOUR.approved,
+    dismissed: COLOUR.settled
+};
+
+const REVIEW_BUTTON: Record<
+    ReviewAction,
+    { label: string; style: ButtonStyle }
+> = {
+    warn: { label: "Issue warning", style: ButtonStyle.Danger },
+    excuse: { label: "Excuse", style: ButtonStyle.Secondary },
+    dismiss: { label: "Dismiss", style: ButtonStyle.Secondary },
+    reopen: { label: "Reopen", style: ButtonStyle.Secondary }
+};
+
+/**
+ * One member's row, which is also that member's permanent record of the
+ * fortnight.
+ *
+ * It lives in its own message and is edited in place for the rest of its life,
+ * so the queue and the log are the same object at two points in it. The
+ * previous design batched every row into one message, which meant a decision
+ * could only be shown by disabling buttons across the whole message: deciding
+ * one member took everybody else's buttons with them.
+ *
+ * Colour is the state, as everywhere else: red is waiting on a human, amber a
+ * warning, green an excusal, grey filed with nothing left to do.
+ */
 export function reviewRowCard(row: ReviewRowInput): ContainerBuilder {
     const shortfall = Math.max(0, row.requiredMinutes - row.totalMinutes);
     const reached = percent(row.totalMinutes, row.requiredMinutes);
+    const colour = row.outcome ? REVIEW_OUTCOME_COLOUR[row.outcome] : COLOUR.adverse;
+
+    const lines = [
+        `**${row.displayName}**`,
+        `**${row.totalMinutes} of ${row.requiredMinutes} minutes** (${reached}%), ` +
+            `short by **${shortfall}**`,
+        `-# Week one ${row.week1Minutes} min, week two ${row.week2Minutes} min`,
+        `-# Earlier fortnights: ${row.priorOutcomes}`
+    ];
+
+    if (row.departed) {
+        lines.push("-# ⚠️ No longer in the server. They cannot be warned, only cleared.");
+    }
+
+    // Said before the click, not after it. The bot counts and surfaces; it
+    // never escalates by itself.
+    if (!row.outcome) lines.push(`-# ${row.warningWeight}`);
+
     const container = new ContainerBuilder()
-        .setAccentColor(row.decided ? COLOUR.settled : COLOUR.adverse)
+        .setAccentColor(colour)
+        .addTextDisplayComponents(text(lines.join("\n")));
+
+    if (row.outcome && row.decidedLine) {
+        container.addSeparatorComponents(separator());
+        const settled = [`${emojiForColour(colour)} **${row.decidedLine}**`];
+        if (row.reason) settled.push(`> ${row.reason}`);
+        if (row.acknowledgedLine) settled.push(`-# ${row.acknowledgedLine}`);
+        if (row.rehearsal) {
+            settled.push("-# Rehearsal. Nothing was recorded against them and nobody was told.");
+        }
+        container.addTextDisplayComponents(text(settled.join("\n")));
+    }
+
+    if (row.contradiction) {
+        container.addTextDisplayComponents(text(`-# ${row.contradiction}`));
+    }
+
+    if (row.buttons.length > 0) {
+        container.addActionRowComponents(
+            new ActionRowBuilder<ButtonBuilder>().addComponents(
+                ...row.buttons.map((action) =>
+                    new ButtonBuilder()
+                        .setCustomId(`review:${row.assessmentId}:${action}`)
+                        .setLabel(REVIEW_BUTTON[action].label)
+                        .setStyle(REVIEW_BUTTON[action].style)
+                )
+            )
+        );
+    }
+
+    return container;
+}
+
+/** The row as its own message, which is how it is actually posted. */
+export function reviewRowMessage(row: ReviewRowInput): RenderedMessage {
+    return { components: [reviewRowCard(row)], files: [], flags: V2_FLAGS };
+}
+
+export interface ReviewHeaderInput {
+    fortnightIndex: number;
+    windowLabel: string;
+    headline: string;
+    remaining: number;
+    rehearsal: boolean;
+}
+
+/**
+ * The queue's own message, edited as the queue is worked so the count at the
+ * top is the count that is actually left.
+ */
+export function reviewHeaderCard(input: ReviewHeaderInput): RenderedMessage {
+    const container = new ContainerBuilder()
+        .setAccentColor(input.remaining > 0 ? COLOUR.pending : COLOUR.settled)
         .addTextDisplayComponents(
             text(
-                `**${row.displayName}**\n` +
-                    `**${row.totalMinutes} of ${row.requiredMinutes} minutes** (${reached}%), ` +
-                    `short by **${shortfall}**\n` +
-                    `-# Week one ${row.week1Minutes} min, week two ${row.week2Minutes} min\n` +
-                    `-# Previous outcomes: ${row.priorOutcomes}`
+                `## ${input.remaining > 0 ? "⏳" : "📁"} Fortnight review\n` +
+                    `${input.windowLabel}\n${input.headline}\n` +
+                    (input.rehearsal
+                        ? "-# **Rehearsal.** Every decision below is recorded against a " +
+                          "throwaway record and only Executives are messaged. Turn off the " +
+                          "assessment dry run to make a review real."
+                        : "-# The bot issues no warnings. Every outcome below is an Executive " +
+                          "decision, and every one asks why.")
             )
         );
 
-    if (row.decided) {
-        container.addTextDisplayComponents(text(`-# Decided: ${row.decided}`));
-    } else {
+    if (input.remaining > 0) {
         container.addActionRowComponents(
             new ActionRowBuilder<ButtonBuilder>().addComponents(
                 new ButtonBuilder()
-                    .setCustomId(`review:${row.assessmentId}:warn`)
-                    .setLabel("Issue warning")
-                    .setStyle(ButtonStyle.Danger),
-                new ButtonBuilder()
-                    .setCustomId(`review:${row.assessmentId}:excuse`)
-                    .setLabel("Excuse")
-                    .setStyle(ButtonStyle.Secondary),
-                new ButtonBuilder()
-                    .setCustomId(`review:${row.assessmentId}:dismiss`)
-                    .setLabel("Dismiss")
+                    .setCustomId(`reviewBulk:${input.fortnightIndex}:ask`)
+                    .setLabel(`Decide all ${input.remaining} remaining`)
                     .setStyle(ButtonStyle.Secondary)
             )
         );
     }
-    return container;
+
+    return { components: [container], files: [], flags: V2_FLAGS };
+}
+
+/**
+ * The second click on deciding a whole queue at once.
+ *
+ * It names every member it would touch rather than counting them, because the
+ * whole objection to a bulk action is that it applies a decision to people
+ * without reading them. Naming them is the least it can do.
+ */
+export function reviewBulkConfirmCard(input: {
+    fortnightIndex: number;
+    names: string[];
+    skipped: string[];
+}): RenderedMessage {
+    const container = new ContainerBuilder()
+        .setAccentColor(COLOUR.pending)
+        .addTextDisplayComponents(
+            text(
+                `### ⏳ Decide ${input.names.length} remaining ` +
+                    `${input.names.length === 1 ? "row" : "rows"} at once?\n` +
+                    input.names.map((name) => `- ${name}`).join("\n") +
+                    (input.skipped.length > 0
+                        ? `\n\n-# Skipped, because you cannot warn yourself: ` +
+                          `${input.skipped.join(", ")}. Excuse or dismiss instead.`
+                        : "") +
+                    "\n\nPick the outcome. You will be asked for one reason, and it is " +
+                    "recorded against every row above."
+            )
+        )
+        .addActionRowComponents(
+            new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`reviewBulk:${input.fortnightIndex}:warn`)
+                    .setLabel("Warn all")
+                    .setStyle(ButtonStyle.Danger),
+                new ButtonBuilder()
+                    .setCustomId(`reviewBulk:${input.fortnightIndex}:excuse`)
+                    .setLabel("Excuse all")
+                    .setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder()
+                    .setCustomId(`reviewBulk:${input.fortnightIndex}:dismiss`)
+                    .setLabel("Dismiss all")
+                    .setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder()
+                    .setCustomId(`reviewBulk:${input.fortnightIndex}:cancel`)
+                    .setLabel("Leave them")
+                    .setStyle(ButtonStyle.Secondary)
+            )
+        );
+
+    return { components: [container], files: [], flags: V2_FLAGS | MessageFlags.Ephemeral };
+}
+
+/**
+ * The warning as the member receives it.
+ *
+ * It carries the Executive's own words rather than a generated line, because a
+ * warning nobody explained is a warning nobody can appeal. The Acknowledge
+ * button is the member saying they have read it: the row card and the warnings
+ * view then show the difference between unread and ignored, which is the only
+ * thing an Executive can fairly act on later.
+ */
+export function warningDmCard(input: {
+    warningId: string;
+    windowLabel: string;
+    totalMinutes: number;
+    requiredMinutes: number;
+    reason: string;
+}): RenderedMessage {
+    const shortfall = Math.max(0, input.requiredMinutes - input.totalMinutes);
+    const container = new ContainerBuilder()
+        .setAccentColor(COLOUR.adverse)
+        .addTextDisplayComponents(
+            text(
+                `### ${emojiForColour(COLOUR.adverse)} You have been issued a warning\n` +
+                    `Fortnight ${input.windowLabel}. You recorded ` +
+                    `**${input.totalMinutes} of ${input.requiredMinutes} activity minutes**, ` +
+                    `short by **${shortfall}**.\n\n` +
+                    `**Why**\n> ${input.reason}\n\n` +
+                    "If you think this is wrong, or something was going on we should know " +
+                    "about, reply to the Executive team.\n\n" +
+                    `-# You can see everything held about you with ${cmd("mydata export")}.`
+            )
+        )
+        .addActionRowComponents(
+            new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`warning:${input.warningId}:ack`)
+                    .setLabel("I have read this")
+                    .setStyle(ButtonStyle.Secondary)
+            )
+        );
+
+    return { components: [container], files: [], flags: V2_FLAGS };
+}
+
+/**
+ * A member's warning record.
+ *
+ * Ordered newest first and always ephemeral, whoever is reading. A spent
+ * warning is shown rather than hidden: it is still part of what happened, it
+ * just no longer counts, and hiding it would make the record disagree with the
+ * member's own memory of it.
+ */
+export function warningsCard(input: {
+    displayName: string;
+    isSelf: boolean;
+    activeCount: number;
+    expiryDays: number;
+    rows: {
+        issuedAt: Date;
+        issuedBy: string;
+        note: string;
+        acknowledged: boolean;
+        spent: boolean;
+    }[];
+    historyLine: string;
+    windowLabel: (start: Date, end: Date) => string;
+}): RenderedMessage {
+    const clean = input.rows.length === 0;
+    const container = new ContainerBuilder()
+        .setAccentColor(input.activeCount > 0 ? COLOUR.pending : COLOUR.approved)
+        .addTextDisplayComponents(
+            text(
+                `## ${emojiForColour(input.activeCount > 0 ? COLOUR.pending : COLOUR.approved)} ` +
+                    `${input.isSelf ? "Your warnings" : `Warnings: ${input.displayName}`}\n` +
+                    (clean
+                        ? input.isSelf
+                            ? "You have never been warned. Nothing is on your record."
+                            : "They have never been warned. Nothing is on their record."
+                        : `**${input.activeCount}** currently count` +
+                          `${input.activeCount === 1 ? "s" : ""}, of ${input.rows.length} ` +
+                          `ever issued.\n-# A warning stops counting after ` +
+                          `${input.expiryDays} days. It stays on the record either way.`)
+            )
+        );
+
+    for (const row of input.rows) {
+        container.addSeparatorComponents(separator());
+        container.addTextDisplayComponents(
+            text(
+                `**${ts(row.issuedAt, "D")}**` +
+                    (row.spent ? " · _spent_" : "") +
+                    `, by ${row.issuedBy}\n> ${row.note}\n` +
+                    `-# ${row.acknowledged ? "Acknowledged" : "Not acknowledged"}`
+            )
+        );
+    }
+
+    container.addSeparatorComponents(separator());
+    container.addTextDisplayComponents(
+        text(`-# **Recent fortnights**\n-# ${input.historyLine}`)
+    );
+
+    return {
+        components: [container],
+        files: [],
+        flags: V2_FLAGS | MessageFlags.Ephemeral
+    };
 }
 
 /**

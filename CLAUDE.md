@@ -139,6 +139,32 @@ a member's `timezone` is display only. All zone maths goes through `src/time/cal
 uses `Intl.DateTimeFormat` parts and never assumes a 24-hour day (`zonedToUtc` converges in two
 passes). `activityDays` is keyed by **UTC** day (`utcDayKey`), independent of both clocks.
 
+**One assessment, one card, in its own message.** The fortnight review posts a header plus one
+message per member below the requirement, and each row card is edited in place from awaiting a
+decision through to its outcome: the queue and the log are the same object at two points in its
+life. Rows are never dropped once decided. `reviewRowFor` in `services/assessmentService.ts` is the
+only thing that draws a row, so colour, buttons and record cannot disagree. The old design batched
+every row into one message, which meant a decision could only be shown by disabling buttons across
+the whole message — deciding one member took everybody else's buttons with them and the queue could
+not be finished. `domain/review.ts` holds the rules as pure functions (`rowButtons`,
+`decisionPermitted`, `activeWarningCount`, `queueHeadline`, `reminderDue`), and `fortnightReviews`
+keyed by index remembers where the header is.
+
+**Every review outcome asks why.** Warn, excuse, dismiss, reopen and each bulk action open a modal
+and require a reason; `showModal` cannot follow a defer, so the button only checks and opens, and
+every write happens in `events/reviewModals.ts`. Dismiss tells the member nothing. **Reopen is the
+only path that deletes a warning**, so a withdrawal is always a reviewed decision with an audit row
+behind it. Warnings count and expire (`warningExpiryDays`) but the bot never escalates on its own,
+the same way it never issues one. An Executive may excuse or dismiss their own row but never warn
+themselves, and a departed member can be cleared but not warned.
+
+**A rehearsal writes, and only Executives hear about it.** `assessmentDryRun` flags the records it
+creates with `rehearsal: true` and **every read that feeds a real decision filters them out** —
+`assessmentHistory` and `warningsFor` do it in the query, which is where it belongs: one missed
+filter puts a rehearsal warning on somebody's real record. A rehearsal exercises the real write
+path, because one that skips the writes tests nothing; notifications go only to members holding the
+Executive role, and the card says when somebody was skipped.
+
 **One leave record, one card.** A request's card in the leave channel is edited in place through
 its whole life, from pending through approved or declined, active, back and purged. It is never
 replaced, and never followed by a second message. `logChannelId`/`logMessageId` on the record are what make that possible, and

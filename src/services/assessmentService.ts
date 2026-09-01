@@ -1,6 +1,6 @@
 import type { Client } from "discord.js";
 import { ObjectId } from "mongodb";
-import type { FortnightAssessmentDoc } from "../db/types.js";
+import type { FortnightAssessmentDoc, ReviewOutcome } from "../db/types.js";
 import type { StaffBotConfig } from "../config/guildConfig.js";
 import {
     announcementPlan,
@@ -9,50 +9,84 @@ import {
     assessmentsForFortnight,
     belowThresholdFor,
     isAssessableFortnight,
+    setReviewCard,
+    warningsFor,
     windowForIndex,
     type AnnouncementPlan
 } from "../domain/assessments.js";
+import {
+    activeWarningCount,
+    priorOutcomesLine,
+    queueCounts,
+    queueHeadline,
+    reminderDue,
+    rowButtons,
+    warningWeightLine
+} from "../domain/review.js";
+import {
+    findReview,
+    markReminded,
+    rememberHeader,
+    unremindedReviews
+} from "../domain/reviewQueue.js";
 import { findStaffById } from "../domain/staff.js";
 import { staffChannel } from "./leaveService.js";
 import {
-    containersMessage,
     noticeCard,
-    reviewRowCard,
-    text,
-    type TopLevelComponent
+    reviewHeaderCard,
+    reviewRowMessage,
+    type RenderedMessage
 } from "../render/cards.js";
 import { claimFortnightAnnouncement, sendFortnightOutcome } from "./notifications.js";
-import { ContainerBuilder } from "discord.js";
-import { labelWindow, formatMinutes } from "../time/format.js";
-import { cmd } from "../discord/commandMentions.js";
+import { labelDate, labelWindow, formatMinutes, ts } from "../time/format.js";
+import { sendOptions } from "../discord/respond.js";
 import { COLOUR } from "../render/theme.js";
 import { log } from "../log.js";
 import { staffDisplayName } from "../discord/displayName.js";
+
 
 /**
  * The bot never issues a warning by itself. It assesses, posts one review card
  * listing everyone below threshold, and waits for an Executive to decide.
  */
 
-const OUTCOME_LABEL: Record<string, string> = {
-    warned: "warned",
-    excused: "excused",
-    dismissed: "dismissed"
+
+/** Past tense, for the line a decided card carries. */
+const OUTCOME_LABEL_PAST: Record<ReviewOutcome, string> = {
+    warned: "Warned",
+    excused: "Excused",
+    dismissed: "Dismissed"
 };
 
-async function priorOutcomesLine(staffId: ObjectId, excludeIndex: number): Promise<string> {
+/**
+ * The member's earlier fortnights, in words.
+ *
+ * `assessmentHistory` already drops rehearsals and pre-anchor fortnights; this
+ * turns what is left into a sentence. The old version printed
+ * `F-3 0m below, F-5 0m warned`, which needs the reader to know what a
+ * fortnight index is, that a negative one exists, and that "below" is a status
+ * while "warned" is a decision about one. It is the line somebody reads
+ * immediately before deciding a colleague's record.
+ */
+async function priorOutcomesFor(
+    staffId: ObjectId,
+    excludeIndex: number,
+    config: StaffBotConfig
+): Promise<string> {
     const history = await assessmentHistory(staffId, 6);
     const relevant = history.filter((entry) => entry.fortnightIndex !== excludeIndex);
-    if (relevant.length === 0) return "none on record";
-    return relevant
-        .map((entry) => {
-            const outcome = entry.reviewOutcome
-                ? OUTCOME_LABEL[entry.reviewOutcome]
-                : entry.status;
-            return `F${entry.fortnightIndex} ${entry.totalMinutes}m ${outcome}`;
-        })
-        .join(", ");
+    return priorOutcomesLine(
+        relevant.map((entry) => ({
+            windowStart: entry.windowStart,
+            totalMinutes: entry.totalMinutes,
+            requiredMinutes: entry.requiredMinutes,
+            outcome: entry.reviewOutcome,
+            status: entry.status
+        })),
+        (date) => labelDate(date, config.accountingTimezone)
+    );
 }
+
 
 /**
  * Run the assessment for a closed fortnight and post the review card.
@@ -81,7 +115,7 @@ export async function runFortnightAssessment(
         return "silent";
     }
 
-    const assessments = await assessFortnight(index, config);
+    const assessments = await assessFortnight(index, config, dryRun);
     const window = windowForIndex(index, config);
     const label = labelWindow(window.week1Start, window.end, config.accountingTimezone);
 
@@ -129,113 +163,179 @@ export async function runFortnightAssessment(
         );
     }
 
-    await postReviewCard(client, config, index, { rehearsal: plan === "rehearse" });
+    await postReviewQueue(client, config, index, { rehearsal: plan === "rehearse" });
     return plan;
 }
 
-/** One review card for the fortnight, listing every member below threshold. */
-export async function postReviewCard(
+/**
+ * Post or refresh a fortnight's queue: one header, then one message per member.
+ *
+ * Converges rather than appends. A row whose card already exists is edited; one
+ * whose card has gone is reposted and its location updated. Re-running an
+ * assessment therefore corrects the channel instead of stacking another copy of
+ * it on top, which is what made the old card look like a fresh queue every time
+ * anyone recomputed.
+ *
+ * Decided rows are kept and redrawn in their outcome, because the card is the
+ * log. Dropping them was what made the review look like it forgot decisions.
+ */
+export async function postReviewQueue(
     client: Client,
     config: StaffBotConfig,
     index: number,
     options: { rehearsal?: boolean } = {}
 ): Promise<void> {
-    // Rows already decided are dropped rather than reprinted. That is what makes
-    // re-running the assessment a way to page through a backlog larger than one
-    // card can hold: decide the first batch, run it again, see the next.
-    const all = await belowThresholdFor(index);
-    const below = all.filter((assessment) => !assessment.reviewOutcome);
-    const alreadyDecided = all.length - below.length;
     const channel = await staffChannel(client, config, config.reportChannelId);
     if (!channel) {
-        log.warn("No reportChannelId configured; skipping the fortnight report card.");
+        log.warn("No reportChannelId configured; skipping the fortnight review queue.");
         return;
     }
 
+    const below = await belowThresholdFor(index);
     const window = windowForIndex(index, config);
     const label = labelWindow(window.week1Start, window.end, config.accountingTimezone);
+    const counts = queueCounts(below.map((row) => ({ outcome: row.reviewOutcome })));
 
-    if (below.length === 0) {
-        await channel.send({
-            ...noticeCard(
-                options.rehearsal
-                    ? `Fortnight ${index} rehearsed`
-                    : `Fortnight ${index} assessed`,
-                alreadyDecided > 0
-                    ? `${label}. All ${alreadyDecided} member(s) below the requirement have been ` +
-                      "reviewed. Nothing left to decide."
-                    : `${label}. Every active member met the ` +
-                      `${config.fortnightRequiredMinutes} minute requirement. Nothing to review.`
-            )
-        });
-        return;
+    // The header first, so it sits above the rows on a first posting.
+    const existing = await findReview(index);
+    const header = reviewHeaderCard({
+        fortnightIndex: index,
+        windowLabel: label,
+        headline: queueHeadline(counts, config.fortnightRequiredMinutes),
+        remaining: counts.remaining,
+        rehearsal: options.rehearsal ?? false
+    });
+
+    let headerMessageId = existing?.headerMessageId ?? null;
+    if (headerMessageId && existing) {
+        try {
+            const message = await channel.messages.fetch(existing.headerMessageId);
+            await message.edit(sendOptions(header) as never);
+        } catch {
+            headerMessageId = null; // deleted by hand; post a new one below
+        }
+    }
+    if (!headerMessageId) {
+        const posted = await channel.send(sendOptions(header));
+        headerMessageId = posted.id;
+    }
+    await rememberHeader(index, channel.id, headerMessageId);
+
+    // No rows at all still gets a header, which reads "nothing to review". A
+    // separate "assessed" notice for that case was a second message saying the
+    // same thing.
+    for (const assessment of below) {
+        await upsertReviewRow(client, config, assessment, index, options.rehearsal ?? false);
+    }
+}
+
+/** Draw one member's row, editing its own message if it already has one. */
+export async function upsertReviewRow(
+    client: Client,
+    config: StaffBotConfig,
+    assessment: FortnightAssessmentDoc,
+    index: number,
+    rehearsal: boolean
+): Promise<void> {
+    const channel = await staffChannel(client, config, config.reportChannelId);
+    if (!channel) return;
+
+    const row = await reviewRowFor(client, config, assessment, index, rehearsal);
+
+    if (assessment.reviewChannelId && assessment.reviewMessageId) {
+        try {
+            const target = await client.channels.fetch(assessment.reviewChannelId);
+            if (target?.isTextBased()) {
+                const message = await target.messages.fetch(assessment.reviewMessageId);
+                await message.edit(sendOptions(row) as never);
+                return;
+            }
+        } catch {
+            // Deleted by hand, or the channel moved. Fall through and repost.
+        }
     }
 
-    const header = new ContainerBuilder()
-        .setAccentColor(COLOUR.pending)
-        .addTextDisplayComponents(
-            text(
-                `## Fortnight ${index} review\n${label}\n` +
-                    `${below.length} ${below.length === 1 ? "member is" : "members are"} below ` +
-                    `the ${config.fortnightRequiredMinutes} minute requirement` +
-                    (alreadyDecided > 0 ? `, ${alreadyDecided} already reviewed` : "") +
-                    ".\n" +
-                    (options.rehearsal
-                        ? "-# **Rehearsal.** Nobody was told and nothing here has been " +
-                          "recorded against anyone. Turn off the assessment dry run to make a " +
-                          "review real."
-                        : "-# The bot issues no warnings. Each outcome below is an Executive " +
-                          "decision.")
-            )
-        );
+    const posted = await channel.send(sendOptions(row));
+    await setReviewCard(assessment._id, posted.channelId, posted.id);
+}
 
-    const containers: TopLevelComponent[] = [header];
+/**
+ * The one renderer for a review row, wherever it is being drawn.
+ *
+ * Every state change goes through this, so the colour, the buttons and the
+ * record cannot disagree. Same reason `leaveCardFor` exists.
+ */
+export async function reviewRowFor(
+    client: Client,
+    config: StaffBotConfig,
+    assessment: FortnightAssessmentDoc,
+    index: number,
+    rehearsal: boolean
+): Promise<RenderedMessage> {
+    const staff = await findStaffById(assessment.staffId);
+    const departed = staff ? staff.active === false : true;
+    const now = new Date();
 
-    // The 40 component ceiling is real: cap rows and say so rather than
-    // silently truncating.
-    const MAX_ROWS = 12;
-    for (const assessment of below.slice(0, MAX_ROWS)) {
-        const staff = await findStaffById(assessment.staffId);
-        containers.push(
-            reviewRowCard({
-                assessmentId: assessment._id.toHexString(),
-                // The mention is appended rather than used as the fallback,
-                // so someone who has left both servers reads as a named row an
-                // Executive can still click through, not as the same mention
-                // printed twice.
-                displayName: staff
-                    ? `${await staffDisplayName(
-                          client,
-                          config,
-                          staff.discordId,
-                          "Departed member"
-                      )} (<@${staff.discordId}>)`
-                    : "unknown member",
-                week1Minutes: assessment.week1Minutes,
-                week2Minutes: assessment.week2Minutes,
-                totalMinutes: assessment.totalMinutes,
-                requiredMinutes: assessment.requiredMinutes,
-                priorOutcomes: await priorOutcomesLine(assessment.staffId, index),
-                decided: assessment.reviewOutcome
-                    ? OUTCOME_LABEL[assessment.reviewOutcome]
-                    : null
-            })
-        );
-    }
+    const warnings = staff ? await warningsFor(staff._id) : [];
+    // The count that matters is what already counts, so a warning issued by
+    // this very assessment is left out of "this would be their nth".
+    const others = warnings.filter((warning) => !warning.assessmentId.equals(assessment._id));
+    const active = activeWarningCount(others, now, config.warningExpiryDays);
 
-    if (below.length > MAX_ROWS) {
-        containers.push(
-            new ContainerBuilder().addTextDisplayComponents(
-                text(
-                    `-# ${below.length - MAX_ROWS} further members fall below the threshold. ` +
-                        "One card holds 40 components, so decide the rows above, then run " +
-                        `${cmd(`admin assess fortnight:${index}`, config.staffGuildId)} for the next batch.`
-                )
-            )
-        );
-    }
+    const decider = assessment.reviewedBy ? await findStaffById(assessment.reviewedBy) : null;
+    const issued = warnings.find((warning) => warning.assessmentId.equals(assessment._id));
 
-    await channel.send({ ...containersMessage(containers as ContainerBuilder[]) });
+    const decidedLine =
+        assessment.reviewOutcome && assessment.reviewedAt
+            ? `${OUTCOME_LABEL_PAST[assessment.reviewOutcome]}` +
+              (decider ? ` by <@${decider.discordId}>` : "") +
+              `, ${ts(assessment.reviewedAt, "R")}`
+            : null;
+
+    return reviewRowMessage({
+        assessmentId: assessment._id.toHexString(),
+        // The mention is appended rather than used as the fallback, so somebody
+        // who has left both servers reads as a named row an Executive can still
+        // click through, not as the same mention printed twice.
+        displayName: staff
+            ? `${await staffDisplayName(
+                  client,
+                  config,
+                  staff.discordId,
+                  "Departed member"
+              )} (<@${staff.discordId}>)`
+            : "unknown member",
+        week1Minutes: assessment.week1Minutes,
+        week2Minutes: assessment.week2Minutes,
+        totalMinutes: assessment.totalMinutes,
+        requiredMinutes: assessment.requiredMinutes,
+        priorOutcomes: await priorOutcomesFor(assessment.staffId, index, config),
+        warningWeight: warningWeightLine(active),
+        buttons: rowButtons({
+            outcome: assessment.reviewOutcome,
+            departed,
+            rehearsal
+        }),
+        outcome: assessment.reviewOutcome,
+        decidedLine,
+        reason: assessment.reviewNote,
+        acknowledgedLine:
+            issued && issued.acknowledgedAt
+                ? `Acknowledged ${ts(issued.acknowledgedAt, "R")}`
+                : issued
+                  ? "Not yet acknowledged"
+                  : null,
+        departed,
+        rehearsal: assessment.rehearsal === true,
+        // A recompute can lift somebody above the requirement after they were
+        // decided. The figures move; the decision is a human's and stays put,
+        // flagged so a human can reopen it if they want to.
+        contradiction:
+            assessment.reviewOutcome && assessment.totalMinutes >= assessment.requiredMinutes
+                ? "⚠️ A recompute has since put them above the requirement. The decision " +
+                  "above still stands; reopen it if it should not."
+                : null
+    });
 }
 
 export async function fortnightSummary(index: number): Promise<{
@@ -253,4 +353,58 @@ export async function fortnightSummary(index: number): Promise<{
         exempt: assessments.filter((entry) => entry.status === "exempt").length,
         assessments
     };
+}
+
+
+/**
+ * The queue's one reminder.
+ *
+ * Once, `reviewReminderDays` after posting, if anything is still undecided.
+ * `remindedAt` is set when it fires and never reset, so a queue worked slowly is
+ * chased a single time rather than nagged daily until somebody clicks something
+ * to make it stop.
+ */
+export async function chaseUnworkedQueues(
+    client: Client,
+    config: StaffBotConfig,
+    now = new Date()
+): Promise<number> {
+    const channel = await staffChannel(client, config, config.reportChannelId);
+    if (!channel) return 0;
+
+    let sent = 0;
+    for (const review of await unremindedReviews()) {
+        const below = await belowThresholdFor(review._id);
+        const counts = queueCounts(below.map((row) => ({ outcome: row.reviewOutcome })));
+
+        if (
+            !reminderDue({
+                postedAt: review.postedAt,
+                remindedAt: review.remindedAt,
+                remaining: counts.remaining,
+                now,
+                afterDays: config.reviewReminderDays
+            })
+        ) {
+            continue;
+        }
+
+        const window = windowForIndex(review._id, config);
+        await channel.send({
+            ...noticeCard(
+                "A review is still waiting",
+                `${labelWindow(window.week1Start, window.end, config.accountingTimezone)}: ` +
+                    `**${counts.remaining}** of ${counts.below} ` +
+                    `${counts.below === 1 ? "row" : "rows"} still has no decision, ` +
+                    `${ts(review.postedAt, "R")} after it was posted.\n\n` +
+                    "The cards are above. This is the only reminder.",
+                { colour: COLOUR.pending }
+            )
+        });
+
+        await markReminded(review._id, now);
+        sent += 1;
+    }
+
+    return sent;
 }

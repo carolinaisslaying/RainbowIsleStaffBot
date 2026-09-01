@@ -1,12 +1,13 @@
 import { SlashCommandBuilder } from "discord.js";
 import type { Command } from "./types.js";
 import { findStaffByDiscordId, relinkStaff, setLeaderboardOptOut } from "../domain/staff.js";
-import { isExecutive } from "../domain/permissions.js";
+import { isExecutive, isLeadOrAbove } from "../domain/permissions.js";
 import { fetchMember } from "../discord/roles.js";
 import { errorCard, faceSetupCard, noticeCard } from "../render/cards.js";
 import { FACES } from "../render/faces.js";
 import { defer, respond } from "../discord/respond.js";
 import { cmd } from "../discord/commandMentions.js";
+import { warningsViewFor } from "../services/warningsService.js";
 
 export const staffCommand: Command = {
     tier: "staff",
@@ -40,10 +41,55 @@ export const staffCommand: Command = {
                         )
                         .setRequired(true)
                 )
+        )
+        .addSubcommand((sub) =>
+            sub
+                .setName("warnings")
+                .setDescription("Warning history. Yours, or a member's (Lead and Executive)")
+                .addUserOption((option) =>
+                    option
+                        .setName("user")
+                        .setDescription("Whose record. Leave empty for your own.")
+                        .setRequired(false)
+                )
         ),
 
     async execute({ client, config, interaction, staff, tier }) {
         const sub = interaction.options.getSubcommand();
+
+        if (sub === "warnings") {
+            const target = interaction.options.getUser("user");
+
+            // Anyone may read their own record; reading somebody else's is the
+            // audit capacity a Lead holds, and the tier that issues them.
+            if (target && target.id !== interaction.user.id && !isLeadOrAbove(tier)) {
+                await respond(
+                    interaction,
+                    errorCard(
+                        "Only Leads and Executives can look up another member's warnings. " +
+                            `Run ${cmd("staff warnings", interaction.guildId)} with no user to ` +
+                            "see your own."
+                    )
+                );
+                return;
+            }
+
+            await defer(interaction, true);
+
+            const subject = target
+                ? await findStaffByDiscordId(target.id)
+                : staff;
+            if (!subject) {
+                await respond(interaction, errorCard(`<@${target?.id}> has no staff record.`));
+                return;
+            }
+
+            await respond(
+                interaction,
+                await warningsViewFor(client, config, subject, subject._id.equals(staff._id))
+            );
+            return;
+        }
 
         // The same picker the onboarding gate shows, so there is one place a
         // face is chosen and one card that describes the choice.

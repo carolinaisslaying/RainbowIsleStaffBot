@@ -4,6 +4,7 @@ import { everyHour, everyMinute, schedule, startScheduler } from "./scheduler.js
 import { sweepShifts } from "../services/shiftService.js";
 import { processLeaveTransitions } from "../services/leaveService.js";
 import { deliverDueRecaps } from "../services/notifications.js";
+import { chaseUnworkedQueues } from "../services/assessmentService.js";
 import { pruneActivityCache, recomputeCounts } from "../domain/activity.js";
 import { closeWeek, catchUpMissedWeeks } from "./weeklyRollup.js";
 import { nextWeekStart, weekStartFor, wallClockIn, zonedToUtc } from "../time/calendar.js";
@@ -89,6 +90,13 @@ export async function registerJobs(client: Client): Promise<void> {
             );
         }
     );
+
+    // The review queue's one reminder. Hourly rather than by the minute: it is
+    // measured in days and firing it late by an hour costs nothing.
+    schedule("review-reminders", everyHour, async (at) => {
+        const sent = await chaseUnworkedQueues(client, await loadConfig(), at);
+        if (sent > 0) log.info(`Chased ${sent} unworked review queue(s)`);
+    });
 
     startScheduler();
 

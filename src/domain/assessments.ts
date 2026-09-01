@@ -108,7 +108,8 @@ export async function computeAssessment(
  * outcomes. A re-run refreshes the figures but leaves any review decision alone.
  */
 export async function saveAssessment(
-    computation: AssessmentComputation
+    computation: AssessmentComputation,
+    rehearsal = false
 ): Promise<FortnightAssessmentDoc> {
     const result = await collections.fortnightAssessments().findOneAndUpdate(
         { staffId: computation.staffId, fortnightIndex: computation.fortnightIndex },
@@ -129,7 +130,10 @@ export async function saveAssessment(
                 reviewedBy: null,
                 reviewOutcome: null,
                 reviewedAt: null,
-                reviewNote: null
+                reviewNote: null,
+                reviewChannelId: null,
+                reviewMessageId: null,
+                rehearsal
             }
         },
         { upsert: true, returnDocument: "after" }
@@ -141,13 +145,14 @@ export async function saveAssessment(
 /** Assess every active staff member for the fortnight that just closed. */
 export async function assessFortnight(
     index: number,
-    config: StaffBotConfig
+    config: StaffBotConfig,
+    rehearsal = false
 ): Promise<FortnightAssessmentDoc[]> {
     const staff = await listActiveStaff();
     const saved: FortnightAssessmentDoc[] = [];
     for (const member of staff) {
         const computation = await computeAssessment(member._id, index, config);
-        saved.push(await saveAssessment(computation));
+        saved.push(await saveAssessment(computation, rehearsal));
     }
     await audit("assessment.run", {
         detail: { fortnightIndex: index, assessed: saved.length }
@@ -257,16 +262,63 @@ export async function findAssessment(id: ObjectId): Promise<FortnightAssessmentD
     return collections.fortnightAssessments().findOne({ _id: id });
 }
 
+/**
+ * A member's own history, as anything real is allowed to see it.
+ *
+ * Rehearsals are excluded because they were never real, and fortnights before
+ * the anchor because they were never fortnights: an earlier boot assessed four
+ * of them against a database that held no data, and those rows would otherwise
+ * read as four shortfalls on somebody's record for ever.
+ */
 export async function assessmentHistory(
     staffId: ObjectId,
     limit = 10
 ): Promise<FortnightAssessmentDoc[]> {
     return collections
         .fortnightAssessments()
-        .find({ staffId })
+        .find({ staffId, rehearsal: { $ne: true }, fortnightIndex: { $gte: 0 } })
         .sort({ fortnightIndex: -1 })
         .limit(limit)
         .toArray();
+}
+
+/** Set, or move, where this row's card lives. */
+export async function setReviewCard(
+    assessmentId: ObjectId,
+    channelId: string,
+    messageId: string
+): Promise<void> {
+    await collections
+        .fortnightAssessments()
+        .updateOne({ _id: assessmentId }, { $set: { reviewChannelId: channelId, reviewMessageId: messageId } });
+}
+
+/**
+ * Undo a decision, returning the row to the queue.
+ *
+ * The warning it issued goes with it: a withdrawn warning that stays on the
+ * record is not withdrawn. This is the only path that deletes a warning, so
+ * every removal is a reviewed decision with an audit row behind it.
+ */
+export async function clearReview(assessmentId: ObjectId): Promise<FortnightAssessmentDoc | null> {
+    return collections.fortnightAssessments().findOneAndUpdate(
+        { _id: assessmentId },
+        {
+            $set: {
+                reviewedBy: null,
+                reviewOutcome: null,
+                reviewedAt: null,
+                reviewNote: null
+            }
+        },
+        { returnDocument: "after" }
+    );
+}
+
+/** Remove the warnings an assessment issued. Returns how many went. */
+export async function deleteWarningsFor(assessmentId: ObjectId): Promise<number> {
+    const result = await collections.warnings().deleteMany({ assessmentId });
+    return result.deletedCount;
 }
 
 export async function recordReview(
@@ -293,7 +345,8 @@ export async function issueWarning(
     staffId: ObjectId,
     assessmentId: ObjectId,
     issuedBy: ObjectId,
-    note: string
+    note: string,
+    rehearsal = false
 ): Promise<WarningDoc> {
     const warning: WarningDoc = {
         _id: new ObjectId(),
@@ -302,14 +355,28 @@ export async function issueWarning(
         issuedBy,
         issuedAt: new Date(),
         note,
-        acknowledgedAt: null
+        acknowledgedAt: null,
+        rehearsal
     };
     await collections.warnings().insertOne(warning);
     return warning;
 }
 
+/** Every real warning against a member, newest first. Rehearsals are not real. */
 export async function warningsFor(staffId: ObjectId): Promise<WarningDoc[]> {
-    return collections.warnings().find({ staffId }).sort({ issuedAt: -1 }).toArray();
+    return collections
+        .warnings()
+        .find({ staffId, rehearsal: { $ne: true } })
+        .sort({ issuedAt: -1 })
+        .toArray();
+}
+
+/** The warning an assessment issued against a member, if it still exists. */
+export async function findWarning(
+    assessmentId: ObjectId,
+    staffId: ObjectId
+): Promise<WarningDoc | null> {
+    return collections.warnings().findOne({ assessmentId, staffId });
 }
 
 export async function acknowledgeWarning(warningId: ObjectId): Promise<void> {
