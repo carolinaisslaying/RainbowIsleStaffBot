@@ -746,7 +746,11 @@ export function scrubConfirmCard(input: {
     fortnight: number | null;
     assessments: number;
     warnings: number;
+    /** Of those assessments, how many were written by a rehearsal. */
+    rehearsals: number;
     members: number;
+    /** Rehearse the fortnight again once it is cleared. */
+    rerun: boolean;
 }): RenderedMessage {
     const scope =
         input.fortnight === null
@@ -765,16 +769,28 @@ export function scrubConfirmCard(input: {
                           `${input.warnings === 1 ? "" : "s"} issued from them`
                         : ", and no warnings") +
                     ".\n\n" +
+                    (input.rehearsals === input.assessments
+                        ? "Every one of them was written by a rehearsal.\n\n"
+                        : input.rehearsals > 0
+                          ? `**${input.rehearsals}** of them came from a rehearsal; the rest ` +
+                            "are real records of real fortnights.\n\n"
+                          : "**None of them came from a rehearsal.** These are real records " +
+                            "of real fortnights.\n\n") +
+                    "Their cards in the review channel are deleted too, so a re-run is read " +
+                    "on its own rather than against what is left of the last one.\n\n" +
                     "The audit log keeps everything they held, written before anything is " +
                     "removed. Nothing else in the database refers to them: rollups are " +
-                    "rebuilt from raw activity, which this does not touch."
+                    "rebuilt from raw activity, which this does not touch." +
+                    (input.rerun
+                        ? "\n\nThe fortnight is rehearsed again straight afterwards."
+                        : "")
             )
         )
         .addActionRowComponents(
             new ActionRowBuilder<ButtonBuilder>().addComponents(
                 new ButtonBuilder()
-                    .setCustomId(`scrub:${input.fortnight ?? "pre"}:go`)
-                    .setLabel(`Delete ${input.assessments}`)
+                    .setCustomId(`scrub:${input.fortnight ?? "pre"}:${input.rerun ? "goRerun" : "go"}`)
+                    .setLabel(input.rerun ? `Delete ${input.assessments} and re-run` : `Delete ${input.assessments}`)
                     .setStyle(ButtonStyle.Danger),
                 new ButtonBuilder()
                     .setCustomId(`scrub:${input.fortnight ?? "pre"}:cancel`)

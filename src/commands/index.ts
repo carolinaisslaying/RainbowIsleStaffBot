@@ -16,6 +16,7 @@ import { coverageCommand } from "./coverage.js";
 import { staffCommand } from "./staff.js";
 import { mydataCommand } from "./mydata.js";
 import { adminCommand } from "./admin.js";
+import { devCommand } from "./dev.js";
 import { env } from "../config/env.js";
 import type { StaffBotConfig } from "../config/guildConfig.js";
 import {
@@ -35,7 +36,8 @@ export const commands: Command[] = [
     mydataCommand,
     configCommand,
     coverageCommand,
-    adminCommand
+    adminCommand,
+    devCommand
 ];
 
 export const commandsByName = new Map(

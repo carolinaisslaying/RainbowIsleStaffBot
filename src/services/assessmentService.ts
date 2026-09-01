@@ -25,6 +25,7 @@ import {
 } from "../domain/review.js";
 import {
     findReview,
+    forgetReview,
     markReminded,
     rememberHeader,
     unremindedReviews
@@ -513,4 +514,52 @@ function describeSpread(entries: SpreadEntry[], required: number): string {
         `${below} below the line. Median ${median?.minutes ?? 0} minutes, ` +
         `${Math.round(total / entries.length)} on average.`
     );
+}
+
+
+/**
+ * Delete a fortnight's review from the channel: the header and every row card.
+ *
+ * A rehearsal leaves real messages behind, and re-running one posts a second
+ * set beside the first because the records remember where their cards are. So
+ * clearing a rehearsal means clearing the channel too, or the next run is read
+ * against the leftovers of the last one.
+ *
+ * Best effort per message, as `updateLeaveCard` is: a card somebody already
+ * deleted by hand must not stop the rest from going.
+ */
+export async function deleteReviewMessages(
+    client: Client,
+    config: StaffBotConfig,
+    index: number
+): Promise<number> {
+    let removed = 0;
+
+    const drop = async (channelId: string, messageId: string): Promise<void> => {
+        try {
+            const channel = await client.channels.fetch(channelId);
+            if (!channel?.isTextBased()) return;
+            const message = await channel.messages.fetch(messageId);
+            await message.delete();
+            removed += 1;
+        } catch (error) {
+            log.debug(`Could not delete review message ${messageId}`, error);
+        }
+    };
+
+    for (const assessment of await assessmentsForFortnight(index)) {
+        if (assessment.reviewChannelId && assessment.reviewMessageId) {
+            await drop(assessment.reviewChannelId, assessment.reviewMessageId);
+        }
+    }
+
+    const review = await findReview(index);
+    if (review) {
+        await drop(review.headerChannelId, review.headerMessageId);
+        // The header's location goes with it, so a re-run posts a fresh one
+        // rather than trying to edit a message that is no longer there.
+        await forgetReview(index);
+    }
+
+    return removed;
 }

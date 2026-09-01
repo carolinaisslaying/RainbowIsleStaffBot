@@ -212,6 +212,12 @@ function keyChoices(config: StaffBotConfig, query: string) {
 
 export const configCommand: Command = {
     tier: "executive",
+    // Configuration changes how the bot behaves everywhere, including who
+    // counts as an Executive, so an Executive changing it could promote
+    // themselves. Limited to the deployment's own administrators, and falling
+    // back to Executive only when none are named, or a fresh deployment could
+    // never be configured at all.
+    seededOnly: true,
     communityFallback: true,
     data: new SlashCommandBuilder()
         .setName("config")

@@ -38,3 +38,8 @@ export async function markReminded(index: number, at = new Date()): Promise<void
 export async function unremindedReviews(): Promise<FortnightReviewDoc[]> {
     return collections.fortnightReviews().find({ remindedAt: null }).toArray();
 }
+
+/** Forget where a queue was posted, so the next run posts a fresh header. */
+export async function forgetReview(index: number): Promise<void> {
+    await collections.fortnightReviews().deleteOne({ _id: index });
+}

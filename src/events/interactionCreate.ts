@@ -22,6 +22,7 @@ import {
     bootstrapAdminsConfigured,
     fetchPublicMember,
     isBootstrapAdmin,
+    seededGatePermits,
     resolveTier,
     wearsOnLeaveRole,
     type Tier
@@ -116,6 +117,31 @@ export function registerInteractionHandler(client: Client): void {
                 await respond(
                     interaction,
                     errorCard(`**/${command.data.name}** is for ${command.tier} and above.`)
+                );
+                return;
+            }
+
+            // Above the tier check, not part of it: a seeded admin already
+            // resolves as Executive, so the lattice cannot say "Executive is
+            // not enough" and this has to. Skipped entirely when the deployment
+            // names no administrators, or the bot would be unconfigurable by
+            // anybody, the person setting it up included.
+            if (
+                !seededGatePermits({
+                    seededOnly: command.seededOnly === true,
+                    anyAdminsConfigured: bootstrapAdminsConfigured(),
+                    callerIsAdmin: isBootstrapAdmin(interaction.user.id)
+                })
+            ) {
+                await respond(
+                    interaction,
+                    errorCard(
+                        `**/${command.data.name}** is limited to the administrators named when ` +
+                            "this bot was deployed. Executive rank does not reach it, on " +
+                            "purpose: it changes how the bot itself behaves rather than what " +
+                            "it decides about anyone.\n\n" +
+                            "Ask whoever runs the deployment."
+                    )
                 );
                 return;
             }

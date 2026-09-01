@@ -46,6 +46,26 @@ export function isBootstrapAdmin(userId: string): boolean {
 }
 
 /**
+ * Whether a `seededOnly` command may run for this caller.
+ *
+ * Pure, and taking both facts as arguments, so the one case that matters can be
+ * tested without an environment: a deployment that names **no** administrators
+ * falls back to the command's tier rather than refusing everybody. Locking
+ * configuration to a list nobody is on would leave the bot unconfigurable,
+ * including by the person trying to name the first administrator, and the
+ * config command is the only way to fix the setting that caused it.
+ */
+export function seededGatePermits(options: {
+    seededOnly: boolean;
+    anyAdminsConfigured: boolean;
+    callerIsAdmin: boolean;
+}): boolean {
+    if (!options.seededOnly) return true;
+    if (!options.anyAdminsConfigured) return true;
+    return options.callerIsAdmin;
+}
+
+/**
  * Whether the deployment has any seeded admins at all.
  *
  * A permission refusal says the bot is not set up yet only when this is false.

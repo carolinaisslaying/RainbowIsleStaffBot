@@ -80,6 +80,22 @@ consults it. The healthcheck is curl, not `node -e`; the old one started a Node 
 seconds. Mongo's healthcheck runs `mongosh`, which is itself a Node program, so it polls every two
 minutes with a `start_interval` keeping boot detection fast.
 
+**`seededOnly` sits above the tier check.** `resolveTier` promotes a seeded admin (from
+`BOOTSTRAP_ADMIN_IDS`) to Executive, so the tier lattice cannot say "Executive is not enough" and
+`Command.seededOnly` does. It gates `/config` — configuration decides who counts as an Executive, so
+an Executive who could change it could promote themselves — and all of `/dev`. **A deployment that
+names no administrators falls back to the command's tier** (`seededGatePermits`), because locking
+configuration to an empty list leaves the bot unconfigurable by anybody, including whoever is trying
+to name the first administrator. Refusals never name the environment variable.
+
+**`/dev` is rehearsals and cleanup; `/admin` is the real thing.** `/dev assess` is *always* a
+rehearsal, so there is no flag to leave in the wrong position — a `rehearse:` option on the real
+command is how a dry run once wrote real warnings. `/dev recap` previews either recap without
+claiming a receipt. `/dev purge` deletes a fortnight's assessments, the warnings they issued **and
+their cards in the review channel**, optionally rehearsing it again straight afterwards: a re-run
+posted beside the last run's leftovers is read against them. It says on the confirmation how many of
+the records came from a rehearsal and how many are real.
+
 **Two guilds.** Roles live in the public guild; commands answer in the staff guild or in DMs.
 `resolveTierAllowingLeave` in `interactionCreate.ts` re-grants Staff tier to members whose
 department role was removed by active leave, or they could not run `/leave end`.

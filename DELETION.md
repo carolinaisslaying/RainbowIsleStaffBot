@@ -3,7 +3,7 @@
 The bot deletes in three places, all of them Executive-only, all of them
 confirmed, and all of them writing the audit row before anything goes: **Purge
 this record** on a leave card, **Reopen** on a fortnight review row, and
-`/admin scrub`. Everything else is removed by hand, with `mongosh`, by someone
+`/dev purge`. Everything else is removed by hand, with `mongosh`, by someone
 who has decided to do it.
 
 That one exception exists because removing a leave record was the only routine
@@ -30,8 +30,9 @@ buttons will and will not do.
 
 ## Scrubbing assessments that should not exist
 
-`/admin scrub [fortnight]`, Executive only, confirmed on a card that counts the
-records and the people before anything is removed.
+`/dev purge [fortnight] [rerun]`, limited to the deployment's administrators rather
+than to Executives, confirmed on a card that counts the records and the people
+before anything is removed.
 
 - With no `fortnight`, it takes **every fortnight before the anchor**. Those were
   written by a boot that treated an empty database as downtime and assessed four
@@ -42,9 +43,11 @@ records and the people before anything is removed.
   Nothing else refers to either: `weeklyStats` and the rings are rebuilt from
   `activityDays` and `shifts`, which this does not touch, so no member's figures,
   streak or leaderboard position move.
+- Deletes the review's **messages** as well: the header and every row card, so a
+  re-run is read on its own rather than against what is left of the last one.
 - Writes the audit row **first**, with every record embedded, and abandons the
   delete if that write fails. The preview is taken again on the second click
-  rather than trusted from the first.
+  rather than trusted from the first, and so is the permission.
 
 ## The one command that deletes
 

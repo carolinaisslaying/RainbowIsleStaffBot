@@ -36,6 +36,20 @@ export interface Command {
      */
     tier: Tier;
     /**
+     * Restrict to the administrators seeded at deployment, above and beyond
+     * `tier`.
+     *
+     * `resolveTier` already promotes a seeded admin to Executive, so the tier
+     * lattice cannot express "Executive is not enough". This can. It is for the
+     * two things an Executive should not reach: the bot's own configuration,
+     * and the dry-run tools that write throwaway records and delete real ones.
+     *
+     * A deployment with **no** seeded admins falls back to `tier`, because the
+     * alternative is a bot nobody can configure, including the person trying to
+     * name the first administrator.
+     */
+    seededOnly?: boolean;
+    /**
      * Whether an un-onboarded member may run this. Only /timezone set may.
      */
     bypassTimezoneGate?: boolean;
