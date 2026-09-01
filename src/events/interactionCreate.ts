@@ -35,6 +35,7 @@ import { COLOUR } from "../render/theme.js";
 import { handleReviewBulkButton, handleReviewButton } from "./reviewButtons.js";
 import { handleReviewModal } from "./reviewModals.js";
 import { handleWarningButton } from "./warningButtons.js";
+import { handleScrubButton } from "./scrubButtons.js";
 import { handleLeaveButton } from "./leaveButtons.js";
 import { handleLeaveModal } from "./leaveModals.js";
 import { handleLeaveConfirmButton } from "./leaveConfirm.js";
@@ -322,6 +323,10 @@ async function routeButton(client: Client, interaction: import("discord.js").But
     }
     if (namespace === "reviewBulk") {
         await handleReviewBulkButton(client, config, interaction, Number(first), second);
+        return;
+    }
+    if (namespace === "scrub") {
+        await handleScrubButton(client, config, interaction, first, second);
         return;
     }
     if (namespace === "warning") {

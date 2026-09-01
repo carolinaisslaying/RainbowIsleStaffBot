@@ -678,6 +678,60 @@ export function warningsCard(input: {
 }
 
 /**
+ * The confirmation before scrubbing assessment records.
+ *
+ * Deleting is rare here on purpose, so the card counts what would go and names
+ * how many people it touches rather than asking "are you sure". The audit row
+ * is written before the delete, which is the only reason this is offered as a
+ * button at all.
+ */
+export function scrubConfirmCard(input: {
+    fortnight: number | null;
+    assessments: number;
+    warnings: number;
+    members: number;
+}): RenderedMessage {
+    const scope =
+        input.fortnight === null
+            ? "every fortnight before the anchor"
+            : `fortnight ${input.fortnight}`;
+
+    const container = new ContainerBuilder()
+        .setAccentColor(COLOUR.adverse)
+        .addTextDisplayComponents(
+            text(
+                `### ${EMOJI_SCRUB} Delete the records for ${scope}?\n` +
+                    `**${input.assessments}** assessment${input.assessments === 1 ? "" : "s"} ` +
+                    `across **${input.members}** member${input.members === 1 ? "" : "s"}` +
+                    (input.warnings > 0
+                        ? `, and **${input.warnings}** warning` +
+                          `${input.warnings === 1 ? "" : "s"} issued from them`
+                        : ", and no warnings") +
+                    ".\n\n" +
+                    "The audit log keeps everything they held, written before anything is " +
+                    "removed. Nothing else in the database refers to them: rollups are " +
+                    "rebuilt from raw activity, which this does not touch."
+            )
+        )
+        .addActionRowComponents(
+            new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`scrub:${input.fortnight ?? "pre"}:go`)
+                    .setLabel(`Delete ${input.assessments}`)
+                    .setStyle(ButtonStyle.Danger),
+                new ButtonBuilder()
+                    .setCustomId(`scrub:${input.fortnight ?? "pre"}:cancel`)
+                    .setLabel("Leave them")
+                    .setStyle(ButtonStyle.Secondary)
+            )
+        );
+
+    return { components: [container], files: [], flags: V2_FLAGS | MessageFlags.Ephemeral };
+}
+
+const EMOJI_SCRUB = "🗑️";
+
+/**
  * The leave request as it appears in the log channel, in each of the three
  * states it passes through.
  *

@@ -309,8 +309,49 @@ export async function autoFinishShift(
 
     const displayName = await staffDisplayName(client, config, staff.discordId, "You");
 
-    const card = await finishShift(client, config, staff, displayName, reason, at);
-    if (card) await tryDm(client, staff.discordId, { ...card });
+    // Closing the shift and telling them about it are two jobs, and the second
+    // must not be able to cancel the first.
+    //
+    // `finishShift` closes the shift before it builds the summary, and anything
+    // that threw after that point — a stats query, the streak, rendering the
+    // rings — propagated out and left a shift ended in the database with the
+    // member never told. From their side the bot simply went quiet past the
+    // auto-end time. So the card is built defensively and a plain sentence goes
+    // out when it cannot be, because "your shift ended" is the part that
+    // matters and it needs no PNG.
+    let card: RenderedMessage | null = null;
+    try {
+        card = await finishShift(client, config, staff, displayName, reason, at);
+        if (card === null) return; // there was no open shift; nothing happened
+    } catch (error) {
+        log.error(
+            `Closing shift for ${staff._id.toHexString()} raised after the shift was ended; ` +
+                "sending the plain notice instead",
+            error
+        );
+    }
+
+    await tryDm(
+        client,
+        staff.discordId,
+        card ? { ...card } : { ...plainShiftEndCard(reason, at) }
+    );
+}
+
+/**
+ * The fallback the member gets when the summary card could not be built.
+ *
+ * It says the one thing they need to know and nothing it has to compute, so
+ * there is nothing left in it that can fail.
+ */
+function plainShiftEndCard(reason: ShiftEndReason, at: Date): RenderedMessage {
+    return noticeCard(
+        "Your shift has ended",
+        `${REASON_LABEL[reason]}, ${ts(at, "R")}.\n\n` +
+            "Your minutes for it are counted. The summary card could not be drawn this time, " +
+            `so use ${cmd("rings")} to see where the week stands.`,
+        { colour: COLOUR.settled }
+    );
 }
 
 /**

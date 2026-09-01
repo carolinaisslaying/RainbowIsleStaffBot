@@ -1,8 +1,14 @@
-import { SlashCommandBuilder, ContainerBuilder } from "discord.js";
+import { SlashCommandBuilder, ContainerBuilder, MessageFlags } from "discord.js";
 import type { Command } from "./types.js";
 import { isExecutive, isLeadOrAbove } from "../domain/permissions.js";
 import { EMOJI } from "../render/emoji.js";
-import { containersMessage, errorCard, noticeCard, text } from "../render/cards.js";
+import {
+    containersMessage,
+    errorCard,
+    noticeCard,
+    scrubConfirmCard,
+    text
+} from "../render/cards.js";
 import { defer, respond } from "../discord/respond.js";
 import { listActiveStaff, findStaffByDiscordId } from "../domain/staff.js";
 import { rebuildWeek, weekWindowFor, currentWeekStats } from "../domain/weekly.js";
@@ -16,6 +22,9 @@ import {
 import { runFortnightAssessment, fortnightSummary } from "../services/assessmentService.js";
 import { shiftHistory } from "../domain/shifts.js";
 import { audit } from "../domain/audit.js";
+import { scrubPreview } from "../domain/scrub.js";
+import { rehearseRecap } from "../services/notifications.js";
+import { cmd } from "../discord/commandMentions.js";
 import { weekStartFor, nextWeekStart, DAY_MS } from "../time/calendar.js";
 import { formatDuration, labelWindow, ts } from "../time/format.js";
 import { COLOUR } from "../render/theme.js";
@@ -52,6 +61,30 @@ export const adminCommand: Command = {
                     option
                         .setName("rehearse")
                         .setDescription("Post the card without telling anyone. For testing.")
+                        .setRequired(false)
+                )
+        )
+        .addSubcommand((sub) =>
+            sub
+                .setName("recap")
+                .setDescription("Read a weekly recap without anybody being sent one")
+                .addUserOption((option) =>
+                    option
+                        .setName("user")
+                        .setDescription("Whose recap. Defaults to your own.")
+                        .setRequired(false)
+                )
+        )
+        .addSubcommand((sub) =>
+            sub
+                .setName("scrub")
+                .setDescription("Delete assessments that should never have been written")
+                .addIntegerOption((option) =>
+                    option
+                        .setName("fortnight")
+                        .setDescription(
+                            "One fortnight. Leave empty for every fortnight before the anchor."
+                        )
                         .setRequired(false)
                 )
         )
@@ -189,6 +222,73 @@ export const adminCommand: Command = {
                             : "The review card is up. An Executive decides each outcome."),
                     { ephemeral: true }
                 )
+            );
+            return;
+        }
+
+        if (sub === "recap") {
+            await defer(interaction, true);
+
+            const who = interaction.options.getUser("user");
+            const subject = who ? await findStaffByDiscordId(who.id) : staff;
+            if (!subject) {
+                await respond(interaction, errorCard(`<@${who?.id}> has no staff record.`));
+                return;
+            }
+
+            // Deliberately not claiming the delivery receipt: this is a
+            // rehearsal, and the member's real recap still has to arrive at
+            // their own 09:00 afterwards.
+            const card = await rehearseRecap(client, config, subject._id);
+            if (!card) {
+                await respond(
+                    interaction,
+                    errorCard(
+                        "There is no weekly rollup for the week that just closed, so there is " +
+                            `nothing to recap. Run ${cmd("admin recompute", interaction.guildId)} ` +
+                            "first if the week should have one."
+                    )
+                );
+                return;
+            }
+
+            await respond(interaction, {
+                ...card,
+                flags: card.flags | MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        if (sub === "scrub") {
+            await defer(interaction, true);
+
+            const requested = interaction.options.getInteger("fortnight");
+            const target = await scrubPreview(requested);
+
+            if (target.assessments.length === 0) {
+                await respond(
+                    interaction,
+                    noticeCard(
+                        "Nothing to scrub",
+                        requested === null
+                            ? "No assessment exists for any fortnight before the anchor."
+                            : `Fortnight ${requested} has no assessments on record.`,
+                        { ephemeral: true, colour: COLOUR.settled }
+                    )
+                );
+                return;
+            }
+
+            await respond(
+                interaction,
+                scrubConfirmCard({
+                    fortnight: requested,
+                    assessments: target.assessments.length,
+                    warnings: target.warnings.length,
+                    members: new Set(
+                        target.assessments.map((entry) => entry.staffId.toHexString())
+                    ).size
+                })
             );
             return;
         }

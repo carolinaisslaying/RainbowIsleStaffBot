@@ -1,9 +1,10 @@
 # Deletion procedure
 
-The bot deletes exactly one thing, in exactly one place: an Executive may purge
-a single leave record with the **Purge this record** button on its card in the
-leave log. Everything else is removed by hand, with `mongosh`, by someone who
-has decided to do it.
+The bot deletes in three places, all of them Executive-only, all of them
+confirmed, and all of them writing the audit row before anything goes: **Purge
+this record** on a leave card, **Reopen** on a fortnight review row, and
+`/admin scrub`. Everything else is removed by hand, with `mongosh`, by someone
+who has decided to do it.
 
 That one exception exists because removing a leave record was the only routine
 removal, and asking an Executive to open a database shell for it meant either
@@ -11,7 +12,39 @@ the shell became routine or the removal never happened. A button that refuses
 the unsafe cases and writes an audit row first is more accountable than either.
 
 This document is the procedure for everything else, and the record of what the
-button will and will not do.
+buttons will and will not do.
+
+## Reopening a review
+
+**Reopen**, on a decided row in the fortnight review channel.
+
+- Executive only, and it asks for a reason like every other review outcome.
+- Deletes the `warnings` documents that row issued, and clears the outcome,
+  the reviewer and the note from the `fortnightAssessments` document. The
+  assessment itself is not deleted: the figures stand, only the decision goes.
+- This is the **only** way a warning is ever removed. There is no separate
+  delete, so every withdrawal is a reviewed decision with a reason attached.
+- The member is told the decision was withdrawn, unless it was a dismissal:
+  they were never told about that one, and announcing its reversal would raise
+  the issue the silence existed to avoid.
+
+## Scrubbing assessments that should not exist
+
+`/admin scrub [fortnight]`, Executive only, confirmed on a card that counts the
+records and the people before anything is removed.
+
+- With no `fortnight`, it takes **every fortnight before the anchor**. Those were
+  written by a boot that treated an empty database as downtime and assessed four
+  fortnights that closed before the deployment existed. With a `fortnight`, it
+  takes exactly that one, which is how rehearsal decisions written before the
+  `rehearsal` flag existed are removed.
+- Deletes `fortnightAssessments` documents and the `warnings` issued from them.
+  Nothing else refers to either: `weeklyStats` and the rings are rebuilt from
+  `activityDays` and `shifts`, which this does not touch, so no member's figures,
+  streak or leaderboard position move.
+- Writes the audit row **first**, with every record embedded, and abandons the
+  delete if that write fails. The preview is taken again on the second click
+  rather than trusted from the first.
 
 ## The one command that deletes
 

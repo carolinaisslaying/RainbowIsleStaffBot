@@ -159,19 +159,46 @@ export async function deliverDueRecaps(
     return sent;
 }
 
+/**
+ * Build and send one member's recap on demand, ignoring both gates.
+ *
+ * The real delivery waits for the member's own local 09:00 and claims a receipt
+ * so it happens once. A rehearsal has to ignore both or it could only ever be
+ * tested for one hour a week, once. It claims nothing, so the real recap still
+ * arrives normally afterwards.
+ */
+export async function rehearseRecap(
+    client: Client,
+    config: StaffBotConfig,
+    staffId: ObjectId,
+    now = new Date()
+): Promise<RenderedMessage | null> {
+    const closed = previousWeekWindow(now, config);
+    const teamRows = await collections
+        .weeklyStats()
+        .find({ weekStart: closed.start })
+        .toArray();
+    const teamMinutes = teamRows.reduce((total, row) => total + row.activityMinutes, 0);
+
+    return sendRecap(client, config, staffId, closed, teamMinutes, teamRows.length, true);
+}
+
 async function sendRecap(
     client: Client,
     config: StaffBotConfig,
     staffId: ObjectId,
     closed: WeekWindow,
     teamMinutes: number,
-    teamSize: number
-): Promise<void> {
+    teamSize: number,
+    rehearsal = false
+): Promise<RenderedMessage | null> {
     const staff = await findStaffById(staffId);
-    if (!staff) return;
+    if (!staff) return null;
 
     const stored = await collections.weeklyStats().findOne({ staffId, weekStart: closed.start });
-    if (!stored) return;
+    // No rollup for the closed week means there is nothing to recap. Real
+    // delivery just skips; a rehearsal has to say so, or it looks broken.
+    if (!stored) return null;
 
     const previous = await collections
         .weeklyStats()
@@ -225,7 +252,12 @@ async function sendRecap(
             `This week closes ${ts(weekWindowFor(new Date(), config).end, "F")}.`
     });
 
+    // A rehearsal hands the card back to the person who asked for it instead of
+    // messaging the member, so a recap can be read without anybody receiving one.
+    if (rehearsal) return card;
+
     await tryDm(client, staff.discordId, { ...card });
+    return card;
 }
 
 /** Sent after a fortnight assessment, telling the member their own outcome. */
