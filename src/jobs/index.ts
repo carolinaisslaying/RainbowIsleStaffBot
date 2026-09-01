@@ -1,5 +1,5 @@
 import type { Client } from "discord.js";
-import { loadConfig, type StaffBotConfig } from "../config/guildConfig.js";
+import { cachedConfig, loadConfig, type StaffBotConfig } from "../config/guildConfig.js";
 import { everyHour, everyMinute, schedule, startScheduler } from "./scheduler.js";
 import { sweepShifts } from "../services/shiftService.js";
 import { processLeaveTransitions } from "../services/leaveService.js";
@@ -15,8 +15,17 @@ import { log } from "../log.js";
  * boundary, so a message posted at 23:59:59 has certainly been written before
  * the rollup reads it.
  */
-function nextWeekClose(config: StaffBotConfig): (from: Date) => Date {
+function nextWeekClose(): (from: Date) => Date {
     return (from: Date) => {
+        // Read at the moment the next boundary is computed, not captured when
+        // the job was registered. The scheduler re-arms after every fire and
+        // /config set invalidates this cache, so changing accountingTimezone or
+        // weekStartDay moves the next close rather than waiting for a restart.
+        //
+        // It used to close over the config from boot while the job body called
+        // loadConfig(), so the rollup ran in the new zone on a schedule still
+        // firing in the old one, and the two silently disagreed.
+        const config = cachedConfig();
         const zone = config.accountingTimezone;
         const currentWeek = weekStartFor(from, zone, config.weekStartDay);
         const thisWeekClose = offsetMinutes(currentWeek, 5, zone);
@@ -69,7 +78,7 @@ export async function registerJobs(client: Client): Promise<void> {
 
     // Week close: rebuild the closing week, then assess if it completed a
     // fortnight.
-    schedule("week-close", nextWeekClose(config), async (at) => {
+    schedule("week-close", nextWeekClose(), async (at) => {
         await closeWeek(client, await loadConfig(), at);
     });
 

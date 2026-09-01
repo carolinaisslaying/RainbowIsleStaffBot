@@ -142,6 +142,7 @@ export async function runFortnightAssessment(
 
     // Every member gets their own outcome, met or not. A rehearsal tells none
     // of them: the point is to read the card, not to wake the roster.
+    let undelivered = 0;
     for (const assessment of plan === "rehearse" ? [] : assessments) {
         const staff = await findStaffById(assessment.staffId);
         if (!staff) continue;
@@ -158,7 +159,7 @@ export async function runFortnightAssessment(
                     `${assessment.requiredMinutes - assessment.totalMinutes}. An Executive ` +
                     "will review it and decide what happens.";
 
-        await sendFortnightOutcome(
+        const delivered = await sendFortnightOutcome(
             client,
             staff.discordId,
             body,
@@ -167,6 +168,17 @@ export async function runFortnightAssessment(
                 : assessment.status === "exempt"
                   ? COLOUR.settled
                   : COLOUR.pending
+        );
+        if (!delivered) undelivered += 1;
+    }
+
+    // Said once, at info, rather than per member at debug. A fortnight where a
+    // third of the roster never heard the outcome is a fact about the
+    // deployment, not a detail of one send.
+    if (undelivered > 0) {
+        log.warn(
+            `Fortnight ${index}: ${undelivered} member(s) could not be DMed their outcome. ` +
+                "Their direct messages are closed."
         );
     }
 

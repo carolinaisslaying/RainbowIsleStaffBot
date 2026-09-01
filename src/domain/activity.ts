@@ -91,16 +91,26 @@ export async function creditMinute(staffId: ObjectId, at: Date): Promise<boolean
         const day = await loadDay(staffId, date);
         if (isMinuteSet(day.bitmap, minute)) return false;
 
-        setMinute(day.bitmap, minute);
+        // Set the bit on a copy and commit it to the cache only once the write
+        // has landed. Mutating the cached buffer first meant a failed write left
+        // the minute set in memory and absent from the document: every later
+        // call returned "already credited" and the minute was gone for good,
+        // beyond the reach of the nightly recompute, which rebuilds `count`
+        // from the stored bitmap and so never knew about it either.
+        const next = Buffer.from(day.bitmap);
+        setMinute(next, minute);
+
         await collections.activityDays().updateOne(
             { staffId, date },
             {
-                $set: { minutes: new Binary(day.bitmap) },
+                $set: { minutes: new Binary(next) },
                 $setOnInsert: { _id: new ObjectId(), staffId, date },
                 $inc: { count: 1 }
             },
             { upsert: true }
         );
+
+        day.bitmap = next;
         return true;
     });
 }

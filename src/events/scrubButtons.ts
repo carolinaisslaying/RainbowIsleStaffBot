@@ -94,22 +94,42 @@ export async function handleScrubButton(
         return;
     }
 
+    // Three steps, in this order and no other.
+    //
+    // The audit row first, because nothing user-visible may disappear untraced
+    // and it carries where every card was. Then the cards, while the documents
+    // that know their locations still exist: deleting the documents first
+    // leaves a channel full of orphaned cards for members whose records are
+    // gone. Then the documents.
+    //
+    // The audit write has its own try, and nothing else shares it. All three
+    // used to sit under one catch whose card said "the audit row could not be
+    // written, so nothing was deleted" — true only of the first step. A failure
+    // between the two deleteMany calls left warnings gone and assessments
+    // present, and told the operator nothing had happened.
+    let receipt;
     try {
-        // Three steps, in this order and no other.
-        //
-        // The audit row first, because nothing user-visible may disappear
-        // untraced and it carries where every card was. Then the cards, while
-        // the documents that know their locations still exist: deleting the
-        // documents first leaves a channel full of orphaned cards for members
-        // whose records are gone. Then the documents.
-        const receipt = await recordScrubIntent(
+        receipt = await recordScrubIntent(
             target,
             interaction.user.id,
             fortnight === null
                 ? "Assessments for fortnights before the anchor, written by a boot against an empty database"
                 : `Assessments and cards for fortnight ${fortnight}`
         );
+    } catch (error) {
+        log.error("Scrub aborted before deleting anything: the audit write failed", error);
+        await interaction.editReply(
+            sendOptions(
+                errorCard(
+                    "The audit row could not be written, so nothing was deleted. Records are " +
+                        "not removed without a trace of what they held."
+                )
+            ) as never
+        );
+        return;
+    }
 
+    try {
         const messages = await deleteReviewMessages(client, target.assessments);
         const result = await deleteScrubbed(target, receipt);
 
@@ -149,14 +169,20 @@ export async function handleScrubButton(
             ) as never
         );
     } catch (error) {
-        // The audit row is written first and the delete is abandoned if it
-        // fails, so this branch means nothing was removed.
-        log.error("Scrub aborted", error);
+        // The audit row landed before this ran, so the deletion is on record
+        // whether or not it finished. What this cannot say is how far it got:
+        // the cards and the two deleteMany calls are separate operations and
+        // any of them may have completed. So it says exactly that, and points
+        // at the one place that knows.
+        log.error("Scrub failed after the audit row was written", error);
         await interaction.editReply(
             sendOptions(
                 errorCard(
-                    "The audit row could not be written, so nothing was deleted. Records are " +
-                        "not removed without a trace of what they held."
+                    "Something failed partway through deleting. **The audit row was written " +
+                        "first, so whatever went is on record there** — read it before doing " +
+                        "anything else.\n\nSome records may be gone and some may remain. " +
+                        "Running the purge again is safe: it takes a fresh count of what is " +
+                        "actually left."
                 )
             ) as never
         );

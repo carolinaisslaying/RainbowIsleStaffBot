@@ -266,13 +266,18 @@ async function sendRecap(
 }
 
 /** Sent after a fortnight assessment, telling the member their own outcome. */
+/**
+ * Returns whether it arrived. The caller counts what did not: a member with
+ * closed DMs is never told their fortnight closed, and used to be indistinguishable
+ * from one who was told, because this discarded what `tryDm` handed back.
+ */
 export async function sendFortnightOutcome(
     client: Client,
     discordId: string,
     body: string,
     colour: number = COLOUR.admin
-): Promise<void> {
-    await tryDm(client, discordId, {
+): Promise<boolean> {
+    return tryDm(client, discordId, {
         ...noticeCard("Fortnight closed", body, { colour })
     });
 }

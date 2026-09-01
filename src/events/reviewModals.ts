@@ -15,6 +15,7 @@ import {
 import {
     OUTCOME_FOR,
     decisionPermitted,
+    deliveryLine,
     reopenNotifies,
     type ReviewAction
 } from "../domain/review.js";
@@ -171,11 +172,13 @@ export async function handleReviewModal(
     //
     // Throttled, because editing an interaction reply once per row on a long
     // queue is a rate limit waiting to happen and nobody can read it that fast
-    // anyway. The first and last edits always go.
+    // anyway. The first tick always goes, because lastTick starts at zero. The
+    // finished card is not a tick at all: it is sent once below, after the
+    // header has been redrawn, and carries the names.
     let lastTick = 0;
-    const tick = async (finished: boolean): Promise<void> => {
+    const tick = async (): Promise<void> => {
         const now = Date.now();
-        if (!finished && now - lastTick < 1500) return;
+        if (now - lastTick < 1500) return;
         lastTick = now;
         try {
             await respond(
@@ -194,7 +197,7 @@ export async function handleReviewModal(
         }
     };
 
-    await tick(false);
+    await tick();
 
     for (const row of remaining) {
         const subject = await findStaffById(row.staffId);
@@ -237,7 +240,7 @@ export async function handleReviewModal(
             log.error(`Bulk ${action} failed for assessment ${row._id.toHexString()}`, error);
             skipped.push(`<@${subject?.discordId ?? "unknown"}>`);
         }
-        await tick(false);
+        await tick();
     }
 
     // The header once at the end. It carries a count, and a count that ticks
@@ -302,13 +305,15 @@ async function applyDecision(
         // Only if they were told about the decision in the first place. A
         // dismissal is never raised with them, so announcing its reopening
         // would be the first they heard of the whole thing.
-        const tell =
+        // Permission to tell them, which is not the same as having told them.
+        const mayTell =
             reopenNotifies(assessment.reviewOutcome) &&
             subject !== null &&
             (await mayNotify(client, config, rehearsal, subject.discordId));
 
-        if (tell && subject) {
-            await tryDm(client, subject.discordId, {
+        let told = false;
+        if (mayTell && subject) {
+            told = await tryDm(client, subject.discordId, {
                 ...noticeCard(
                     "A decision about you has been withdrawn",
                     `Fortnight ${label}. The outcome recorded against you has been reopened` +
@@ -334,9 +339,12 @@ async function applyDecision(
                 (assessment.reviewOutcome === "dismissed"
                     ? "They were not told. They were never told about the dismissal either, " +
                       "so there is nothing for them to have stopped believing."
-                    : tell
+                    : told
                       ? "They have been told it was withdrawn."
-                      : "They could not be told it was withdrawn."),
+                      : mayTell
+                        ? "⚠️ They could not be told it was withdrawn: their direct messages " +
+                          "are closed. They may still believe the original decision stands."
+                        : "They could not be told it was withdrawn."),
             colour: COLOUR.settled
         };
     }
@@ -365,30 +373,37 @@ async function applyDecision(
     // issue with somebody purely to say it has been dropped is worse than never
     // raising it.
     const notify = action !== "dismiss";
+
+    // Two different facts, and they used to be one variable. `attempted` is
+    // whether we were allowed to message them; `messaged` is whether the
+    // message actually arrived. Setting a single flag before calling `tryDm`
+    // and discarding what it returned meant an Executive who warned somebody
+    // with closed DMs read "They have been messaged" — and the branch below
+    // saying otherwise could never run.
+    let attempted = false;
     let messaged = false;
 
     if (notify && subject && (await mayNotify(client, config, rehearsal, subject.discordId))) {
-        messaged = true;
-        if (action === "warn") {
-            await tryDm(client, subject.discordId, {
-                ...warningDmCard({
-                    warningId: assessment._id.toHexString(),
-                    windowLabel: label,
-                    totalMinutes: assessment.totalMinutes,
-                    requiredMinutes: assessment.requiredMinutes,
-                    reason
-                })
-            });
-        } else {
-            await tryDm(client, subject.discordId, {
-                ...noticeCard(
-                    "Fortnight excused",
-                    `Fortnight ${label}. You were below the requirement and an Executive ` +
-                        `excused it, so you have no warning on record.\n\n**Why:** ${reason}`,
-                    { colour: COLOUR.approved }
-                )
-            });
-        }
+        attempted = true;
+        messaged =
+            action === "warn"
+                ? await tryDm(client, subject.discordId, {
+                      ...warningDmCard({
+                          warningId: assessment._id.toHexString(),
+                          windowLabel: label,
+                          totalMinutes: assessment.totalMinutes,
+                          requiredMinutes: assessment.requiredMinutes,
+                          reason
+                      })
+                  })
+                : await tryDm(client, subject.discordId, {
+                      ...noticeCard(
+                          "Fortnight excused",
+                          `Fortnight ${label}. You were below the requirement and an Executive ` +
+                              `excused it, so you have no warning on record.\n\n**Why:** ${reason}`,
+                          { colour: COLOUR.approved }
+                      )
+                  });
     }
 
     return {
@@ -396,13 +411,7 @@ async function applyDecision(
         body:
             `<@${subject?.discordId ?? "unknown"}>, fortnight ${label}.\n\n` +
             `**Reason:** ${reason}\n\n` +
-            (action === "dismiss"
-                ? "They were not told; a dismissal is not raised with them."
-                : messaged
-                  ? "They have been messaged."
-                  : rehearsal
-                    ? "Rehearsal: they were not messaged, because they are not an Executive."
-                    : "They could not be messaged."),
+            deliveryLine({ action, attempted, messaged, rehearsal }),
         colour: action === "warn" ? COLOUR.pending : COLOUR.approved
     };
 }

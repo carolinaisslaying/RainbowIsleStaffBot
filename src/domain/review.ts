@@ -108,6 +108,40 @@ export function reopenNotifies(previousOutcome: ReviewOutcome | null): boolean {
 }
 
 /**
+ * What the Executive's own confirmation says about whether the member heard.
+ *
+ * Four different things can be true and they used to collapse into two. The
+ * card said "They have been messaged" whenever the bot was *permitted* to send
+ * one, which is not the same as sending it: a member with closed DMs generated
+ * exactly the same sentence as one who read it. An Executive deciding whether
+ * somebody has ignored a warning or never received it is the last person who
+ * should be guessing.
+ *
+ * `attempted` is permission, `messaged` is arrival, and they are reported apart.
+ */
+export function deliveryLine(options: {
+    action: ReviewAction;
+    attempted: boolean;
+    messaged: boolean;
+    rehearsal: boolean;
+}): string {
+    if (options.action === "dismiss") {
+        return "They were not told; a dismissal is not raised with them.";
+    }
+    if (options.messaged) return "They have been messaged.";
+    if (options.attempted) {
+        return (
+            "⚠️ **They could not be messaged.** Their direct messages are closed, so they " +
+            "have not seen this. The decision stands on the record either way."
+        );
+    }
+    if (options.rehearsal) {
+        return "Rehearsal: they were not messaged, because they are not an Executive.";
+    }
+    return "They could not be messaged.";
+}
+
+/**
  * A warning past its expiry is spent: still on the record, still readable, and
  * no longer counted. Nobody should carry one bad fortnight for ever, and a
  * total that only ever grows stops meaning anything.
