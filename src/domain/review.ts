@@ -94,6 +94,20 @@ export function decisionPermitted(options: {
 }
 
 /**
+ * Whether withdrawing a decision is worth telling the member about.
+ *
+ * Only if they were told about the decision in the first place. A dismissal is
+ * never raised with them — it decides that nothing happened — so announcing
+ * that one has been reopened would raise the very issue the silence existed to
+ * avoid, and would be the first they ever heard of it. A warning or an excusal
+ * they were told about, so leaving them believing the old outcome still stands
+ * is the worse failure.
+ */
+export function reopenNotifies(previousOutcome: ReviewOutcome | null): boolean {
+    return previousOutcome === "warned" || previousOutcome === "excused";
+}
+
+/**
  * A warning past its expiry is spent: still on the record, still readable, and
  * no longer counted. Nobody should carry one bad fortnight for ever, and a
  * total that only ever grows stops meaning anything.

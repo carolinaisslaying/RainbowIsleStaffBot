@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ObjectId } from "mongodb";
 import {
     activeWarningCount,
+    reopenNotifies,
     decisionPermitted,
     priorOutcomesLine,
     queueCounts,
@@ -246,5 +247,29 @@ describe("the previous outcomes line", () => {
             month
         );
         expect(line).toContain("on leave");
+    });
+});
+
+
+describe("who hears about a reopened decision", () => {
+    it("tells a member whose warning has been withdrawn", () => {
+        expect(reopenNotifies("warned")).toBe(true);
+    });
+
+    it("tells a member whose excusal has been withdrawn", () => {
+        // They were told they were excused, so they have to be told it is back
+        // open, or their own record contradicts what they were last told.
+        expect(reopenNotifies("excused")).toBe(true);
+    });
+
+    it("says nothing when reopening a dismissal", () => {
+        // A dismissal is never raised with the member. Announcing the reopening
+        // of one would raise the issue they were deliberately never told about,
+        // which is the whole thing the silence exists to prevent.
+        expect(reopenNotifies("dismissed")).toBe(false);
+    });
+
+    it("says nothing when there was no decision to withdraw", () => {
+        expect(reopenNotifies(null)).toBe(false);
     });
 });

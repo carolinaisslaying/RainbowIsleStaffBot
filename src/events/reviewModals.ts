@@ -12,7 +12,12 @@ import {
     recordReview,
     windowForIndex
 } from "../domain/assessments.js";
-import { OUTCOME_FOR, decisionPermitted, type ReviewAction } from "../domain/review.js";
+import {
+    OUTCOME_FOR,
+    decisionPermitted,
+    reopenNotifies,
+    type ReviewAction
+} from "../domain/review.js";
 import { ensureStaff, findStaffById } from "../domain/staff.js";
 import { fetchPublicMember, resolveTier, isExecutive } from "../domain/permissions.js";
 import { audit } from "../domain/audit.js";
@@ -222,7 +227,15 @@ async function applyDecision(
             }
         });
 
-        if (subject && (await mayNotify(client, config, rehearsal, subject.discordId))) {
+        // Only if they were told about the decision in the first place. A
+        // dismissal is never raised with them, so announcing its reopening
+        // would be the first they heard of the whole thing.
+        const tell =
+            reopenNotifies(assessment.reviewOutcome) &&
+            subject !== null &&
+            (await mayNotify(client, config, rehearsal, subject.discordId));
+
+        if (tell && subject) {
             await tryDm(client, subject.discordId, {
                 ...noticeCard(
                     "A decision about you has been withdrawn",
@@ -240,9 +253,18 @@ async function applyDecision(
         return {
             title: "Reopened",
             body:
-                `The row is back in the queue` +
-                (removed > 0 ? ` and ${removed} warning(s) were deleted` : "") +
-                ".",
+                "The row is back in the queue" +
+                (removed > 0
+                    ? `, and the warning it carried ${removed === 1 ? "was" : "warnings were"} ` +
+                      "deleted"
+                    : "") +
+                ".\n\n" +
+                (assessment.reviewOutcome === "dismissed"
+                    ? "They were not told. They were never told about the dismissal either, " +
+                      "so there is nothing for them to have stopped believing."
+                    : tell
+                      ? "They have been told it was withdrawn."
+                      : "They could not be told it was withdrawn."),
             colour: COLOUR.settled
         };
     }

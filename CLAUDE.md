@@ -152,8 +152,9 @@ keyed by index remembers where the header is.
 
 **Every review outcome asks why.** Warn, excuse, dismiss, reopen and each bulk action open a modal
 and require a reason; `showModal` cannot follow a defer, so the button only checks and opens, and
-every write happens in `events/reviewModals.ts`. Dismiss tells the member nothing. **Reopen is the
-only path that deletes a warning**, so a withdrawal is always a reviewed decision with an audit row
+every write happens in `events/reviewModals.ts`. Dismiss tells the member nothing, and neither does reopening a
+dismissal: announcing that one would raise the very issue the silence exists to avoid. **Reopen is
+the only path that deletes a warning**, so a withdrawal is always a reviewed decision with an audit row
 behind it. Warnings count and expire (`warningExpiryDays`) but the bot never escalates on its own,
 the same way it never issues one. An Executive may excuse or dismiss their own row but never warn
 themselves, and a departed member can be cleared but not warned.
