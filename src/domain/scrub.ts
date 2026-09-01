@@ -23,6 +23,58 @@ export interface ScrubTarget {
     warnings: WarningDoc[];
 }
 
+/**
+ * Split a target into what a rehearsal wrote and what is real.
+ *
+ * Pure, and the only place the distinction is drawn, so the command that shows
+ * the confirmation and the button that acts on it cannot disagree about which
+ * records are protected. Warnings follow their assessment rather than their own
+ * flag: a warning issued from a real assessment is real whatever else is true,
+ * and one issued from a rehearsal was never anything.
+ */
+export function partitionByRealness(target: ScrubTarget): {
+    rehearsal: ScrubTarget;
+    real: ScrubTarget;
+} {
+    const rehearsalIds = new Set(
+        target.assessments
+            .filter((entry) => entry.rehearsal === true)
+            .map((entry) => entry._id.toHexString())
+    );
+
+    const belongsToRehearsal = (warning: WarningDoc): boolean =>
+        rehearsalIds.has(warning.assessmentId.toHexString());
+
+    return {
+        rehearsal: {
+            assessments: target.assessments.filter((entry) => entry.rehearsal === true),
+            warnings: target.warnings.filter(belongsToRehearsal)
+        },
+        real: {
+            assessments: target.assessments.filter((entry) => entry.rehearsal !== true),
+            warnings: target.warnings.filter((warning) => !belongsToRehearsal(warning))
+        }
+    };
+}
+
+/**
+ * What this deployment is actually allowed to delete.
+ *
+ * With the dangerous-operations switch off, a purge is narrowed to the records
+ * a rehearsal wrote. Those were never real, so removing them costs nothing and
+ * clearing up after a dry run stays a one-click job. Everything else is
+ * somebody's assessment history and stays put.
+ */
+export function permittedScrub(
+    target: ScrubTarget,
+    dangerousAllowed: boolean
+): { allowed: ScrubTarget; refused: ScrubTarget } {
+    const split = partitionByRealness(target);
+    return dangerousAllowed
+        ? { allowed: target, refused: { assessments: [], warnings: [] } }
+        : { allowed: split.rehearsal, refused: split.real };
+}
+
 /** What a scrub would remove, without removing any of it. */
 export async function scrubPreview(fortnightIndex: number | null): Promise<ScrubTarget> {
     // A null index means every fortnight before the anchor, which is the whole

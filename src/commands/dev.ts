@@ -9,7 +9,8 @@ import {
     isAssessableFortnight,
     windowForIndex
 } from "../domain/assessments.js";
-import { scrubPreview } from "../domain/scrub.js";
+import { permittedScrub, scrubPreview } from "../domain/scrub.js";
+import { env } from "../config/env.js";
 import { runFortnightAssessment, fortnightSummary } from "../services/assessmentService.js";
 import { rehearseRecap } from "../services/notifications.js";
 import { buildTeamRecap } from "../services/teamRecapService.js";
@@ -191,7 +192,32 @@ export const devCommand: Command = {
 
         const requested = interaction.options.getInteger("fortnight");
         const rerun = interaction.options.getBoolean("rerun") ?? false;
-        const target = await scrubPreview(requested);
+        const found = await scrubPreview(requested);
+        const { allowed: target, refused } = permittedScrub(found, env.devDangerousCommands);
+
+        // Everything found is protected: there is nothing to confirm, so say
+        // what was found and what would let it through rather than offering a
+        // button that can only refuse.
+        if (target.assessments.length === 0 && refused.assessments.length > 0) {
+            await respond(
+                interaction,
+                errorCard(
+                    `**${refused.assessments.length} real ` +
+                        `${refused.assessments.length === 1 ? "record" : "records"}** ` +
+                        (requested === null
+                            ? "match that, and none of them came from a rehearsal."
+                            : `match fortnight ${requested}, and none of them came from a ` +
+                              "rehearsal.") +
+                        "\n\nThis deployment will not delete real assessment history from a " +
+                        "slash command. A rehearsal's own records can always be cleared; " +
+                        "somebody's actual record takes a deliberate change to the " +
+                        "deployment's settings and a restart, which is the point.\n\n" +
+                        "-# Set `DEV_DANGEROUS_COMMANDS=true` in the deployment environment if " +
+                        "this really is meant to go."
+                )
+            );
+            return;
+        }
 
         if (target.assessments.length === 0) {
             await respond(
@@ -215,6 +241,7 @@ export const devCommand: Command = {
                 assessments: target.assessments.length,
                 warnings: target.warnings.length,
                 rehearsals: target.assessments.filter((entry) => entry.rehearsal === true).length,
+                protectedRecords: refused.assessments.length,
                 members: new Set(
                     target.assessments.map((entry) => entry.staffId.toHexString())
                 ).size

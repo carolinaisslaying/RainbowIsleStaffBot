@@ -68,6 +68,15 @@ async function main(): Promise<void> {
         await registerJobs(client);
         startApiServer();
 
+        // Said once, loudly, because a deployment left with this on is one
+        // mistyped fortnight number away from deleting real history.
+        if (env.devDangerousCommands) {
+            log.warn(
+                "DEV_DANGEROUS_COMMANDS is on: /dev purge can delete real assessment records. " +
+                    "Unset it when you are done."
+            );
+        }
+
         log.info("Rainbow Isle staff bot is ready.");
     });
 

@@ -748,6 +748,8 @@ export function scrubConfirmCard(input: {
     warnings: number;
     /** Of those assessments, how many were written by a rehearsal. */
     rehearsals: number;
+    /** Real records the deployment refused to put in scope. */
+    protectedRecords: number;
     members: number;
     /** Rehearse the fortnight again once it is cleared. */
     rerun: boolean;
@@ -778,6 +780,12 @@ export function scrubConfirmCard(input: {
                             "of real fortnights.\n\n") +
                     "Their cards in the review channel are deleted too, so a re-run is read " +
                     "on its own rather than against what is left of the last one.\n\n" +
+                    (input.protectedRecords > 0
+                        ? `-# **${input.protectedRecords}** further real ` +
+                          `${input.protectedRecords === 1 ? "record was" : "records were"} ` +
+                          "left out: this deployment does not delete real assessment history " +
+                          "from a slash command.\n\n"
+                        : "") +
                     "The audit log keeps everything they held, written before anything is " +
                     "removed. Nothing else in the database refers to them: rollups are " +
                     "rebuilt from raw activity, which this does not touch." +

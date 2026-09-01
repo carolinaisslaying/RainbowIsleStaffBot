@@ -6,7 +6,13 @@ import {
     deleteReviewMessages,
     runFortnightAssessment
 } from "../services/assessmentService.js";
-import { deleteScrubbed, recordScrubIntent, scrubPreview } from "../domain/scrub.js";
+import {
+    deleteScrubbed,
+    permittedScrub,
+    recordScrubIntent,
+    scrubPreview
+} from "../domain/scrub.js";
+import { env } from "../config/env.js";
 import { errorCard, noticeCard } from "../render/cards.js";
 import { respond, sendOptions } from "../discord/respond.js";
 import { COLOUR } from "../render/theme.js";
@@ -56,7 +62,26 @@ export async function handleScrubButton(
     await interaction.deferUpdate();
 
     const fortnight = scope === "pre" ? null : Number(scope);
-    const target = await scrubPreview(fortnight);
+
+    // Re-derived on the second click, not carried from the first. The card is
+    // ephemeral and can be sat on, and the deployment could have been
+    // restarted with a different setting in between. A guard that is only
+    // checked where the button is drawn is not a guard.
+    const found = await scrubPreview(fortnight);
+    const { allowed: target, refused } = permittedScrub(found, env.devDangerousCommands);
+
+    if (refused.assessments.length > 0 && target.assessments.length === 0) {
+        await interaction.editReply(
+            sendOptions(
+                errorCard(
+                    "Nothing was deleted. Every record that matched is a real one, and this " +
+                        "deployment does not delete real assessment history from a slash " +
+                        "command."
+                )
+            ) as never
+        );
+        return;
+    }
 
     if (target.assessments.length === 0) {
         await interaction.editReply(
@@ -110,6 +135,11 @@ export async function handleScrubButton(
                             ? `, along with ${messages} card${messages === 1 ? "" : "s"} in the ` +
                               "review channel."
                             : ".") +
+                        (refused.assessments.length > 0
+                            ? `\n\n${refused.assessments.length} real ` +
+                              `${refused.assessments.length === 1 ? "record" : "records"} ` +
+                              "were left alone."
+                            : "") +
                         "\n\nThe audit log holds what they said and is the only way back. " +
                         "Members' rings, rollups and leaderboard positions are unaffected: " +
                         "those are rebuilt from raw activity, which this did not touch." +

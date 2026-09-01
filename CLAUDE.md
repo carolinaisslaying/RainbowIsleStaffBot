@@ -88,6 +88,21 @@ names no administrators falls back to the command's tier** (`seededGatePermits`)
 configuration to an empty list leaves the bot unconfigurable by anybody, including whoever is trying
 to name the first administrator. Refusals never name the environment variable.
 
+**`/dev purge` cannot touch real records unless the deployment says so.** `DEV_DANGEROUS_COMMANDS`
+must be exactly `true` in the environment, or `permittedScrub` (`domain/scrub.ts`) narrows a purge
+to records flagged `rehearsal: true`. Those were never real, so clearing up after a dry run stays a
+one-click job either way — if it did not, nobody would rehearse. Everything else is somebody's
+assessment history, and removing it should cost a deliberate change outside Discord plus a restart,
+because a mistyped fortnight number is one keystroke. An absent `rehearsal` flag reads as **real**,
+which is what protects everything written before the flag existed. The check is re-derived on the
+confirmation's second click, not carried from the first: a guard only enforced where the button is
+drawn is not a guard. Boot logs a warning while it is on.
+
+This is the one place a card names an environment variable, against the rule below. `/dev` is
+`seededOnly` and unreachable by a Moderator, and the only person who can see the refusal is the
+person who would have to act on it; telling them the switch exists without naming it would make the
+refusal useless.
+
 **`/dev` is rehearsals and cleanup; `/admin` is the real thing.** `/dev assess` is *always* a
 rehearsal, so there is no flag to leave in the wrong position — a `rehearse:` option on the real
 command is how a dry run once wrote real warnings. `/dev recap` previews either recap without

@@ -34,6 +34,11 @@ buttons will and will not do.
 than to Executives, confirmed on a card that counts the records and the people
 before anything is removed.
 
+- **Locked to rehearsal records** unless `DEV_DANGEROUS_COMMANDS=true` is set in
+  the deployment environment. A rehearsal's records were never real and are
+  always clearable; everything else needs that switch and a restart. A record
+  with no `rehearsal` flag counts as real, which protects everything written
+  before the flag existed. Re-checked on the confirmation's second click.
 - With no `fortnight`, it takes **every fortnight before the anchor**. Those were
   written by a boot that treated an empty database as downtime and assessed four
   fortnights that closed before the deployment existed. With a `fortnight`, it

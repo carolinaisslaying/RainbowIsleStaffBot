@@ -61,6 +61,20 @@ export const env = {
      * list to the one or two people who administer the deployment; every use of
      * it is logged and audited.
      */
+    /**
+     * Whether `/dev purge` may delete records that are not rehearsals.
+     *
+     * Off unless the file says exactly `true`. A rehearsal's records were never
+     * real and deleting them costs nothing, so those go either way. Everything
+     * else is somebody's actual assessment history, and the command that
+     * removes it should require a deliberate act outside Discord: a
+     * misremembered fortnight number is one keystroke, editing a deployment
+     * file and restarting is not.
+     */
+    get devDangerousCommands(): boolean {
+        return optional("DEV_DANGEROUS_COMMANDS", "").trim().toLowerCase() === "true";
+    },
+
     get bootstrapAdminIds(): string[] {
         return optional("BOOTSTRAP_ADMIN_IDS", "")
             .split(/[\s,]+/)
