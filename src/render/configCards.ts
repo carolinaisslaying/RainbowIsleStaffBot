@@ -1,0 +1,227 @@
+import { ContainerBuilder, type Client } from "discord.js";
+import {
+    CONFIG_KEYS,
+    DEFAULT_CONFIG,
+    GROUP_LABELS,
+    isUnset,
+    keysInGroup,
+    type KeyGroup,
+    type StaffBotConfig
+} from "../config/guildConfig.js";
+import { containersMessage, separator, text, type RenderedMessage } from "./cards.js";
+import { COLOUR } from "./theme.js";
+
+/**
+ * The configuration viewer.
+ *
+ * Two rules drive the layout. Discord's subtext markup (`-#`) only applies to a
+ * line it starts, so a description appended after a value renders as literal
+ * "-#" characters; every description therefore gets its own line. And a raw
+ * snowflake tells the reader nothing, so roles and channels render as mentions,
+ * which Discord resolves to names.
+ */
+
+const WEEKDAYS = [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday"
+];
+
+function mentionFor(key: keyof StaffBotConfig, id: string, guildNames: Map<string, string>): string {
+    const target = CONFIG_KEYS[key].target;
+    if (target === "role") return `<@&${id}>`;
+    if (target === "channel") return `<#${id}>`;
+    if (target === "guild") {
+        const name = guildNames.get(id);
+        return name ? name : id;
+    }
+    return `**${id}**`;
+}
+
+/** Rendered value, or an explicit marker when nothing is set. */
+export function renderValue(
+    key: keyof StaffBotConfig,
+    config: StaffBotConfig,
+    guildNames: Map<string, string>
+): string {
+    const spec = CONFIG_KEYS[key];
+    const value = config[key];
+
+    if (isUnset(config, key)) {
+        return spec.importance === "required" ? "**not set**" : "*not set*";
+    }
+
+    if (Array.isArray(value)) {
+        return value.map((id) => mentionFor(key, String(id), guildNames)).join(" ");
+    }
+    if (spec.kind === "boolean") return value ? "**on**" : "**off**";
+    if (spec.kind === "weekday") return `**${WEEKDAYS[Number(value)]}**`;
+    if (spec.kind === "isoDate") {
+        const parsed = new Date(String(value));
+        return Number.isNaN(parsed.getTime())
+            ? `**${String(value)}**`
+            : `<t:${Math.floor(parsed.getTime() / 1000)}:D>`;
+    }
+    if (spec.target === "plain") return `**${String(value)}**`;
+    return mentionFor(key, String(value), guildNames);
+}
+
+function isDefault(config: StaffBotConfig, key: keyof StaffBotConfig): boolean {
+    const current = config[key];
+    const fallback = DEFAULT_CONFIG[key];
+    if (Array.isArray(current) && Array.isArray(fallback)) {
+        return current.length === fallback.length;
+    }
+    return current === fallback;
+}
+
+function groupBlock(
+    group: KeyGroup,
+    config: StaffBotConfig,
+    guildNames: Map<string, string>
+): string {
+    const lines: string[] = [];
+    for (const key of keysInGroup(group)) {
+        const spec = CONFIG_KEYS[key];
+        const changed =
+            spec.importance === "optional" && !isUnset(config, key) && isDefault(config, key)
+                ? " *(default)*"
+                : "";
+
+        lines.push(`**${key}** ${renderValue(key, config, guildNames)}${changed}`);
+        // Own line: `-#` styles the line it begins, never a fragment after a value.
+        lines.push(`-# ${spec.description}`);
+    }
+    return lines.join("\n");
+}
+
+export interface SetupStatus {
+    requiredTotal: number;
+    requiredSet: number;
+    missingRequired: (keyof StaffBotConfig)[];
+    missingRecommended: (keyof StaffBotConfig)[];
+    ready: boolean;
+}
+
+export function setupStatus(config: StaffBotConfig): SetupStatus {
+    const keys = Object.keys(CONFIG_KEYS) as (keyof StaffBotConfig)[];
+    const required = keys.filter((key) => CONFIG_KEYS[key].importance === "required");
+    const recommended = keys.filter((key) => CONFIG_KEYS[key].importance === "recommended");
+    const missingRequired = required.filter((key) => isUnset(config, key));
+    const missingRecommended = recommended.filter((key) => isUnset(config, key));
+
+    return {
+        requiredTotal: required.length,
+        requiredSet: required.length - missingRequired.length,
+        missingRequired,
+        missingRecommended,
+        ready: missingRequired.length === 0
+    };
+}
+
+function statusContainer(config: StaffBotConfig, setCommand: string): ContainerBuilder {
+    const status = setupStatus(config);
+
+    const container = new ContainerBuilder().setAccentColor(
+        status.ready
+            ? COLOUR.approved
+            : status.requiredSet === 0
+              ? COLOUR.adverse
+              : COLOUR.pending
+    );
+
+    if (status.ready) {
+        container.addTextDisplayComponents(
+            text(
+                `## Configuration\n**${status.requiredSet} of ${status.requiredTotal}** ` +
+                    "essentials are set. The bot has what it needs."
+            )
+        );
+    } else {
+        const blockers = status.missingRequired
+            .map((key) => `**${key}**\n-# ${CONFIG_KEYS[key].consequence ?? ""}`)
+            .join("\n");
+        container.addTextDisplayComponents(
+            text(
+                `## Configuration\n**${status.requiredSet} of ${status.requiredTotal}** ` +
+                    `essentials are set.\n\n**Still needed**\n${blockers}`
+            )
+        );
+    }
+
+    if (status.missingRecommended.length > 0) {
+        container.addSeparatorComponents(separator());
+        container.addTextDisplayComponents(
+            text(
+                "**Worth setting**\n" +
+                    status.missingRecommended
+                        .map((key) => `**${key}**\n-# ${CONFIG_KEYS[key].consequence ?? ""}`)
+                        .join("\n")
+            )
+        );
+    }
+
+    container.addSeparatorComponents(separator());
+    container.addTextDisplayComponents(
+        text(
+            `-# Change one with ${setCommand}. Roles and channels autocomplete by name.`
+        )
+    );
+    return container;
+}
+
+/** Resolve the two guild IDs to names, so the servers block reads as names. */
+export async function resolveGuildNames(
+    client: Client,
+    config: StaffBotConfig
+): Promise<Map<string, string>> {
+    const names = new Map<string, string>();
+    for (const id of [config.publicGuildId, config.staffGuildId]) {
+        if (!id || names.has(id)) continue;
+        try {
+            const guild = await client.guilds.fetch(id);
+            names.set(id, guild.name);
+        } catch {
+            // Left unresolved; the raw ID still renders.
+        }
+    }
+    return names;
+}
+
+export function configViewCard(
+    config: StaffBotConfig,
+    guildNames: Map<string, string>,
+    setCommand: string
+): RenderedMessage {
+    // One heading per block, one divider between blocks, and nothing else
+    // doing the dividing. Blank lines inside a text display look like accident;
+    // a Separator is the thing Discord provides for this and it renders the
+    // same width every time.
+    const block = (container: ContainerBuilder, groups: KeyGroup[]): ContainerBuilder => {
+        groups.forEach((group, index) => {
+            if (index > 0) container.addSeparatorComponents(separator());
+            container.addTextDisplayComponents(
+                text(`### ${GROUP_LABELS[group]}\n${groupBlock(group, config, guildNames)}`)
+            );
+        });
+        return container;
+    };
+
+    const wiring = block(new ContainerBuilder().setAccentColor(COLOUR.admin), [
+        "servers",
+        "roles",
+        "channels"
+    ]);
+
+    const policy = block(new ContainerBuilder().setAccentColor(COLOUR.admin), [
+        "targets",
+        "timings",
+        "calendar"
+    ]);
+
+    return containersMessage([statusContainer(config, setCommand), wiring, policy]);
+}

@@ -1,0 +1,137 @@
+import {
+    LabelBuilder,
+    ModalBuilder,
+    TextDisplayBuilder,
+    TextInputBuilder,
+    TextInputStyle
+} from "discord.js";
+
+/**
+ * Modals, in the Components V2 form.
+ *
+ * A V2 modal is a list of Labels, each wrapping one input, plus TextDisplays
+ * for anything the member needs to read before they type. That is what lets the
+ * hint about which clock the times are read in sit beside the fields rather
+ * than being crammed into a placeholder nobody reads.
+ *
+ * Leave used to arrive as slash command options, which forced a single line for
+ * the reason and gave no room to explain the format. It arrives here instead.
+ */
+
+export const LEAVE_REQUEST_MODAL = "leaveRequest";
+export const LEAVE_EXTEND_MODAL = "leaveExtend";
+
+export const FIELD_START = "start";
+export const FIELD_END = "end";
+export const FIELD_REASON = "reason";
+
+function dateField(
+    customId: string,
+    label: string,
+    description: string,
+    example: string,
+    value?: string
+): LabelBuilder {
+    const input = new TextInputBuilder()
+        .setCustomId(customId)
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder(example)
+        .setRequired(true)
+        // Long enough for a sentence like "the first Monday of October at 9am".
+        // The old 32 was sized for an ISO date and would truncate plain English
+        // mid-word, which reads as the bot refusing a date it never received.
+        .setMaxLength(64);
+    if (value) input.setValue(value);
+
+    return new LabelBuilder()
+        .setLabel(label)
+        .setDescription(description)
+        .setTextInputComponent(input);
+}
+
+function reasonField(label: string, description: string): LabelBuilder {
+    return new LabelBuilder()
+        .setLabel(label)
+        .setDescription(description)
+        .setTextInputComponent(
+            new TextInputBuilder()
+                .setCustomId(FIELD_REASON)
+                .setStyle(TextInputStyle.Paragraph)
+                .setRequired(true)
+                .setMinLength(10)
+                .setMaxLength(1000)
+                .setPlaceholder("As much or as little as you want an Executive to know.")
+        );
+}
+
+/**
+ * The clock line, which is also the only documentation the date fields have.
+ *
+ * It leads with plain English because that is what people type first, and
+ * because a field that silently accepts "Tuesday at 10.16 pm" while advertising
+ * `YYYY-MM-DD` teaches everyone the harder of the two. The exact format is kept
+ * as a second sentence for the people who prefer it.
+ */
+function clockNote(timeZone: string): TextDisplayBuilder {
+    return new TextDisplayBuilder().setContent(
+        `Write the dates however you would say them: **Tuesday at 10.16 pm**, ` +
+            "**tomorrow at 9am**, **the 6th**, **6 October**, **in 2 weeks**. " +
+            `Read in **${timeZone}**, your own timezone.\n` +
+            "-# `2026-10-06 09:00` works too. You will see what the dates were read as " +
+            "before anything is sent."
+    );
+}
+
+export function leaveRequestModal(timeZone: string, example: string): ModalBuilder {
+    return new ModalBuilder()
+        .setCustomId(LEAVE_REQUEST_MODAL)
+        .setTitle("Request leave")
+        .addTextDisplayComponents(clockNote(timeZone))
+        .addLabelComponents(
+            dateField(
+                FIELD_START,
+                "Leave starts",
+                "When your ranks are set aside and your assessment pauses.",
+                example
+            ),
+            dateField(
+                FIELD_END,
+                "Leave ends",
+                "Your leave closes itself at this moment and your ranks come back.",
+                example
+            ),
+            reasonField(
+                "Reason",
+                "Visible to Executives only. Never shown to other Moderators."
+            )
+        );
+}
+
+/**
+ * Extending reuses the same shape deliberately: the member is answering the
+ * same question, so they should not have to learn a second format for it.
+ */
+export function leaveExtendModal(
+    leaveId: string,
+    timeZone: string,
+    currentEnd: string,
+    example: string
+): ModalBuilder {
+    return new ModalBuilder()
+        .setCustomId(`${LEAVE_EXTEND_MODAL}:${leaveId}`)
+        .setTitle("Extend leave")
+        .addTextDisplayComponents(clockNote(timeZone))
+        .addLabelComponents(
+            dateField(
+                FIELD_END,
+                "New return",
+                `Currently ${currentEnd}. The new date has to be later than that.`,
+                example,
+                currentEnd
+            ),
+            reasonField(
+                "Why the extension",
+                "Visible to Executives only. Appended to your original reason."
+            )
+        );
+}

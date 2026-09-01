@@ -1,0 +1,27 @@
+{
+    "name": "rainbowisle-staffbot",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "engines": {
+        "node": ">=26"
+    },
+    "scripts": {
+        "build": "tsc -p tsconfig.json",
+        "start": "node dist/index.js",
+        "dev": "tsc -p tsconfig.json --watch",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "typecheck": "tsc -p tsconfig.json --noEmit"
+    },
+    "dependencies": {
+        "@resvg/resvg-js": "^2.6.2",
+        "discord.js": "^14.27.0",
+        "mongodb": "^6.12.0"
+    },
+    "devDependencies": {
+        "@types/node": "^22.10.0",
+        "typescript": "^5.7.0",
+        "vitest": "^3.2.7"
+    }
+}

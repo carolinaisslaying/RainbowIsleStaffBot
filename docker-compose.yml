@@ -1,0 +1,49 @@
+services:
+    bot:
+        build: .
+        restart: unless-stopped
+        env_file: .env
+        depends_on:
+            mongo:
+                condition: service_healthy
+        networks:
+            - internal
+        # The API port is deliberately not published. It is reachable only from
+        # inside this network.
+        expose:
+            - "8080"
+        healthcheck:
+            test:
+                [
+                    "CMD",
+                    "node",
+                    "-e",
+                    "fetch('http://127.0.0.1:'+(process.env.API_PORT||8080)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+                ]
+            interval: 30s
+            timeout: 5s
+            start_period: 40s
+            retries: 3
+
+    mongo:
+        image: mongo:8
+        restart: unless-stopped
+        command: ["--bind_ip_all"]
+        volumes:
+            - mongo-data:/data/db
+        networks:
+            - internal
+        # No ports section. Mongo is not reachable from the host.
+        healthcheck:
+            test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+            interval: 30s
+            timeout: 5s
+            start_period: 30s
+            retries: 5
+
+volumes:
+    mongo-data:
+
+networks:
+    internal:
+        driver: bridge

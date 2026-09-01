@@ -1,0 +1,252 @@
+import { ObjectId } from "mongodb";
+import { collections } from "../db/client.js";
+import type {
+    AssessmentStatus,
+    FortnightAssessmentDoc,
+    ReviewOutcome,
+    WarningDoc
+} from "../db/types.js";
+import type { StaffBotConfig } from "../config/guildConfig.js";
+import { fortnightAnchorDate } from "../config/guildConfig.js";
+import { completesFortnight, fortnightIndexFor, fortnightWindow } from "../time/calendar.js";
+import { countMinutesBetween } from "./activity.js";
+import { leaveCoverageFor } from "./leave.js";
+import { listActiveStaff } from "./staff.js";
+import { weekWindowFor, type WeekWindow } from "./weekly.js";
+import { audit } from "./audit.js";
+
+/**
+ * The enforcement unit is a fortnight, never a week. Weekly figures are display
+ * only and trigger nothing.
+ *
+ * A member may record 0 minutes in week one and the full target in week two and
+ * pass. That is intended.
+ *
+ * The bot never issues a warning by itself. It assesses, posts one review card,
+ * and waits for an Executive.
+ */
+
+export function fortnightIndexForWeek(weekStart: Date, config: StaffBotConfig): number {
+    return fortnightIndexFor(weekStart, fortnightAnchorDate(config));
+}
+
+/** True when the week closing at this week's end completes a fortnight. */
+export function weekClosesFortnight(weekStart: Date, config: StaffBotConfig): boolean {
+    return completesFortnight(weekStart, fortnightAnchorDate(config));
+}
+
+export function windowForIndex(index: number, config: StaffBotConfig) {
+    return fortnightWindow(
+        index,
+        fortnightAnchorDate(config),
+        config.accountingTimezone,
+        config.weekStartDay
+    );
+}
+
+export interface AssessmentComputation {
+    staffId: ObjectId;
+    fortnightIndex: number;
+    windowStart: Date;
+    windowEnd: Date;
+    week1Minutes: number;
+    week2Minutes: number;
+    totalMinutes: number;
+    requiredMinutes: number;
+    status: AssessmentStatus;
+}
+
+export async function computeAssessment(
+    staffId: ObjectId,
+    index: number,
+    config: StaffBotConfig
+): Promise<AssessmentComputation> {
+    const window = windowForIndex(index, config);
+
+    const [week1Minutes, week2Minutes, week1Leave, week2Leave] = await Promise.all([
+        countMinutesBetween(staffId, window.week1Start, window.week2Start),
+        countMinutesBetween(staffId, window.week2Start, window.end),
+        leaveCoverageFor(staffId, window.week1Start, window.week2Start),
+        leaveCoverageFor(staffId, window.week2Start, window.end)
+    ]);
+
+    const totalMinutes = week1Minutes + week2Minutes;
+    const requiredMinutes = config.fortnightRequiredMinutes;
+
+    // Exemption follows whole weeks, not any overlap at all.
+    //
+    // A day of leave used to exempt an entire fortnight, which was too generous
+    // in one direction and, because the same test greyed the member's rings,
+    // misleading in the other: it told everyone they had been away when they
+    // had worked thirteen of the fourteen days. A member who loses a full week
+    // cannot reasonably make up a fortnight's target in the week that remains,
+    // so a full week of leave, in either half, is what exempts them.
+    const exempt = week1Leave.full || week2Leave.full;
+
+    const status: AssessmentStatus = exempt
+        ? "exempt"
+        : totalMinutes >= requiredMinutes
+          ? "met"
+          : "below";
+
+    return {
+        staffId,
+        fortnightIndex: index,
+        windowStart: window.week1Start,
+        windowEnd: window.end,
+        week1Minutes,
+        week2Minutes,
+        totalMinutes,
+        requiredMinutes,
+        status
+    };
+}
+
+/**
+ * Persist an assessment. requiredMinutes is snapshotted here and never re-read
+ * from live config: changing the target must not retroactively rewrite past
+ * outcomes. A re-run refreshes the figures but leaves any review decision alone.
+ */
+export async function saveAssessment(
+    computation: AssessmentComputation
+): Promise<FortnightAssessmentDoc> {
+    const result = await collections.fortnightAssessments().findOneAndUpdate(
+        { staffId: computation.staffId, fortnightIndex: computation.fortnightIndex },
+        {
+            $set: {
+                windowStart: computation.windowStart,
+                windowEnd: computation.windowEnd,
+                week1Minutes: computation.week1Minutes,
+                week2Minutes: computation.week2Minutes,
+                totalMinutes: computation.totalMinutes,
+                status: computation.status
+            },
+            $setOnInsert: {
+                _id: new ObjectId(),
+                staffId: computation.staffId,
+                fortnightIndex: computation.fortnightIndex,
+                requiredMinutes: computation.requiredMinutes,
+                reviewedBy: null,
+                reviewOutcome: null,
+                reviewedAt: null,
+                reviewNote: null
+            }
+        },
+        { upsert: true, returnDocument: "after" }
+    );
+    if (!result) throw new Error("Failed to persist fortnight assessment");
+    return result;
+}
+
+/** Assess every active staff member for the fortnight that just closed. */
+export async function assessFortnight(
+    index: number,
+    config: StaffBotConfig
+): Promise<FortnightAssessmentDoc[]> {
+    const staff = await listActiveStaff();
+    const saved: FortnightAssessmentDoc[] = [];
+    for (const member of staff) {
+        const computation = await computeAssessment(member._id, index, config);
+        saved.push(await saveAssessment(computation));
+    }
+    await audit("assessment.run", {
+        detail: { fortnightIndex: index, assessed: saved.length }
+    });
+    return saved;
+}
+
+/** The fortnight a closing week completes, or null when it does not complete one. */
+export function closingFortnightIndex(
+    closingWeek: WeekWindow,
+    config: StaffBotConfig
+): number | null {
+    if (!weekClosesFortnight(closingWeek.start, config)) return null;
+    return fortnightIndexForWeek(closingWeek.start, config);
+}
+
+export function currentFortnightIndex(config: StaffBotConfig, now = new Date()): number {
+    return fortnightIndexForWeek(weekWindowFor(now, config).start, config);
+}
+
+export async function assessmentsForFortnight(
+    index: number
+): Promise<FortnightAssessmentDoc[]> {
+    return collections
+        .fortnightAssessments()
+        .find({ fortnightIndex: index })
+        .sort({ totalMinutes: 1 })
+        .toArray();
+}
+
+export async function belowThresholdFor(index: number): Promise<FortnightAssessmentDoc[]> {
+    return collections
+        .fortnightAssessments()
+        .find({ fortnightIndex: index, status: "below" })
+        .sort({ totalMinutes: 1 })
+        .toArray();
+}
+
+export async function findAssessment(id: ObjectId): Promise<FortnightAssessmentDoc | null> {
+    return collections.fortnightAssessments().findOne({ _id: id });
+}
+
+export async function assessmentHistory(
+    staffId: ObjectId,
+    limit = 10
+): Promise<FortnightAssessmentDoc[]> {
+    return collections
+        .fortnightAssessments()
+        .find({ staffId })
+        .sort({ fortnightIndex: -1 })
+        .limit(limit)
+        .toArray();
+}
+
+export async function recordReview(
+    assessmentId: ObjectId,
+    reviewerStaffId: ObjectId,
+    outcome: ReviewOutcome,
+    note: string | null
+): Promise<FortnightAssessmentDoc | null> {
+    return collections.fortnightAssessments().findOneAndUpdate(
+        { _id: assessmentId },
+        {
+            $set: {
+                reviewedBy: reviewerStaffId,
+                reviewOutcome: outcome,
+                reviewedAt: new Date(),
+                reviewNote: note
+            }
+        },
+        { returnDocument: "after" }
+    );
+}
+
+export async function issueWarning(
+    staffId: ObjectId,
+    assessmentId: ObjectId,
+    issuedBy: ObjectId,
+    note: string
+): Promise<WarningDoc> {
+    const warning: WarningDoc = {
+        _id: new ObjectId(),
+        staffId,
+        assessmentId,
+        issuedBy,
+        issuedAt: new Date(),
+        note,
+        acknowledgedAt: null
+    };
+    await collections.warnings().insertOne(warning);
+    return warning;
+}
+
+export async function warningsFor(staffId: ObjectId): Promise<WarningDoc[]> {
+    return collections.warnings().find({ staffId }).sort({ issuedAt: -1 }).toArray();
+}
+
+export async function acknowledgeWarning(warningId: ObjectId): Promise<void> {
+    await collections
+        .warnings()
+        .updateOne({ _id: warningId }, { $set: { acknowledgedAt: new Date() } });
+}
