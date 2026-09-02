@@ -323,12 +323,26 @@ export function warningTally(
  * issued. The bot counts and surfaces; it never escalates by itself, the same
  * way it never issues a warning by itself.
  */
-export function warningWeightLine(activeWarnings: number): string {
-    if (activeWarnings === 0) return "No warnings currently count against them.";
-    const next = activeWarnings + 1;
+export function warningWeightLine(tally: {
+    total: number;
+    conduct: number;
+    activity: number;
+}): string {
+    if (tally.total === 0) return "No warnings currently count against them.";
+
+    // One total, because a warning is a warning and that is what the member is
+    // told they have. The breakdown, because activity and conduct are not the
+    // same thing and a bare number would say they were — an Executive deciding
+    // an attendance shortfall should see that the member also has conduct
+    // history, without the card pretending the two weigh differently.
+    const parts: string[] = [];
+    if (tally.conduct > 0) parts.push(`${tally.conduct} conduct`);
+    if (tally.activity > 0) parts.push(`${tally.activity} activity`);
+
     return (
-        `${activeWarnings} warning${activeWarnings === 1 ? "" : "s"} currently count` +
-        `${activeWarnings === 1 ? "s" : ""} against them. This would be their ${ordinal(next)}.`
+        `${tally.total} warning${tally.total === 1 ? "" : "s"} currently count` +
+        `${tally.total === 1 ? "s" : ""} against them (${parts.join(", ")}). ` +
+        `This would be their ${ordinal(tally.total + 1)}.`
     );
 }
 

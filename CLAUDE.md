@@ -280,6 +280,43 @@ is `reopen`, which already deletes the warning; declining it leaves the outcome 
 appeal decided and DMs the reason. The text goes to the row, the audit log, and `/mydata export`,
 which ships whole warning documents and so carries it for free.
 
+**Warnings come in two kinds, and every one of them is logged.** `WarningDoc.kind` is `activity` or
+`conduct` and reads as `activity` when absent, which is what every warning written before this was.
+`assessmentId` is **nullable** — a conduct warning belongs to no fortnight — and making it so turned
+six sites that silently assumed otherwise into type errors, including the purge path, which would
+have thrown the first time a conduct warning existed. That was the point of changing the shape rather
+than inventing a placeholder assessment.
+
+Three rungs (`ConductTier`), differing by the gravity of the conduct and never by how formal they
+are: everything issued through this bot is a formal written warning, and informal correction happens
+in a DM and never reaches the record. **Caution** 90 days, **Misconduct** 180, **Serious Misconduct**
+never — each its own config key, where **zero means never**. The bottom two are New Zealand
+employment terms. **Severity is not weight**: every warning counts as one whatever its rung, the rung
+decides only how long it counts for, and nothing sums them into an action.
+`lifetimeDaysFor`/`warningIsSpent`/`countsNow`/`warningTally` (`domain/review.ts`) are the whole rule.
+
+**Nothing in this bot deletes a warning.** Reopening a review row, the **Withdraw** button on a log
+card, and upholding an appeal all mark `withdrawnAt`/`withdrawnBy`/`withdrawalReason` and leave the
+record in place carrying both reasons. A withdrawn warning counts nowhere, whatever its clock says.
+Reopen used to delete, leaving the audit log as the only trace; `DELETION.md` is corrected. A row
+warned, reopened and warned again therefore carries two documents, so `reviewRowFor` takes the one
+that still stands — the acknowledgement and appeal lines belong to the live warning.
+
+**`/admin warn user:`** opens a modal carrying the rung and the reason. Executives issue; staff and
+Leads receive. **An Executive cannot be warned through this bot at all** — a warning here is one
+person's decision with no second signature, and it would land on a peer's permanent record.
+`conductWarningPermitted` (`domain/conduct.ts`) is pure and orders its refusals so the caller is told
+the fact they can act on first, and every rule is re-derived on submission rather than carried from
+the command.
+
+**One card per warning**, in `warningChannelId`, drawn only by `warningLogCard` so colour, buttons
+and record cannot disagree — `leaveCardFor`'s rule. Edited in place through issued, delivered,
+acknowledged, appealed and withdrawn; **Withdraw** is its one button, and a withdrawn card has none.
+Both kinds go in it: the review row is a decision queue, organised by fortnight and purgeable, and
+the log is the durable record. Unset means warnings still issue and only the card is missing, as
+`recapChannelId` behaves. The acknowledgement button takes **either** id — a warning id from a
+conduct DM, an assessment id from every activity DM already in an inbox — both scoped to the caller.
+
 **Every review outcome asks why.** Warn, excuse, dismiss, reopen and each bulk action open a modal
 and require a reason; `showModal` cannot follow a defer, so the button only checks and opens, and
 every write happens in `events/reviewModals.ts`. Dismiss tells the member nothing, and neither does reopening a

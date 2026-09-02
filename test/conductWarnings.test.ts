@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
     activeWarningCount,
+    warningWeightLine,
     countsNow,
     lifetimeDaysFor,
     warningIsSpent,
@@ -146,5 +147,45 @@ describe("the shipped defaults", () => {
 
     it("ships no warning channel, so a deployment must choose one", () => {
         expect(DEFAULT_CONFIG.warningChannelId).toBe("");
+    });
+});
+
+
+describe("what the review row tells an Executive", () => {
+    it("says nothing counts when nothing does", () => {
+        expect(warningWeightLine({ total: 0, conduct: 0, activity: 0 })).toContain(
+            "No warnings"
+        );
+    });
+
+    it("breaks one total down by kind", () => {
+        const line = warningWeightLine({ total: 3, conduct: 2, activity: 1 });
+        expect(line).toContain("3 warnings currently count");
+        expect(line).toContain("2 conduct, 1 activity");
+        expect(line).toContain("their 4th");
+    });
+
+    it("omits a kind that has none rather than printing a zero", () => {
+        expect(warningWeightLine({ total: 2, conduct: 2, activity: 0 })).toContain(
+            "(2 conduct)"
+        );
+        expect(warningWeightLine({ total: 2, conduct: 0, activity: 2 })).toContain(
+            "(2 activity)"
+        );
+    });
+
+    it("reads correctly at one", () => {
+        const line = warningWeightLine({ total: 1, conduct: 1, activity: 0 });
+        expect(line).toContain("1 warning currently counts");
+        expect(line).toContain("their 2nd");
+    });
+
+    it("never suggests what should happen next", () => {
+        // The bot surfaces the count and refuses to act on it. It has never
+        // escalated on its own and must not start by implying an outcome.
+        const line = warningWeightLine({ total: 5, conduct: 4, activity: 1 }).toLowerCase();
+        expect(line).not.toContain("should");
+        expect(line).not.toContain("dismiss");
+        expect(line).not.toContain("recommend");
     });
 });

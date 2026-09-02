@@ -16,13 +16,13 @@ import {
     type AnnouncementPlan
 } from "../domain/assessments.js";
 import {
-    activeWarningCount,
     deliveryState,
     priorOutcomesLine,
     queueCounts,
     queueHeadline,
     reminderDue,
     rowButtons,
+    warningTally,
     warningWeightLine
 } from "../domain/review.js";
 import {
@@ -361,7 +361,7 @@ export async function reviewRowFor(
     const others = warnings.filter(
         (warning) => !warning.assessmentId?.equals(assessment._id)
     );
-    const active = activeWarningCount(others, now, config);
+    const tally = warningTally(others, now, config);
 
     const decider = assessment.reviewedBy ? await findStaffById(assessment.reviewedBy) : null;
     // The live warning this assessment issued, if it has one.
@@ -400,7 +400,7 @@ export async function reviewRowFor(
         totalMinutes: assessment.totalMinutes,
         requiredMinutes: assessment.requiredMinutes,
         priorOutcomes: await priorOutcomesFor(assessment.staffId, index, config),
-        warningWeight: warningWeightLine(active),
+        warningWeight: warningWeightLine(tally),
         buttons: rowButtons({
             outcome: assessment.reviewOutcome,
             departed,

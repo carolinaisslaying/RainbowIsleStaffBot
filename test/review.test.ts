@@ -121,11 +121,16 @@ describe("what still counts against somebody", () => {
     });
 
     it("says what the next warning would be without deciding anything", () => {
-        expect(warningWeightLine(0)).toContain("No warnings");
-        expect(warningWeightLine(1)).toContain("their 2nd");
-        expect(warningWeightLine(2)).toContain("their 3rd");
-        expect(warningWeightLine(10)).toContain("their 11th");
-        expect(warningWeightLine(20)).toContain("their 21st");
+        const tally = (total: number, conduct = 0) => ({
+            total,
+            conduct,
+            activity: total - conduct
+        });
+        expect(warningWeightLine(tally(0))).toContain("No warnings");
+        expect(warningWeightLine(tally(1))).toContain("their 2nd");
+        expect(warningWeightLine(tally(2))).toContain("their 3rd");
+        expect(warningWeightLine(tally(10))).toContain("their 11th");
+        expect(warningWeightLine(tally(20))).toContain("their 21st");
     });
 });
 

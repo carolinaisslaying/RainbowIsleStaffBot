@@ -276,6 +276,35 @@ saw it, which is the difference between a warning somebody has ignored and one
 they never received — and the review row now says which, because the bot records
 whether the DM actually arrived rather than assuming it did.
 
+An Executive can also issue a warning for conduct rather than for a shortfall,
+with `/admin warn`. Three rungs, differing by the gravity of what happened and
+not by how formal they are — everything issued through this bot is a formal
+written warning, and informal correction happens in a DM and never reaches the
+record:
+
+| Rung | Counts for |
+| --- | --- |
+| Caution | 90 days |
+| Misconduct | 180 days |
+| Serious Misconduct | never stops counting |
+
+Each is a config key, and `0` means permanent. Every warning still weighs one:
+the rung decides how long it counts, never how much, and the bot never adds them
+up into an action.
+
+Executives issue them; staff and Leads receive them. An Executive cannot be
+warned through this bot at all, because a warning here is one person's decision
+with no second signature and it would go on a peer's permanent record.
+
+Every warning of either kind gets a card in `warningChannelId`, edited in place
+for its whole life — issued, delivered, acknowledged, appealed, withdrawn. That
+channel is the durable record; the fortnight review row is a decision queue,
+organised by fortnight and purgeable.
+
+**Nothing deletes a warning.** Withdrawing one — by reopening a review row, by
+the button on its card, or by upholding an appeal — marks it withdrawn and keeps
+it, carrying both reasons. It then counts against nobody. See `DELETION.md`.
+
 **Appeal this** gives them one reply, within `appealWindowDays` (14 by default).
 The window is counted from the moment the warning **reached** them, not from when
 it was issued: a member whose DMs are closed never received it, and a deadline
@@ -407,7 +436,7 @@ instead. Say the word and I will add the linter.
 npm test
 ```
 
-511 tests covering what section 17 requires: week and fortnight boundary maths
+578 tests covering what section 17 requires: week and fortnight boundary maths
 including DST in both directions in a non-UTC zone, fortnight index derivation
 from the anchor, bitmap set/popcount/cross-day window summation, crediting
 idempotency, the shift state machine including a pause spanning a UTC day
