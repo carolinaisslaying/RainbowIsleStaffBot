@@ -1,4 +1,4 @@
-import type { Client, ModalSubmitInteraction } from "discord.js";
+import { MessageFlags, type Client, type ModalSubmitInteraction } from "discord.js";
 import { ObjectId } from "mongodb";
 import type { FortnightAssessmentDoc } from "../db/types.js";
 import type { StaffBotConfig } from "../config/guildConfig.js";
@@ -151,7 +151,26 @@ export async function handleReviewModal(
         return;
     }
 
-    await defer(interaction, true);
+    // The confirmation card becomes the progress card becomes the result.
+    //
+    // A modal submitted from a button is its own interaction, so deferring a
+    // *reply* opened a second ephemeral message and left the confirmation
+    // sitting above it — with its buttons still live, so "Warn all" could be
+    // pressed again to start a second run over rows the first had just decided.
+    // Deferring an *update* instead edits the card the button was on, which is
+    // the same rule every other card in this bot follows: one action, one
+    // message, edited through its whole life.
+    //
+    // Guarded rather than assumed: the bulk modal is only ever opened from the
+    // ephemeral confirmation, but a modal that arrived without a message, or
+    // from a public one, must not have that message overwritten with somebody's
+    // ephemeral progress card.
+    const editsItsOwnCard =
+        interaction.isFromMessage() &&
+        interaction.message.flags.has(MessageFlags.Ephemeral);
+
+    if (editsItsOwnCard) await interaction.deferUpdate();
+    else await defer(interaction, true);
 
     const remaining = (await belowThresholdFor(fortnightIndex)).filter(
         (row) => !row.reviewOutcome

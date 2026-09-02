@@ -1,4 +1,4 @@
-import type { ButtonInteraction, Client } from "discord.js";
+import { MessageFlags, type ButtonInteraction, type Client } from "discord.js";
 import type { ObjectId } from "mongodb";
 import type { StaffBotConfig } from "../config/guildConfig.js";
 import { belowThresholdFor, findAssessment } from "../domain/assessments.js";
@@ -6,9 +6,10 @@ import { ensureStaff, findStaffById } from "../domain/staff.js";
 import { fetchPublicMember, resolveTier, isExecutive } from "../domain/permissions.js";
 import { decisionPermitted, type ReviewAction } from "../domain/review.js";
 import { isAssessableFortnight } from "../domain/assessments.js";
-import { errorCard, reviewBulkConfirmCard } from "../render/cards.js";
+import { errorCard, noticeCard, reviewBulkConfirmCard } from "../render/cards.js";
+import { COLOUR } from "../render/theme.js";
 import { reviewDecisionModal, reviewBulkModal } from "../render/modals.js";
-import { respond } from "../discord/respond.js";
+import { respond, sendOptions } from "../discord/respond.js";
 import { staffDisplayName } from "../discord/displayName.js";
 
 /**
@@ -26,6 +27,30 @@ import { staffDisplayName } from "../discord/displayName.js";
  */
 
 const ACTIONS: ReviewAction[] = ["warn", "excuse", "dismiss", "reopen"];
+
+/**
+ * Answer on the card that was pressed, when the card is the caller's own.
+ *
+ * A button on an ephemeral card is a step in a conversation with one person, and
+ * the answer belongs in place of the question: a pressed button that stays
+ * pressable is an invitation to run the thing twice, and a reply underneath
+ * reads as two things having happened. That is the rule everywhere else in this
+ * bot, and the bulk confirmation was the one place still stacking messages.
+ *
+ * A button on a public card — the queue header's "Decide all remaining" — must
+ * NOT be answered this way: editing it would overwrite the header everybody
+ * reads with one Executive's ephemeral confirmation.
+ */
+async function answerInPlace(
+    interaction: ButtonInteraction,
+    card: import("../render/cards.js").RenderedMessage
+): Promise<void> {
+    if (interaction.message.flags.has(MessageFlags.Ephemeral)) {
+        await interaction.update(sendOptions(card) as never);
+        return;
+    }
+    await respond(interaction, card);
+}
 
 export async function handleReviewButton(
     client: Client,
@@ -135,7 +160,12 @@ export async function handleReviewBulkButton(
     }
 
     if (action === "cancel") {
-        await respond(interaction, errorCard("Nothing was changed. The queue is as it was."));
+        await answerInPlace(
+            interaction,
+            noticeCard("Left as they were", "Nothing was changed. The queue is as it was.", {
+                colour: COLOUR.settled
+            })
+        );
         return;
     }
 
@@ -145,9 +175,13 @@ export async function handleReviewBulkButton(
     );
 
     if (remaining.length === 0) {
-        await respond(
+        await answerInPlace(
             interaction,
-            errorCard("Every row in that fortnight has already been decided.")
+            noticeCard(
+                "Nothing left",
+                "Every row in that fortnight has already been decided.",
+                { colour: COLOUR.settled }
+            )
         );
         return;
     }

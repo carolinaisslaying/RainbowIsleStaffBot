@@ -142,8 +142,16 @@ their cards in the review channel**, optionally rehearsing it again straight aft
 posted beside the last run's leftovers is read against them. It says on the confirmation how many of
 the records came from a rehearsal and how many are real.
 
-**A bulk decision reports as it runs.** Twelve rows is twelve records, twelve DMs and twelve card
-edits, so the ephemeral reply is edited as it goes (throttled to 1.5s; the first tick always
+**A bulk decision reports as it runs, on the card that asked for it.** The confirmation card becomes
+the progress card becomes the result: the modal submit is its own interaction, so deferring a *reply*
+opened a second ephemeral message and left the confirmation above it with live buttons — pressable
+again, to start a second run over rows the first had just decided. It defers an *update* instead,
+which edits the message the button was on. Guarded on `isFromMessage()` **and** on that message being
+ephemeral, because the same handler must never overwrite a public card with one Executive's progress.
+"Leave them" and "nothing left to decide" replace the confirmation for the same reason.
+
+Twelve rows is twelve records, twelve DMs and twelve card
+edits, so that card is edited as it goes (throttled to 1.5s; the first tick always
 goes, and the finished card is a separate send after the header is redrawn, not a tick)
 and each row's own card is redrawn the moment it is decided. `refreshQueueHeader` is split from
 `postReviewQueue` for this: the header carries the count and changes on every decision, while the
