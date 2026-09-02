@@ -15,15 +15,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-npm run typecheck              # tsc --noEmit
-npm run build                  # tsc -> dist/
-npm test                       # vitest run (all tests)
-npm run test:watch
-npm start                      # node dist/index.js (requires build + .env + reachable Mongo)
-npm run dev                    # tsc --watch
+pnpm install                   # pnpm, not npm. There is no package-lock.json.
+pnpm typecheck                 # tsc --noEmit
+pnpm build                     # tsc -> dist/
+pnpm test                      # vitest run (all tests)
+pnpm test:watch
+pnpm start                     # node dist/index.js (requires build + .env + reachable Mongo)
+pnpm dev                       # tsc --watch
 
-npx vitest run test/rings.test.ts          # a single file
-npx vitest run -t "ring state thresholds"  # a single test or describe block
+pnpm vitest run test/rings.test.ts        # a single file
+pnpm vitest run -t "ring state thresholds" # a single test or describe block
 ```
 
 Docker:
@@ -36,7 +37,7 @@ docker exec -it rainbowisle-staffbot-mongo-1 mongosh staffbot
 ```
 
 `tsconfig.json` sets `rootDir: src` and excludes `test/`, so tests are type-checked by vitest only,
-never by `npm run typecheck`.
+never by `pnpm typecheck`.
 
 ## Layout and layering
 
@@ -92,9 +93,22 @@ keeps**. That map lives in this process alone, so a restart emptied it and the s
 tick after a deploy and auto-ended soon after. The trade is deliberate — somebody who went quiet just
 before the restart gets one extra grace period, which is the right direction to be wrong in.
 
-**Docker.** One `npm ci` for the whole build: the deps stage installs, the build stage compiles and
-then `npm prune --omit=dev`, and the runtime stage copies that tree rather than resolving production
-dependencies a second time. Every stage is the same base image on the same platform, which is what
+**pnpm, and two settings that are load-bearing.** `pnpm-workspace.yaml` carries them, because pnpm 11
+no longer reads the `pnpm` field in package.json and warns on every command if one is there.
+`allowBuilds` names **esbuild**, vitest's transform step, whose install script links the prebuilt
+binary — and pnpm checks that allowlist before running *any* script, so without the entry every
+`pnpm run` fails before it starts rather than the install failing. `engineStrict` makes the
+`engines.node` floor a refusal rather than advice, which is right for a floor that exists because the
+runtime image pins node:26.
+
+**Docker.** One `pnpm install --frozen-lockfile` for the whole build: the deps stage installs, the
+build stage compiles and then `pnpm prune --prod`, and the runtime stage copies that tree rather than
+resolving production dependencies a second time. pnpm's `node_modules` is a symlink farm into
+`node_modules/.pnpm`, and every link is relative and inside the directory being copied, so the tree
+moves between stages intact exactly as npm's flat one did. pnpm is installed with `npm i -g` at a
+pinned version rather than through corepack: corepack's place in the Node distribution has been
+contested, and a build depending on it would fail on the deploy rather than on the laptop if a base
+image dropped it. Every stage is the same base image on the same platform, which is what
 makes copying `node_modules` (resvg's prebuilt native binary included) safe. The runtime installs
 `fonts-inter`, `fonts-dejavu-core` and `curl` and **asserts the font paths with `test -d`**. That
 assertion has already earned itself: it caught `fonts.ts` looking for Inter under `truetype/` when

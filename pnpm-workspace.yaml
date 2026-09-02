@@ -1,0 +1,21 @@
+# pnpm's settings live here. The `pnpm` field in package.json is no longer read
+# as of pnpm 11, and leaving one there earns a warning on every command.
+
+# pnpm refuses to run a dependency's install scripts unless it is named here.
+#
+# That default is a supply-chain guard worth keeping: a postinstall script runs
+# with your shell's privileges the moment you install. So the allowlist is
+# explicit, and short.
+#
+# esbuild is vitest's transform step, and its install script links the prebuilt
+# binary for this platform. Without this entry every `pnpm run` fails before it
+# starts, not just the install: pnpm checks the allowlist ahead of each script.
+allowBuilds:
+  esbuild: true
+
+# The engines field says node >=26, and this makes it mean it.
+#
+# npm treated that as advice. Under pnpm it is a refusal, which is the right
+# behaviour for a floor that exists because the runtime image pins node:26: a
+# local run on an older Node is testing something the deployment will never be.
+engineStrict: true

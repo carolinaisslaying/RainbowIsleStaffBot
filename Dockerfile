@@ -6,36 +6,63 @@ ARG NODE_IMAGE=node:26-bookworm-slim
 # The dependency tree, resolved once.
 #
 # Split from the build stage so that editing a source file does not invalidate
-# the install: this layer is keyed on the two manifest files alone.
+# the install: this layer is keyed on the manifest, lockfile and pnpm settings
+# alone.
 FROM ${NODE_IMAGE} AS deps
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
-# Plain `npm ci`, with no BuildKit cache mount, so this file builds identically
-# under the classic builder. That matters more than it sounds: `docker-compose`
-# run under sudo cannot see a buildx plugin installed for your user, silently
-# falls back to the classic builder, and a `--mount` flag then fails the build
-# on the deploy rather than on the laptop. Docker's own layer cache already
-# skips this step entirely unless one of the two files above changed, so the
-# mount only ever saved time on a dependency bump.
-RUN npm ci
+# pnpm, pinned, installed with npm.
+#
+# Pinned because the lockfile should be read by the pnpm that wrote it, and a
+# floating version turns a reproducible build into a dated one. Installed with
+# npm rather than through corepack: corepack's place in the Node distribution
+# has been contested, and a build that depends on it fails on the deploy rather
+# than on the laptop if a future base image drops it. `npm i -g pnpm` works on
+# any Node image whatever it ships with.
+ARG PNPM_VERSION=11.24.0
+RUN npm i -g pnpm@${PNPM_VERSION}
+
+# pnpm-workspace.yaml is not optional here. It carries the install-script
+# allowlist, and pnpm checks that list before running any script -- so a build
+# without this file fails at `pnpm build`, not at the install, which reads as a
+# compiler problem rather than a missing config.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+
+# `--frozen-lockfile` is pnpm's `npm ci`: it refuses to resolve anything the
+# lockfile does not already pin, so a build can never quietly drift from what
+# was tested. No BuildKit cache mount, so this file builds identically under the
+# classic builder. That matters more than it sounds: `docker-compose` run under
+# sudo cannot see a buildx plugin installed for your user, silently falls back
+# to the classic builder, and a `--mount` flag then fails the build on the
+# deploy rather than on the laptop. Docker's own layer cache already skips this
+# step entirely unless one of the files above changed, so the mount only ever
+# saved time on a dependency bump.
+RUN pnpm install --frozen-lockfile
 
 
 FROM ${NODE_IMAGE} AS build
 
 WORKDIR /app
 
+ARG PNPM_VERSION=11.24.0
+RUN npm i -g pnpm@${PNPM_VERSION}
+
+# pnpm's node_modules is a symlink farm into node_modules/.pnpm, and every one
+# of those links is relative and inside the directory being copied -- so the
+# tree moves between stages intact, exactly as npm's flat one did. The store's
+# hardlinks become ordinary files in the process, which costs a little size and
+# nothing else.
 COPY --from=deps /app/node_modules ./node_modules
-COPY package.json tsconfig.json ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json ./
 COPY src ./src
-RUN npm run build
+RUN pnpm build
 
 # Reduce the same tree to production dependencies rather than resolving and
 # downloading the whole thing again in the runtime stage. Every stage here is
 # the same base image on the same platform, so the pruned `node_modules` --
 # resvg's prebuilt native binary included -- copies across as it stands.
-RUN npm prune --omit=dev
+RUN pnpm prune --prod
 
 
 FROM ${NODE_IMAGE} AS runtime
