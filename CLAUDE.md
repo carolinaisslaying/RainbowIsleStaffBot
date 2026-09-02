@@ -200,6 +200,14 @@ fetch. The card always states which way it went and why. Paging a card that is s
 renders the everyone-view whoever presses it: the buttons edit that public message, so a Lead
 pressing Next would otherwise publish every hidden row to the channel.
 
+**A command mention carries the command, never its arguments.** `cmd()`
+(`discord/commandMentions.ts`) builds `</name group subcommand:id>`, and the colon before the id is
+the syntax — so a path carrying its own colon makes two and Discord parses neither, rendering the
+literal text `</dev purge fortnight:1:1544…>` on a card somebody was meant to click. `cmd()` now
+checks the shape (`isMentionablePath`: one to three segments, each a legal command name) and falls
+back to bold with a logged warning, because this fails exactly the way a wrong-guild id does: silently,
+as raw text. Arguments go in the sentence beside the chip.
+
 **Nothing user-facing names a file, a repository or an environment variable.** The cards are read by
 Moderators. Operator detail belongs in `log.*`, which is where it now lives.
 

@@ -174,7 +174,13 @@ export const devCommand: Command = {
                         "The cards are up and marked as a rehearsal. Nobody outside the " +
                         "deployment administrators was messaged, nothing counts against " +
                         "anyone, and the fortnight can still be announced for real later.\n\n" +
-                        `-# Clear it with ${cmd(`dev purge fortnight:${index}`, interaction.guildId)}.`,
+                        // The mention carries the command path only. Discord's
+                        // syntax is `</name subcommand:id>`, so an option
+                        // pasted into it makes a second colon and the whole
+                        // chip renders as raw text. The argument goes beside
+                        // it, in words.
+                        `-# Clear it with ${cmd("dev purge", interaction.guildId)}, ` +
+                        `fortnight **${index}**.`,
                     { ephemeral: true, colour: COLOUR.pending }
                 )
             );

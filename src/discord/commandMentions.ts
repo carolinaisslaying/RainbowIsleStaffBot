@@ -55,18 +55,56 @@ function lookup(root: string, guildId: string | null | undefined): string | null
 }
 
 /**
- * `cmd("timezone set")` -> `</timezone set:1234>`, or `` `/timezone set` `` when
- * the id is not known yet.
+ * Whether a path can be rendered as a mention at all.
+ *
+ * A mention is `</name group subcommand:id>`: one to three name segments and
+ * nothing else. The colon before the id is the syntax, so a path carrying its
+ * own colon produces two and Discord parses neither — `dev purge fortnight:1`
+ * rendered as the literal text `</dev purge fortnight:1:1544…>` on a card an
+ * Executive was meant to click.
+ *
+ * That is the same failure the guild-id mismatch has, and it is silent in the
+ * same way: raw text where a chip should be, with nothing logged. So the shape
+ * is checked rather than assumed, and an option value pasted into a path falls
+ * back to bold like any other unresolvable mention.
+ *
+ * Discord's own rule for a command name: 1-32 characters, letters, digits,
+ * hyphen and underscore.
+ */
+export function isMentionablePath(path: string): boolean {
+    const segments = path.trim().split(/\s+/);
+    if (segments.length < 1 || segments.length > 3) return false;
+    return segments.every((segment) => /^[-_\p{L}\p{N}]{1,32}$/u.test(segment));
+}
+
+/**
+ * `cmd("timezone set")` -> `</timezone set:1234>`, or `` **\/timezone set** ``
+ * when the id is not known yet.
  *
  * Pass the guild the message will be READ in. Omit it for a DM, which resolves
  * against the global registration instead.
+ *
+ * The path is the command only. Arguments belong in the sentence around it:
+ * there is no syntax for a mention that carries one.
  */
 export function cmd(path: string, guildId?: string | null): string {
-    const root = path.trim().split(/\s+/)[0];
-    const id = lookup(root, guildId);
+    const trimmed = path.trim();
+
     // Bold rather than inline code: the fallback should read as a command
     // name in a sentence, not as a snippet in a terminal.
-    return id ? `</${path.trim()}:${id}>` : `**/${path.trim()}**`;
+    const fallback = `**/${trimmed}**`;
+
+    if (!isMentionablePath(trimmed)) {
+        log.warn(
+            `Refusing to build a command mention for "${trimmed}": a mention carries the ` +
+                "command path only, and anything else renders as raw text on the card. " +
+                "Put the argument in the sentence instead."
+        );
+        return fallback;
+    }
+
+    const id = lookup(trimmed.split(/\s+/)[0], guildId);
+    return id ? `</${trimmed}:${id}>` : fallback;
 }
 
 /** Test seam. */
