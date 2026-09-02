@@ -41,6 +41,11 @@ import {
     handleAppealDeclineModal,
     handleAppealModal
 } from "./appealButtons.js";
+import {
+    handleConductButton,
+    handleConductWarnModal,
+    handleConductWithdrawModal
+} from "./conductButtons.js";
 import { handleScrubButton } from "./scrubButtons.js";
 import { handleLeaveButton } from "./leaveButtons.js";
 import { handleLeaveModal } from "./leaveModals.js";
@@ -53,6 +58,8 @@ import {
 import {
     APPEAL_DECLINE_MODAL,
     APPEAL_MODAL,
+    CONDUCT_WARN_MODAL,
+    CONDUCT_WITHDRAW_MODAL,
     CONFIG_IMPORT_MODAL,
     REVIEW_BULK_MODAL,
     REVIEW_DECISION_MODAL,
@@ -321,6 +328,23 @@ async function routeModal(
         return;
     }
 
+    // Conduct warnings: issuing one, and taking one back. The subject rides in
+    // the id, because the warn modal is opened from a command rather than from
+    // a message and has nothing else to carry it.
+    if (interaction.customId.startsWith(`${CONDUCT_WARN_MODAL}:`)) {
+        await handleConductWarnModal(
+            client,
+            config,
+            interaction,
+            interaction.customId.slice(`${CONDUCT_WARN_MODAL}:`.length)
+        );
+        return;
+    }
+    if (interaction.customId.startsWith(`${CONDUCT_WITHDRAW_MODAL}:`)) {
+        await handleConductWithdrawModal(client, config, interaction);
+        return;
+    }
+
     // Review decisions carry their reason in a modal, so they arrive here as
     // well. Routed before leave, which is the fallthrough.
     if (
@@ -386,6 +410,11 @@ async function routeButton(client: Client, interaction: import("discord.js").But
     // Lives on the member's warning DM, like the acknowledgement beside it.
     if (namespace === "appeal") {
         await handleAppealButton(client, config, interaction, first, second);
+        return;
+    }
+    // The Withdraw button on a warning's card in the log.
+    if (namespace === "conduct") {
+        await handleConductButton(client, config, interaction, first, second);
         return;
     }
     if (namespace === "leave") {

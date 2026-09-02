@@ -29,6 +29,8 @@ export const REVIEW_BULK_MODAL = "reviewBulk";
 export const APPEAL_MODAL = "warningAppeal";
 export const APPEAL_DECLINE_MODAL = "appealDecline";
 export const REVIEW_SUBSET_MODAL = "reviewSubset";
+export const CONDUCT_WARN_MODAL = "conductWarn";
+export const CONDUCT_WITHDRAW_MODAL = "conductWithdraw";
 
 export const FIELD_START = "start";
 export const FIELD_END = "end";
@@ -37,6 +39,7 @@ export const FIELD_CONFIG_JSON = "configJson";
 export const FIELD_APPEAL = "appeal";
 export const FIELD_SUBSET_ROWS = "rows";
 export const FIELD_SUBSET_ACTION = "outcome";
+export const FIELD_TIER = "tier";
 
 /** Discord's cap on a checkbox group. The subset modal is built around it. */
 export const SUBSET_MAX = 10;
@@ -455,4 +458,91 @@ export function reviewSubsetModal(input: {
         );
 
     return modal;
+}
+
+
+/**
+ * Issuing a formal warning for conduct.
+ *
+ * The rung and the reason in one modal, because they are one decision. The rung
+ * descriptions say what each does to the record rather than trying to define the
+ * conduct — an Executive knows what happened; what they are choosing is how long
+ * it should count for.
+ *
+ * The reason box is longer than a review decision's. This one is quoted to the
+ * member in full and is the whole of what they are told, so it has room for a
+ * message link and an account of what happened.
+ */
+export function conductWarnModal(input: {
+    /** Carried in the id: this modal is opened from a command, so there is no
+     *  message to recover the subject from on submission. */
+    subjectDiscordId: string;
+    displayName: string;
+    tiers: { value: string; label: string; description: string }[];
+}): ModalBuilder {
+    return new ModalBuilder()
+        .setCustomId(`${CONDUCT_WARN_MODAL}:${input.subjectDiscordId}`)
+        .setTitle("Issue a formal warning".slice(0, 45))
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(
+                `-# **${input.displayName}** will be sent this, and it goes on their record.`
+            )
+        )
+        .addLabelComponents(
+            new LabelBuilder()
+                .setLabel("How serious?")
+                .setDescription("This decides how long the warning counts for, not how much.")
+                .setRadioGroupComponent(
+                    new RadioGroupBuilder()
+                        .setCustomId(FIELD_TIER)
+                        .addOptions(
+                            input.tiers.map((tier) => ({
+                                value: tier.value,
+                                label: tier.label,
+                                description: tier.description.slice(0, 100)
+                            }))
+                        )
+                )
+        )
+        .addLabelComponents(
+            new LabelBuilder()
+                .setLabel("What happened?")
+                .setDescription(
+                    "They read this in full. Put message or image links in here if you have them."
+                )
+                .setTextInputComponent(
+                    new TextInputBuilder()
+                        .setCustomId(FIELD_REASON)
+                        .setStyle(TextInputStyle.Paragraph)
+                        .setRequired(true)
+                        .setMinLength(10)
+                        .setMaxLength(1500)
+                )
+        );
+}
+
+/** Taking a warning back. The reason is kept beside the one it was issued for. */
+export function conductWithdrawModal(warningId: string, displayName: string): ModalBuilder {
+    return new ModalBuilder()
+        .setCustomId(`${CONDUCT_WITHDRAW_MODAL}:${warningId}`)
+        .setTitle("Withdraw this warning".slice(0, 45))
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(
+                `-# **${displayName}** is told, and it stops counting against them. ` +
+                    "The record keeps both reasons."
+            )
+        )
+        .addLabelComponents(
+            new LabelBuilder()
+                .setLabel("Why is it being withdrawn?")
+                .setDescription("Issued in error, wrong person, or the facts turned out otherwise.")
+                .setTextInputComponent(
+                    new TextInputBuilder()
+                        .setCustomId(FIELD_REASON)
+                        .setStyle(TextInputStyle.Paragraph)
+                        .setRequired(true)
+                        .setMinLength(4)
+                        .setMaxLength(1000)
+                )
+        );
 }

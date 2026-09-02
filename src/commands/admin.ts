@@ -1,10 +1,27 @@
 import { SlashCommandBuilder, ContainerBuilder } from "discord.js";
 import type { Command } from "./types.js";
-import { isExecutive, isLeadOrAbove } from "../domain/permissions.js";
+import {
+    fetchPublicMember,
+    isExecutive,
+    isLeadOrAbove,
+    resolveTier
+} from "../domain/permissions.js";
+import { conductWarningPermitted } from "../domain/conduct.js";
+import { lifetimeDaysFor } from "../domain/review.js";
+import { CONDUCT_TIERS, type ConductTier } from "../db/types.js";
+import type { StaffBotConfig } from "../config/guildConfig.js";
+import { conductWarnModal } from "../render/modals.js";
+import { staffDisplayName } from "../discord/displayName.js";
 import { EMOJI } from "../render/emoji.js";
-import { containersMessage, errorCard, noticeCard, text } from "../render/cards.js";
+import {
+    CONDUCT_TIER_LABEL,
+    containersMessage,
+    errorCard,
+    noticeCard,
+    text
+} from "../render/cards.js";
 import { defer, respond } from "../discord/respond.js";
-import { listActiveStaff, findStaffByDiscordId } from "../domain/staff.js";
+import { ensureStaff, listActiveStaff, findStaffByDiscordId } from "../domain/staff.js";
 import { rebuildWeek, weekWindowFor, currentWeekStats } from "../domain/weekly.js";
 import { recomputeCounts } from "../domain/activity.js";
 import {
@@ -52,6 +69,17 @@ export const adminCommand: Command = {
         )
         .addSubcommand((sub) =>
             sub
+                .setName("warn")
+                .setDescription("Issue a formal warning for conduct (Executive)")
+                .addUserOption((option) =>
+                    option
+                        .setName("user")
+                        .setDescription("Who is being warned")
+                        .setRequired(true)
+                )
+        )
+        .addSubcommand((sub) =>
+            sub
                 .setName("shifts")
                 .setDescription("Shift history for a member (Lead and Executive)")
                 .addUserOption((option) =>
@@ -61,6 +89,61 @@ export const adminCommand: Command = {
 
     async execute({ client, config, interaction, staff, tier }) {
         const sub = interaction.options.getSubcommand();
+
+        // A conduct warning goes on somebody's permanent record on one person's
+        // say-so, so every rule about who may issue and who may receive one is
+        // checked before the modal opens. `showModal` cannot follow a defer, so
+        // this branch must not respond or defer on the way to it.
+        if (sub === "warn") {
+            if (!isExecutive(tier)) {
+                await respond(
+                    interaction,
+                    errorCard(
+                        "Issuing a warning is Executive only. Leads can read the record and " +
+                            "the warning history, and that is the whole of it."
+                    )
+                );
+                return;
+            }
+
+            const target = interaction.options.getUser("user", true);
+            const subjectMember = await fetchPublicMember(client, config, target.id);
+            const subjectTier = resolveTier(target.id, subjectMember, config);
+            const subject = await ensureStaff(target.id);
+
+            const permitted = conductWarningPermitted({
+                issuerTier: tier,
+                subjectTier,
+                issuerStaffId: staff._id,
+                subjectStaffId: subject._id,
+                subjectDeparted: subject.active === false || subjectMember === null
+            });
+            if (!permitted.ok) {
+                await respond(interaction, errorCard(permitted.reason));
+                return;
+            }
+
+            // The rung descriptions say what each does to the record rather than
+            // trying to define the conduct: the Executive knows what happened,
+            // and what they are choosing is how long it should count for.
+            await interaction.showModal(
+                conductWarnModal({
+                    subjectDiscordId: target.id,
+                    displayName: await staffDisplayName(
+                        client,
+                        config,
+                        target.id,
+                        target.username
+                    ),
+                    tiers: CONDUCT_TIERS.map((value) => ({
+                        value,
+                        label: CONDUCT_TIER_LABEL[value],
+                        description: describeTierLifetime(config, value)
+                    }))
+                })
+            );
+            return;
+        }
 
         // Shift history is Lead and above; everything else is Executive only.
         if (sub === "shifts") {
@@ -231,3 +314,10 @@ export const adminCommand: Command = {
 };
 
 export { fortnightIndexForWeek };
+
+
+/** "Counts for 90 days" / "Never stops counting", from the configured ladder. */
+function describeTierLifetime(config: StaffBotConfig, tier: ConductTier): string {
+    const days = lifetimeDaysFor({ kind: "conduct", tier, issuedAt: new Date() }, config);
+    return days <= 0 ? "Never stops counting" : `Counts for ${days} days`;
+}

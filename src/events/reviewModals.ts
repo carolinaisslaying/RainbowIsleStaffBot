@@ -10,6 +10,7 @@ import type { StaffBotConfig } from "../config/guildConfig.js";
 import {
     belowThresholdFor,
     clearReview,
+    warningsForAssessment,
     withdrawWarningsFor,
     findAssessment,
     isAssessableFortnight,
@@ -30,6 +31,7 @@ import { fetchPublicMember, resolveTier, isExecutive } from "../domain/permissio
 import { audit } from "../domain/audit.js";
 import { tryDm } from "../discord/roles.js";
 import { refreshQueueHeader, upsertReviewRow } from "../services/assessmentService.js";
+import { upsertWarningCard } from "../services/conductService.js";
 import {
     errorCard,
     noticeCard,
@@ -434,6 +436,12 @@ async function applyDecision(
             actorStaffId,
             reason
         );
+
+        // Their cards in the log show the withdrawal too, or the log would keep
+        // presenting a warning that no longer counts against anybody.
+        for (const withdrawn of await warningsForAssessment(assessment._id)) {
+            await upsertWarningCard(client, config, withdrawn._id);
+        }
         await clearReview(assessment._id);
         await audit("assessment.reopen", {
             actorId: actorDiscordId,
@@ -562,7 +570,13 @@ async function applyDecision(
     // What actually happened to the DM, against the warning it carried. This is
     // what lets the row say "never delivered" instead of "not yet
     // acknowledged", which is the same silence and a completely different fact.
-    if (issued) await recordWarningDelivery(issued._id, messaged);
+    if (issued) {
+        await recordWarningDelivery(issued._id, messaged);
+        // Activity warnings go in the log as well. The review row is a decision
+        // queue — organised by fortnight, not by member, and purgeable — and the
+        // log is the durable record of what has actually been issued.
+        await upsertWarningCard(client, config, issued._id);
+    }
 
     return {
         title: `${outcome[0].toUpperCase()}${outcome.slice(1)}`,

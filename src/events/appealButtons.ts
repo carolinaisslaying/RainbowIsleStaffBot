@@ -14,6 +14,7 @@ import { fetchPublicMember, isExecutive, resolveTier } from "../domain/permissio
 import { audit } from "../domain/audit.js";
 import { tryDm } from "../discord/roles.js";
 import { upsertReviewRow } from "../services/assessmentService.js";
+import { upsertWarningCard } from "../services/conductService.js";
 import { errorCard, noticeCard } from "../render/cards.js";
 import {
     APPEAL_DECLINE_MODAL,
@@ -225,6 +226,10 @@ export async function handleAppealModal(
         }
     }
 
+    // A conduct warning has no row; its card in the log is where an Executive
+    // sees the appeal. An activity warning has both.
+    await upsertWarningCard(client, config, resolved.warning._id);
+
     await respond(
         interaction,
         noticeCard(
@@ -314,6 +319,7 @@ export async function handleAppealDeclineModal(
             assessment.rehearsal === true
         );
     }
+    await upsertWarningCard(client, config, warning._id);
 
     await respond(
         interaction,

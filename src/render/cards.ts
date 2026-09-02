@@ -1548,3 +1548,152 @@ export function containersMessage(
         flags: V2_FLAGS
     };
 }
+
+
+/**
+ * A warning's card in the warning channel, at whatever point of its life.
+ *
+ * The only thing that draws one, so colour, buttons and record cannot disagree —
+ * the same rule `leaveCardFor` and `reviewRowFor` follow. Colour is the state:
+ * amber while it is waiting on somebody, blue once it has landed, grey once it
+ * has been taken back, red when it never arrived at all.
+ *
+ * Both kinds of warning appear here. An activity warning already has a review
+ * row, but that row is a decision queue — organised by fortnight, not by member,
+ * and purgeable. This is the durable record.
+ */
+export function warningLogCard(input: {
+    warningId: string;
+    displayName: string;
+    mention: string;
+    kind: "activity" | "conduct";
+    tier: ConductTier | null;
+    issuedAt: Date;
+    issuedBy: string;
+    reason: string;
+    permanent: boolean;
+    lifetimeDays: number;
+    acknowledgedAt: Date | null;
+    delivery: "delivered" | "failed" | "unknown";
+    appeal: { text: string; filedAt: Date } | null;
+    withdrawn: { at: Date; by: string; reason: string } | null;
+}): RenderedMessage {
+    const openAppeal = input.appeal !== null && input.withdrawn === null;
+
+    const colour = input.withdrawn
+        ? COLOUR.settled
+        : input.delivery === "failed"
+          ? COLOUR.adverse
+          : openAppeal || input.acknowledgedAt === null
+            ? COLOUR.pending
+            : COLOUR.admin;
+
+    const heading =
+        input.kind === "conduct" && input.tier
+            ? CONDUCT_TIER_LABEL[input.tier]
+            : "Activity warning";
+
+    const lifetime = input.permanent
+        ? "Permanent — never stops counting"
+        : `Counts for ${input.lifetimeDays} days`;
+
+    const lines = [
+        `### ${emojiForColour(colour)} ${heading}`,
+        `**${input.displayName}** (${input.mention})`,
+        `-# Issued ${ts(input.issuedAt, "F")} by ${input.issuedBy} · ${lifetime}`,
+        "",
+        `> ${input.reason.split("\n").join("\n> ")}`
+    ];
+
+    lines.push(
+        "",
+        input.withdrawn
+            ? `${EMOJI.purge} **Withdrawn** ${ts(input.withdrawn.at, "R")} by ` +
+              `${input.withdrawn.by}. It counts against them nowhere.\n` +
+              `> ${input.withdrawn.reason.split("\n").join("\n> ")}`
+            : input.delivery === "failed"
+              ? "⚠️ **Never delivered** — their direct messages are closed, so they have not " +
+                "seen this. It stands on the record either way."
+              : input.acknowledgedAt
+                ? `-# Acknowledged ${ts(input.acknowledgedAt, "R")}`
+                : input.delivery === "delivered"
+                  ? "-# Delivered, not yet acknowledged"
+                  : "-# Not yet acknowledged"
+    );
+
+    if (openAppeal && input.appeal) {
+        lines.push(
+            "",
+            `${EMOJI.appeal} **They have appealed this.**`,
+            `> ${input.appeal.text.split("\n").join("\n> ")}`,
+            `-# Appealed ${ts(input.appeal.filedAt, "R")}`
+        );
+    }
+
+    const container = new ContainerBuilder()
+        .setAccentColor(colour)
+        .addTextDisplayComponents(text(lines.join("\n")));
+
+    // A withdrawn warning offers nothing: it is finished, and the one action a
+    // card has is the one its state actually has.
+    if (!input.withdrawn) {
+        container.addActionRowComponents(
+            new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`conduct:${input.warningId}:withdraw`)
+                    .setLabel("Withdraw")
+                    .setStyle(ButtonStyle.Secondary)
+            )
+        );
+    }
+
+    return { components: [container], files: [], flags: V2_FLAGS };
+}
+
+/** The DM a conduct warning arrives as. */
+export function conductWarnDmCard(input: {
+    warningId: string;
+    tier: ConductTier;
+    tierLabel: string;
+    consequence: string;
+    reason: string;
+    appealWindowDays: number;
+    appealable: boolean;
+}): RenderedMessage {
+    const container = new ContainerBuilder()
+        .setAccentColor(COLOUR.adverse)
+        .addTextDisplayComponents(
+            text(
+                `### ${emojiForColour(COLOUR.adverse)} You have been issued a formal warning\n` +
+                    `**${input.tierLabel}**\n\n` +
+                    `**What happened**\n> ${input.reason.split("\n").join("\n> ")}\n\n` +
+                    `-# ${input.consequence}\n\n` +
+                    (input.appealable
+                        ? "If you think this is wrong, or there is something we should know, " +
+                          `**appeal it** below. You have ${input.appealWindowDays} days, and ` +
+                          "one appeal.\n\n"
+                        : "If you think this is wrong, reply to the Executive team.\n\n") +
+                    `-# You can see everything held about you with ${cmd("mydata export")}.`
+            )
+        )
+        .addActionRowComponents(
+            new ActionRowBuilder<ButtonBuilder>().addComponents(
+                ...[
+                    new ButtonBuilder()
+                        .setCustomId(`warning:${input.warningId}:ack`)
+                        .setLabel("I have read this")
+                        .setStyle(ButtonStyle.Secondary),
+                    ...(input.appealable
+                        ? [
+                              new ButtonBuilder()
+                                  .setCustomId(`appeal:${input.warningId}:open`)
+                                  .setLabel("Appeal this")
+                                  .setStyle(ButtonStyle.Primary)
+                          ]
+                        : [])
+                ]
+            )
+        );
+
+    return { components: [container], files: [], flags: V2_FLAGS };
+}

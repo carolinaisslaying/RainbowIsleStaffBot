@@ -345,6 +345,11 @@ export async function withdrawWarningsFor(
     return result.modifiedCount;
 }
 
+/** Every warning an assessment issued, withdrawn ones included. */
+export async function warningsForAssessment(assessmentId: ObjectId): Promise<WarningDoc[]> {
+    return collections.warnings().find({ assessmentId }).toArray();
+}
+
 /** Withdraw one warning by its own id. The conduct path, which has no row. */
 export async function withdrawWarning(
     warningId: ObjectId,
