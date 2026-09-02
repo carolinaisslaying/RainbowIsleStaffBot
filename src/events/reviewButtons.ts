@@ -8,7 +8,12 @@ import { decisionPermitted, type ReviewAction } from "../domain/review.js";
 import { isAssessableFortnight } from "../domain/assessments.js";
 import { errorCard, noticeCard, reviewBulkConfirmCard } from "../render/cards.js";
 import { COLOUR } from "../render/theme.js";
-import { reviewDecisionModal, reviewBulkModal } from "../render/modals.js";
+import {
+    SUBSET_MAX,
+    reviewBulkModal,
+    reviewDecisionModal,
+    reviewSubsetModal
+} from "../render/modals.js";
 import { respond, sendOptions } from "../discord/respond.js";
 import { staffDisplayName } from "../discord/displayName.js";
 
@@ -182,6 +187,36 @@ export async function handleReviewBulkButton(
                 "Every row in that fortnight has already been decided.",
                 { colour: COLOUR.settled }
             )
+        );
+        return;
+    }
+
+    // Choosing a subset. The modal carries the whole decision — who, what and
+    // why — because a card of buttons per member is a click per row, which is
+    // the thing anybody reaching for a bulk control is trying to avoid.
+    if (action === "some") {
+        const rows: { assessmentId: string; name: string; detail: string }[] = [];
+        for (const row of remaining.slice(0, SUBSET_MAX)) {
+            const staff = await findStaffById(row.staffId);
+            rows.push({
+                assessmentId: row._id.toHexString(),
+                name: staff
+                    ? await staffDisplayName(client, config, staff.discordId, "a departed member")
+                    : "an unknown member",
+                // The figures, so a subset can be chosen on the evidence rather
+                // than on remembering which name was which.
+                detail: `${row.totalMinutes} of ${row.requiredMinutes} minutes` +
+                    (row.staffId.equals(actor._id) ? " · your own row" : "")
+            });
+        }
+
+        // The modal is the reply and cannot follow a defer.
+        await interaction.showModal(
+            reviewSubsetModal({
+                fortnightIndex,
+                rows,
+                totalRemaining: remaining.length
+            })
         );
         return;
     }

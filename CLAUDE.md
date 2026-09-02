@@ -142,12 +142,32 @@ their cards in the review channel**, optionally rehearsing it again straight aft
 posted beside the last run's leftovers is read against them. It says on the confirmation how many of
 the records came from a rehearsal and how many are real.
 
+**Two bulk paths, one runner.** The header offers `Decide all N remaining` and, from two rows up,
+`Decide some…`. "All" confirms on a card naming everybody it would touch, then takes a reason.
+"Some" skips the confirmation because its modal *is* the confirmation: a checkbox group of the
+undecided rows (each labelled with its figures, so a subset is chosen on the evidence), a radio group
+for the outcome, and the reason. Nothing starts ticked — a mistimed submit decides nobody, and the
+button beside it already exists for the everyone case.
+
+Both hand their rows to `runDecisions`, which is the only place the loop lives. A subset warning has
+to be the same warning, written the same way, as a bulk one; two copies of that loop is the drift
+`applyDecision` and `reviewRowFor` already exist to prevent.
+
+**Discord caps a checkbox group at ten options** (`SUBSET_MAX`), so a longer queue is offered its
+first ten and told so on the modal. Decided rows leave the undecided set, so pressing the button
+again offers the next ten: it converges without anybody holding a page number. The ticked ids are
+read back from the database and re-filtered to undecided rather than trusted from the modal, which
+can sit open while somebody else works the queue — a row decided in the meantime is reported as
+moved on, never decided twice.
+
 **A bulk decision reports as it runs, on the card that asked for it.** The confirmation card becomes
 the progress card becomes the result: the modal submit is its own interaction, so deferring a *reply*
 opened a second ephemeral message and left the confirmation above it with live buttons — pressable
 again, to start a second run over rows the first had just decided. It defers an *update* instead,
 which edits the message the button was on. Guarded on `isFromMessage()` **and** on that message being
-ephemeral, because the same handler must never overwrite a public card with one Executive's progress.
+ephemeral (`deferOntoOwnCard`), because the same handler must never overwrite a public card with one
+Executive's progress — and the subset modal is opened from the public header, so that branch is
+load-bearing rather than defensive.
 "Leave them" and "nothing left to decide" replace the confirmation for the same reason.
 
 Twelve rows is twelve records, twelve DMs and twelve card

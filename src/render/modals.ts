@@ -1,6 +1,8 @@
 import {
+    CheckboxGroupBuilder,
     LabelBuilder,
     ModalBuilder,
+    RadioGroupBuilder,
     TextDisplayBuilder,
     TextInputBuilder,
     TextInputStyle
@@ -26,12 +28,18 @@ export const REVIEW_DECISION_MODAL = "reviewDecision";
 export const REVIEW_BULK_MODAL = "reviewBulk";
 export const APPEAL_MODAL = "warningAppeal";
 export const APPEAL_DECLINE_MODAL = "appealDecline";
+export const REVIEW_SUBSET_MODAL = "reviewSubset";
 
 export const FIELD_START = "start";
 export const FIELD_END = "end";
 export const FIELD_REASON = "reason";
 export const FIELD_CONFIG_JSON = "configJson";
 export const FIELD_APPEAL = "appeal";
+export const FIELD_SUBSET_ROWS = "rows";
+export const FIELD_SUBSET_ACTION = "outcome";
+
+/** Discord's cap on a checkbox group. The subset modal is built around it. */
+export const SUBSET_MAX = 10;
 
 function dateField(
     customId: string,
@@ -346,4 +354,105 @@ export function appealDeclineModal(warningId: string, displayName: string): Moda
                         .setMaxLength(1500)
                 )
         );
+}
+
+
+/**
+ * Deciding a chosen few rather than everybody.
+ *
+ * One modal carrying the whole decision: which rows, what outcome, and why.
+ * The alternative was a card of buttons per member, which is a click per row on
+ * the queue where clicking per row is exactly what the reader is trying to
+ * avoid.
+ *
+ * Nothing starts ticked. This is the subset path, so the safe empty state is
+ * none: a mistimed submit decides nobody rather than everybody, and the button
+ * beside it already exists for the everyone case.
+ *
+ * Discord caps a checkbox group at ten options, so a longer queue is offered its
+ * first ten and told so. Decided rows leave the undecided set, so pressing the
+ * button again offers the next ten — it converges without anybody having to hold
+ * a page number.
+ */
+export function reviewSubsetModal(input: {
+    fortnightIndex: number;
+    rows: { assessmentId: string; name: string; detail: string }[];
+    totalRemaining: number;
+}): ModalBuilder {
+    const shown = input.rows.slice(0, SUBSET_MAX);
+    const truncated = input.totalRemaining > shown.length;
+
+    const modal = new ModalBuilder()
+        .setCustomId(`${REVIEW_SUBSET_MODAL}:${input.fortnightIndex}`)
+        .setTitle("Decide some of the queue".slice(0, 45))
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(
+                truncated
+                    ? `-# Showing ${shown.length} of ${input.totalRemaining} undecided rows, ` +
+                      "which is as many as Discord fits in one list. Decide these and press " +
+                      "the button again for the rest."
+                    : `-# ${shown.length} undecided ${shown.length === 1 ? "row" : "rows"}. ` +
+                      "One reason is recorded against every row you tick."
+            )
+        )
+        .addLabelComponents(
+            new LabelBuilder()
+                .setLabel("Who?")
+                .setDescription("Tick everyone this decision applies to.")
+                .setCheckboxGroupComponent(
+                    new CheckboxGroupBuilder()
+                        .setCustomId(FIELD_SUBSET_ROWS)
+                        .setMinValues(1)
+                        .setMaxValues(shown.length)
+                        .addOptions(
+                            shown.map((row) => ({
+                                value: row.assessmentId,
+                                label: row.name.slice(0, 100),
+                                description: row.detail.slice(0, 100),
+                                default: false
+                            }))
+                        )
+                )
+        )
+        .addLabelComponents(
+            new LabelBuilder()
+                .setLabel("What happens to them?")
+                .setDescription("The same outcome is recorded against every row you ticked.")
+                .setRadioGroupComponent(
+                    new RadioGroupBuilder()
+                        .setCustomId(FIELD_SUBSET_ACTION)
+                        .addOptions(
+                            {
+                                value: "warn",
+                                label: "Warn",
+                                description: "Issues a warning and messages them. Not yourself."
+                            },
+                            {
+                                value: "excuse",
+                                label: "Excuse",
+                                description: "No warning. They are told it was excused."
+                            },
+                            {
+                                value: "dismiss",
+                                label: "Dismiss",
+                                description: "Nothing recorded against them. They are not told."
+                            }
+                        )
+                )
+        )
+        .addLabelComponents(
+            new LabelBuilder()
+                .setLabel("Why?")
+                .setDescription("Recorded against every row you ticked, and against each member.")
+                .setTextInputComponent(
+                    new TextInputBuilder()
+                        .setCustomId(FIELD_REASON)
+                        .setStyle(TextInputStyle.Paragraph)
+                        .setRequired(true)
+                        .setMinLength(4)
+                        .setMaxLength(1000)
+                )
+        );
+
+    return modal;
 }

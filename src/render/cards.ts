@@ -587,14 +587,26 @@ export function reviewHeaderCard(input: ReviewHeaderInput): RenderedMessage {
     }
 
     if (input.remaining > 0) {
-        container.addActionRowComponents(
-            new ActionRowBuilder<ButtonBuilder>().addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`reviewBulk:${input.fortnightIndex}:ask`)
-                    .setLabel(`Decide all ${input.remaining} remaining`)
-                    .setStyle(ButtonStyle.Secondary)
-            )
+        const controls = new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`reviewBulk:${input.fortnightIndex}:ask`)
+                .setLabel(`Decide all ${input.remaining} remaining`)
+                .setStyle(ButtonStyle.Secondary)
         );
+
+        // "Some" only earns its place when there is a subset to choose. With
+        // one row left the two buttons would do the same thing by different
+        // routes, and the longer route asks a question with one answer.
+        if (input.remaining > 1) {
+            controls.addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`reviewBulk:${input.fortnightIndex}:some`)
+                    .setLabel("Decide some…")
+                    .setStyle(ButtonStyle.Secondary)
+            );
+        }
+
+        container.addActionRowComponents(controls);
     }
 
     return {

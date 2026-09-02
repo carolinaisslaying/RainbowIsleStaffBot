@@ -55,7 +55,8 @@ import {
     APPEAL_MODAL,
     CONFIG_IMPORT_MODAL,
     REVIEW_BULK_MODAL,
-    REVIEW_DECISION_MODAL
+    REVIEW_DECISION_MODAL,
+    REVIEW_SUBSET_MODAL
 } from "../render/modals.js";
 import { renderLeaderboard, type LeaderboardScope } from "../commands/leaderboard.js";
 import { canonicaliseTimezone } from "../time/timezones.js";
@@ -324,7 +325,8 @@ async function routeModal(
     // well. Routed before leave, which is the fallthrough.
     if (
         interaction.customId.startsWith(`${REVIEW_DECISION_MODAL}:`) ||
-        interaction.customId.startsWith(`${REVIEW_BULK_MODAL}:`)
+        interaction.customId.startsWith(`${REVIEW_BULK_MODAL}:`) ||
+        interaction.customId.startsWith(`${REVIEW_SUBSET_MODAL}:`)
     ) {
         await handleReviewModal(client, config, interaction);
         return;
