@@ -434,7 +434,7 @@ instead. Say the word and I will add the linter.
 ## Tests
 
 ```bash
-npm test
+pnpm test
 ```
 
 578 tests covering what section 17 requires: week and fortnight boundary maths
@@ -457,5 +457,15 @@ dependency the spec does not allow.
 
 ## Local development
 
-Requires Node 26 to match the runtime image. `npm run build` compiles to
-`dist/`, `npm run typecheck` checks without emitting, `npm test` runs vitest.
+Requires **Node 26** and **pnpm**. The Node floor is enforced rather than
+suggested: `engineStrict` is on, so pnpm refuses to install on an older runtime
+instead of warning and letting you test something the deployment will never be.
+`.nvmrc` pins it, so `nvm use` picks it up.
+
+```bash
+npm i -g pnpm@11.24.0     # once
+pnpm install
+```
+
+`pnpm build` compiles to `dist/`, `pnpm typecheck` checks without emitting, and
+`pnpm test` runs vitest.
