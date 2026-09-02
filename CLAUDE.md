@@ -65,9 +65,32 @@ leaves and must not import from `services/` or `domain/`.
 edited with `/config set`. Everything the spec calls configurable is a key on `StaffBotConfig`
 (`src/config/guildConfig.ts`). Handlers call `loadConfig()` rather than closing over a config.
 
+**Configuration says what a setting will do, and never refuses it.** `config/configGuards.ts` holds
+that as pure functions, so `/config set` and `/config view` reach the same answer and a document
+already in a bad state is flagged without anybody setting the key again. Three of them.
+`anchorStatus` catches the case a fresh install is actually in: the default `fortnightAnchor` ships
+in the future, `fortnightIndexFor` floors an unbounded division, and `isAssessableFortnight`
+correctly rejects every negative index — so the deployment assesses nobody, warns nobody, and says so
+only in a debug log. The guard was right; its silence was the bug. `requirementIsReachable` and
+`autoEndIsGenerous` catch a `fortnightRequiredMinutes` above twice the weekly target (a member who
+closes both weekly rings still lands in the review queue, so the rings and the assessment disagree
+and neither is wrong) and an auto-end shorter than the away threshold. All three report with the
+arithmetic rather than as a refusal: policy belongs to the Executive, and a bot that argues with its
+owner gets worked around.
+
+**`weekStartDay` and `accountingTimezone` take a second click.** They are the only two keys that
+reach backwards — they move where every week and fortnight begins for every record ever written, so
+stored rollups and assessments stop matching the calendar and past verdicts move. The confirmation
+counts what is already stored and points at `/admin recompute`. Everything else applies immediately;
+this is two keys, not a habit.
+
 **Boot order in `src/index.ts` is deliberate.** Commands register *before* the role-hierarchy
 check, because that check fails for reasons only fixable via `/config set`; a failure must not
-leave the bot with no commands. `reconcileOnBoot` runs before any scheduler starts.
+leave the bot with no commands. `reconcileOnBoot` runs before any scheduler starts, and **seeds `lastSeen` for every open shift it
+keeps**. That map lives in this process alone, so a restart emptied it and the sweep fell back to
+`shift.startedAt`: every surviving shift older than `awayAfterMinutes` was marked Away on the first
+tick after a deploy and auto-ended soon after. The trade is deliberate — somebody who went quiet just
+before the restart gets one extra grace period, which is the right direction to be wrong in.
 
 **Docker.** One `npm ci` for the whole build: the deps stage installs, the build stage compiles and
 then `npm prune --omit=dev`, and the runtime stage copies that tree rather than resolving production
@@ -103,6 +126,14 @@ This is the one place a card names an environment variable, against the rule bel
 person who would have to act on it; telling them the switch exists without naming it would make the
 refusal useless.
 
+**`/dev status` is the operator's card.** Uptime, gateway latency, a real Mongo `ping` rather than
+the driver's opinion of its own connection, each job's last run and next run from `jobStatus()`
+(`jobs/scheduler.ts`), unset required keys, the config warnings below, and whether
+`DEV_DANGEROUS_COMMANDS` is on. Accent is the summary: red when something is broken, amber when
+something is merely unset, green when there is nothing to say. It is the second card allowed to name
+an environment variable, for the same reason `/dev purge` is: `seededOnly` means the only reader is
+the person who would go and change it.
+
 **`/dev` is rehearsals and cleanup; `/admin` is the real thing.** `/dev assess` is *always* a
 rehearsal, so there is no flag to leave in the wrong position — a `rehearse:` option on the real
 command is how a dry run once wrote real warnings. `/dev recap` previews either recap without
@@ -112,7 +143,8 @@ posted beside the last run's leftovers is read against them. It says on the conf
 the records came from a rehearsal and how many are real.
 
 **A bulk decision reports as it runs.** Twelve rows is twelve records, twelve DMs and twelve card
-edits, so the ephemeral reply is edited as it goes (throttled to 1.5s, first and last always sent)
+edits, so the ephemeral reply is edited as it goes (throttled to 1.5s; the first tick always
+goes, and the finished card is a separate send after the header is redrawn, not a tick)
 and each row's own card is redrawn the moment it is decided. `refreshQueueHeader` is split from
 `postReviewQueue` for this: the header carries the count and changes on every decision, while the
 rows do not, and redrawing all of them per click costs a Discord edit per member in the queue. The
@@ -168,7 +200,8 @@ recovery hatch.
 
 **Interaction routing.** All buttons go through `routeButton` in `src/events/interactionCreate.ts`,
 which splits `customId` on `:` into `namespace:first:second`. Namespaces in use: `config`
-(`export`/`import`/`apply`/`discard`), `review`, `leave`
+(`export`/`import`/`apply`/`discard`/`setConfirm`/`setCancel`), `review`, `appeal`
+(`open` on the member's DM, `decline` on the Executives' row), `leave`
 (`approve`/`decline`/`end`/`endConfirm`/`endCancel`), `leaveConfirm`, `leavePurge`, `tz`,
 `leaderboard`. A pressed button edits its own message in place
 (`interaction.update` / `deferUpdate` + `editReply`) rather than replying beneath it.
@@ -188,6 +221,28 @@ the whole message — deciding one member took everybody else's buttons with the
 not be finished. `domain/review.ts` holds the rules as pure functions (`rowButtons`,
 `decisionPermitted`, `activeWarningCount`, `queueHeadline`, `reminderDue`), and `fortnightReviews`
 keyed by index remembers where the header is.
+
+**A warning says whether it arrived, and the member can answer it.** `tryDm` returns a boolean and
+every caller now reads it: `WarningDoc.deliveredAt`/`deliveryFailedAt` record what happened and
+`deliveryState` (`domain/review.ts`) turns them into the row's line. "Not yet acknowledged" used to
+be drawn both for somebody who read it and never pressed the button and for somebody whose DMs are
+closed — the same silence, opposite facts to an Executive deciding whether a warning has been
+ignored. A warning written before these existed has neither timestamp and reads as **unknown**,
+never as delivered: asserting a delivery the bot did not observe is the bug this replaced.
+
+The warning DM carries **Appeal this** beside the acknowledgement. One appeal per warning, inside
+`appealWindowDays` (default 14), and **the window runs from delivery rather than from issue** — a
+member who never received the warning has nothing to contest yet, and a window counted from issue
+could expire before they ever saw it. `appealPermitted` is re-derived on the button and again on the
+modal, never carried from where the button was drawn: a DM sits in an inbox indefinitely. Filing one
+turns the row amber whatever its outcome (amber is "waiting on a human" everywhere else, and a green
+excusal under appeal is not settled) and the header counts it, so an appeal survives the
+"All reviewed" sentence. **No ping**: it is one assessment and the one-card rule owns it. The cost is
+that an appeal on a fully-decided queue waits until somebody looks; extending `reminderDue` to cover
+it is the obvious follow-up and was left out deliberately rather than guessed at. Upholding an appeal
+is `reopen`, which already deletes the warning; declining it leaves the outcome alone, marks the
+appeal decided and DMs the reason. The text goes to the row, the audit log, and `/mydata export`,
+which ships whole warning documents and so carries it for free.
 
 **Every review outcome asks why.** Warn, excuse, dismiss, reopen and each bulk action open a modal
 and require a reason; `showModal` cannot follow a defer, so the button only checks and opens, and
@@ -313,6 +368,18 @@ near-empty state.
 **Jobs** (`src/jobs/index.ts`): `shift-sweep` and `leave-transitions` every minute, `recaps` hourly,
 `week-close` at 00:05 in the accounting timezone. All are date-driven and idempotent, so a missed
 run self-heals.
+
+**A cached bitmap is committed after the write, never before.** `creditMinute` sets the bit on a
+copy and only assigns it into `hotDays` once `updateOne` has returned. Mutating the cached buffer
+first meant a failed write left the minute set in memory and absent from the document: every later
+call answered "already credited" and the minute was gone for good — beyond the reach of the nightly
+recompute too, which rebuilds `count` from the stored bitmap and so never knew about it.
+
+**`findStaffByDiscordId` is cached both ways.** `messageCreate` asks it of every message in a
+110,000 member guild before it knows the author is staff, so the miss is the common case and is
+cached as such. `ensureStaff`, `relinkStaff` and `setStaffActive` invalidate by Discord ID; hits and
+misses also expire after a minute, because `setTimezone` and its neighbours key on `staffId` and have
+no Discord ID to invalidate by, so a minute is the longest any gap can last.
 
 **Idempotent means the notifications too.** `fortnightAnchor` is the origin of the cycle, and
 `fortnightIndexFor` floors an unbounded division, so weeks before the anchor come back as *negative*

@@ -36,6 +36,11 @@ import { COLOUR } from "../render/theme.js";
 import { handleReviewBulkButton, handleReviewButton } from "./reviewButtons.js";
 import { handleReviewModal } from "./reviewModals.js";
 import { handleWarningButton } from "./warningButtons.js";
+import {
+    handleAppealButton,
+    handleAppealDeclineModal,
+    handleAppealModal
+} from "./appealButtons.js";
 import { handleScrubButton } from "./scrubButtons.js";
 import { handleLeaveButton } from "./leaveButtons.js";
 import { handleLeaveModal } from "./leaveModals.js";
@@ -46,6 +51,8 @@ import {
     handleConfigImportModal
 } from "./configTransferButtons.js";
 import {
+    APPEAL_DECLINE_MODAL,
+    APPEAL_MODAL,
     CONFIG_IMPORT_MODAL,
     REVIEW_BULK_MODAL,
     REVIEW_DECISION_MODAL
@@ -298,6 +305,21 @@ async function routeModal(
         return;
     }
 
+    // The member's own appeal, from the DM carrying their warning. Routed
+    // before the review modals: those are Executive work on somebody else's
+    // row, and this is the one modal whose author is its subject.
+    if (interaction.customId.startsWith(`${APPEAL_MODAL}:`)) {
+        await handleAppealModal(client, config, interaction);
+        return;
+    }
+
+    // The Executive's answer to one. Its own handler because it is the opposite
+    // permission: the appeal belongs to its subject, the decision does not.
+    if (interaction.customId.startsWith(`${APPEAL_DECLINE_MODAL}:`)) {
+        await handleAppealDeclineModal(client, config, interaction);
+        return;
+    }
+
     // Review decisions carry their reason in a modal, so they arrive here as
     // well. Routed before leave, which is the fallthrough.
     if (
@@ -357,6 +379,11 @@ async function routeButton(client: Client, interaction: import("discord.js").But
     }
     if (namespace === "warning") {
         await handleWarningButton(client, config, interaction, new ObjectId(first), second);
+        return;
+    }
+    // Lives on the member's warning DM, like the acknowledgement beside it.
+    if (namespace === "appeal") {
+        await handleAppealButton(client, config, interaction, first, second);
         return;
     }
     if (namespace === "leave") {

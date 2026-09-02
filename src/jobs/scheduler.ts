@@ -16,6 +16,13 @@ interface Job {
     next: NextRun;
     run: (at: Date) => Promise<void>;
     timer: NodeJS.Timeout | null;
+    /** Everything below is for /dev status. The schedule does not read it. */
+    lastRunAt: Date | null;
+    lastOutcome: "ok" | "failed" | null;
+    lastError: string | null;
+    nextRunAt: Date | null;
+    runs: number;
+    failures: number;
 }
 
 const jobs: Job[] = [];
@@ -25,7 +32,18 @@ let running = false;
 const MAX_DELAY = 2_147_483_647;
 
 export function schedule(name: string, next: NextRun, run: (at: Date) => Promise<void>): void {
-    const job: Job = { name, next, run, timer: null };
+    const job: Job = {
+        name,
+        next,
+        run,
+        timer: null,
+        lastRunAt: null,
+        lastOutcome: null,
+        lastError: null,
+        nextRunAt: null,
+        runs: 0,
+        failures: 0
+    };
     jobs.push(job);
     if (running) arm(job);
 }
@@ -33,6 +51,7 @@ export function schedule(name: string, next: NextRun, run: (at: Date) => Promise
 function arm(job: Job): void {
     const now = new Date();
     const target = job.next(now);
+    job.nextRunAt = target;
     const delay = Math.max(1000, target.getTime() - now.getTime());
 
     if (delay > MAX_DELAY) {
@@ -50,15 +69,57 @@ function arm(job: Job): void {
 
 async function fire(job: Job): Promise<void> {
     const at = new Date();
+    job.lastRunAt = at;
+    job.runs += 1;
     try {
         await job.run(at);
+        job.lastOutcome = "ok";
+        job.lastError = null;
         log.debug(`Job ${job.name} completed`);
     } catch (error) {
         // A failed job must not stop the schedule. The next run reconciles.
+        job.lastOutcome = "failed";
+        job.failures += 1;
+        job.lastError = error instanceof Error ? error.message : String(error);
         log.error(`Job ${job.name} failed`, error);
     } finally {
         arm(job);
     }
+}
+
+export interface JobStatus {
+    name: string;
+    lastRunAt: Date | null;
+    lastOutcome: "ok" | "failed" | null;
+    lastError: string | null;
+    nextRunAt: Date | null;
+    runs: number;
+    failures: number;
+}
+
+/**
+ * What each job has been doing. Read by /dev status and by nothing else.
+ *
+ * Every field was already implicit in the scheduler's own state; the only thing
+ * that had to be added was remembering the last run. Diagnosing a quiet bot
+ * meant reading container logs, which is a thing you can only do if you have the
+ * container.
+ */
+export function jobStatus(): JobStatus[] {
+    return jobs.map((job) => ({
+        name: job.name,
+        lastRunAt: job.lastRunAt,
+        lastOutcome: job.lastOutcome,
+        lastError: job.lastError,
+        nextRunAt: job.nextRunAt,
+        runs: job.runs,
+        failures: job.failures
+    }));
+}
+
+/** Whether the schedule is armed at all. False before boot finishes. */
+export function schedulerRunning(): boolean {
+    return running;
 }
 
 export function startScheduler(): void {

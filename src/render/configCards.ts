@@ -28,6 +28,7 @@ import {
     type RenderedMessage
 } from "./cards.js";
 import { COLOUR } from "./theme.js";
+import { formatDuration, ts } from "../time/format.js";
 import { emojiForColour } from "./emoji.js";
 
 /**
@@ -430,4 +431,93 @@ export function configImportCard(
     );
 
     return { components: [container], files: [], flags: V2_FLAGS | MessageFlags.Ephemeral };
+}
+
+/**
+ * The operator's card: what the bot is doing, and what is stopping it.
+ *
+ * `/dev status` is seededOnly, which is what lets this name a deployment switch
+ * at all. The rule that nothing user-facing names an environment variable holds
+ * for every card a Moderator can reach; this one is reachable only by the person
+ * who would have to go and change it, and telling them a switch exists without
+ * naming it makes the card useless. Same exemption `/dev purge` already has.
+ */
+export function devStatusCard(input: {
+    uptimeMs: number;
+    gatewayMs: number | null;
+    databaseOk: boolean;
+    schedulerRunning: boolean;
+    jobs: {
+        name: string;
+        lastRunAt: Date | null;
+        lastOutcome: "ok" | "failed" | null;
+        lastError: string | null;
+        nextRunAt: Date | null;
+        failures: number;
+    }[];
+    missingRequired: string[];
+    warnings: { key: string; text: string }[];
+    dangerousCommands: boolean;
+}): RenderedMessage {
+    // Red when something is actually broken, amber when something is merely
+    // unset or oddly configured, green when there is nothing to say. The
+    // accent is the summary; the reader should not have to find it in the text.
+    const broken =
+        !input.databaseOk ||
+        !input.schedulerRunning ||
+        input.jobs.some((job) => job.lastOutcome === "failed");
+    const unsettled = input.missingRequired.length > 0 || input.warnings.length > 0;
+    const colour = broken ? COLOUR.adverse : unsettled ? COLOUR.pending : COLOUR.approved;
+
+    const health = [
+        `**Up** ${formatDuration(input.uptimeMs)}`,
+        `**Gateway** ${input.gatewayMs === null || input.gatewayMs < 0 ? "not measured yet" : `${Math.round(input.gatewayMs)}ms`}`,
+        `**Database** ${input.databaseOk ? "reachable" : "**unreachable**"}`,
+        `**Scheduler** ${input.schedulerRunning ? `${input.jobs.length} jobs armed` : "**not running**"}`
+    ].join("\n");
+
+    const jobLines = input.jobs.map((job) => {
+        const last =
+            job.lastRunAt === null
+                ? "not yet run"
+                : `${job.lastOutcome === "failed" ? "⚠️ failed " : ""}${ts(job.lastRunAt, "R")}`;
+        const next = job.nextRunAt === null ? "not armed" : ts(job.nextRunAt, "R");
+        const failures = job.failures > 0 ? ` · ${job.failures} failure${job.failures === 1 ? "" : "s"}` : "";
+        return (
+            `**${job.name}** — ran ${last}, next ${next}${failures}` +
+            (job.lastError ? `\n-# ${job.lastError.slice(0, 180)}` : "")
+        );
+    });
+
+    const configLines: string[] = [];
+    if (input.missingRequired.length > 0) {
+        configLines.push(
+            `⚠️ **${input.missingRequired.length} required ${
+                input.missingRequired.length === 1 ? "key is" : "keys are"
+            } unset:** ${input.missingRequired.join(", ")}`
+        );
+    }
+    for (const warning of input.warnings) configLines.push(`⚠️ **${warning.key}** — ${warning.text}`);
+    if (configLines.length === 0) configLines.push("Everything required is set and nothing looks wrong.");
+
+    const container = new ContainerBuilder()
+        .setAccentColor(colour)
+        .addTextDisplayComponents(text(`### ${emojiForColour(colour)} Bot status\n${health}`))
+        .addSeparatorComponents(separator())
+        .addTextDisplayComponents(text(`### Jobs\n${jobLines.join("\n")}`))
+        .addSeparatorComponents(separator())
+        .addTextDisplayComponents(text(`### Configuration\n${configLines.join("\n\n")}`));
+
+    if (input.dangerousCommands) {
+        container.addSeparatorComponents(separator());
+        container.addTextDisplayComponents(
+            text(
+                "### ⚠️ Deployment\n**DEV_DANGEROUS_COMMANDS is on.** `/dev purge` can delete " +
+                    "real assessment history, not just rehearsals. Unset it and restart when " +
+                    "you are done."
+            )
+        );
+    }
+
+    return { components: [container], files: [], flags: V2_FLAGS };
 }

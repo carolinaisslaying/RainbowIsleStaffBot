@@ -92,6 +92,9 @@ async function ensureIndexes(target: Db): Promise<void> {
 
     const warnings = target.collection<WarningDoc>("warnings");
     await warnings.createIndex({ staffId: 1, issuedAt: -1 });
+    // The review row and the queue header both look a warning up by the
+    // assessment that issued it, on every redraw.
+    await warnings.createIndex({ assessmentId: 1 });
 
     const leave = target.collection<LeaveDoc>("leave");
     await leave.createIndex({ staffId: 1, startDate: -1 });

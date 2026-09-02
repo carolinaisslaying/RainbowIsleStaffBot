@@ -10,6 +10,7 @@ import {
     isAssessableFortnight,
     issueWarning,
     recordReview,
+    recordWarningDelivery,
     windowForIndex
 } from "../domain/assessments.js";
 import {
@@ -352,9 +353,12 @@ async function applyDecision(
     const outcome = OUTCOME_FOR[action];
     await recordReview(assessment._id, actorStaffId, outcome, reason);
 
-    if (action === "warn" && subject) {
-        await issueWarning(subject._id, assessment._id, actorStaffId, reason, rehearsal);
-    }
+    // Held, because the DM below carries its id on the appeal button and the
+    // delivery result is written back against it afterwards.
+    const issued =
+        action === "warn" && subject
+            ? await issueWarning(subject._id, assessment._id, actorStaffId, reason, rehearsal)
+            : null;
 
     await audit(`assessment.${action}`, {
         actorId: actorDiscordId,
@@ -390,6 +394,11 @@ async function applyDecision(
                 ? await tryDm(client, subject.discordId, {
                       ...warningDmCard({
                           warningId: assessment._id.toHexString(),
+                          // A rehearsal's warning is not real, so it gets no
+                          // appeal: there would be nothing to decide and the
+                          // row it points at is going to be purged.
+                          appealId: rehearsal ? null : (issued?._id.toHexString() ?? null),
+                          appealWindowDays: config.appealWindowDays,
                           windowLabel: label,
                           totalMinutes: assessment.totalMinutes,
                           requiredMinutes: assessment.requiredMinutes,
@@ -405,6 +414,11 @@ async function applyDecision(
                       )
                   });
     }
+
+    // What actually happened to the DM, against the warning it carried. This is
+    // what lets the row say "never delivered" instead of "not yet
+    // acknowledged", which is the same silence and a completely different fact.
+    if (issued) await recordWarningDelivery(issued._id, messaged);
 
     return {
         title: `${outcome[0].toUpperCase()}${outcome.slice(1)}`,

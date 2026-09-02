@@ -11,6 +11,12 @@ import {
 } from "../domain/assessments.js";
 import { permittedScrub, scrubPreview } from "../domain/scrub.js";
 import { env } from "../config/env.js";
+import { loadConfig } from "../config/guildConfig.js";
+import { configWarnings } from "../config/configGuards.js";
+import { db } from "../db/client.js";
+import { jobStatus, schedulerRunning } from "../jobs/scheduler.js";
+import { devStatusCard, setupStatus } from "../render/configCards.js";
+import { log } from "../log.js";
 import { runFortnightAssessment, fortnightSummary } from "../services/assessmentService.js";
 import { rehearseRecap } from "../services/notifications.js";
 import { buildTeamRecap } from "../services/teamRecapService.js";
@@ -85,10 +91,50 @@ export const devCommand: Command = {
                         .setDescription("Rehearse the fortnight again once it is cleared")
                         .setRequired(false)
                 )
+        )
+        .addSubcommand((sub) =>
+            sub
+                .setName("status")
+                .setDescription("What the bot is doing, and what is stopping it")
         ),
 
     async execute({ client, config, interaction, staff }) {
         const sub = interaction.options.getSubcommand();
+
+        if (sub === "status") {
+            await defer(interaction, true);
+
+            // A real round trip rather than a cached flag: "the driver thinks it
+            // is connected" is exactly the thing that is wrong when this card is
+            // worth reading.
+            let databaseOk = true;
+            try {
+                await db().command({ ping: 1 });
+            } catch (error) {
+                databaseOk = false;
+                log.error("Database ping failed during /dev status", error);
+            }
+
+            const fresh = await loadConfig();
+            await respond(
+                interaction,
+                devStatusCard({
+                    uptimeMs: Math.round(process.uptime() * 1000),
+                    // discord.js reports -1 until the first heartbeat lands.
+                    gatewayMs: client.ws.ping,
+                    databaseOk,
+                    schedulerRunning: schedulerRunning(),
+                    jobs: jobStatus(),
+                    missingRequired: setupStatus(fresh).missingRequired,
+                    warnings: configWarnings(fresh, new Date()).map((warning) => ({
+                        key: String(warning.key),
+                        text: warning.text
+                    })),
+                    dangerousCommands: env.devDangerousCommands
+                })
+            );
+            return;
+        }
 
         if (sub === "assess") {
             await defer(interaction, true);
