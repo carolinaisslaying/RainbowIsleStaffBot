@@ -29,7 +29,7 @@ describe("who may issue a conduct warning", () => {
         const result = ask({ issuerTier: "lead" });
         expect(result.ok).toBe(false);
         if (result.ok) return;
-        expect(result.reason).toContain("Executive only");
+        expect(result.reason).toContain("Only an Executive can issue");
     });
 
     it("refuses a staff member", () => {
@@ -48,7 +48,7 @@ describe("who may receive one", () => {
         const result = ask({ subjectTier: "executive" });
         expect(result.ok).toBe(false);
         if (result.ok) return;
-        expect(result.reason).toContain("Executives cannot be warned");
+        expect(result.reason).toContain("cannot warn an Executive");
     });
 
     it("refuses somebody who is not Moderation staff", () => {
@@ -79,7 +79,7 @@ describe("who may receive one", () => {
         const result = ask({ issuerTier: "lead", subjectTier: "executive" });
         expect(result.ok).toBe(false);
         if (result.ok) return;
-        expect(result.reason).toContain("Executive only");
+        expect(result.reason).toContain("Only an Executive can issue");
     });
 
     it("reports self-warning before departure", () => {

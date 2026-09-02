@@ -100,13 +100,13 @@ describe("what a rung does to the record", () => {
     });
 
     it("names the number of days for a rung that expires", () => {
-        expect(tierConsequenceLine(90)).toContain("**Counts for 90 days**");
-        expect(tierConsequenceLine(180)).toContain("**Counts for 180 days**");
+        expect(tierConsequenceLine(90)).toContain("**Counts for 90 days.**");
+        expect(tierConsequenceLine(180)).toContain("**Counts for 180 days.**");
     });
 
-    it("says the record keeps it either way", () => {
+    it("says the record keeps it whichever rung it is", () => {
         for (const days of [0, 90, 180]) {
-            expect(tierConsequenceLine(days)).toContain("stays on the record");
+            expect(tierConsequenceLine(days)).toContain("The record keeps it");
         }
     });
 

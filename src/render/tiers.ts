@@ -4,20 +4,19 @@ import { COLOUR } from "./theme.js";
 /**
  * How a rung of the conduct ladder presents itself, in one place.
  *
- * The same tier appears on four surfaces — the member's DM, the card in the
- * warning channel, the record list and the review row — and it looked identical
- * on all of them at every rung. A colleague reading the log said they could not
- * see any difference at all until they really looked, which for a disciplinary
- * record is a defect rather than a matter of taste.
+ * A tier shows up on four surfaces: the member's DM, the card in the warning
+ * channel, the record list, and the review row. All four drew every rung the
+ * same way, and a colleague reading the log told us they could not tell the
+ * rungs apart without stopping to read the word.
  *
- * So severity is carried four ways at once, and every one of them lives here:
- * an accent colour, a heading size, a mark, and a sentence about what the rung
- * actually does to the record. Nothing at a call site picks any of them, so the
- * four surfaces cannot drift from each other the way they already had.
+ * Four signals now carry severity, and this file holds all four: an accent
+ * colour, a heading size, a mark, and a sentence naming what the rung does to
+ * the record. No call site picks any of them, which is how the four surfaces
+ * drifted apart in the first place.
  *
- * Colour alone would not be enough even if it were consistent: roughly one man
- * in twelve cannot separate the gold from the red reliably, and a notification
- * preview shows the mark and the text before it shows any accent at all.
+ * Colour on its own would not carry it. About one man in twelve cannot tell the
+ * gold from the red, and a notification preview shows the mark and the text
+ * before it shows an accent.
  */
 export interface TierStyle {
     /** What it is called. Never "minor": all three are formal written warnings. */
@@ -30,15 +29,14 @@ export interface TierStyle {
      */
     emoji: string;
     /**
-     * Discord's heading markup, climbing with the rung. `#` is the largest
-     * thing Discord renders, and the top rung gets it: a warning that never
-     * expires should not be the same size on the page as one that lapses in
-     * ninety days.
+     * Discord's heading markup, climbing with the rung. `#` renders largest,
+     * and the top rung takes it. A warning that never expires should not sit
+     * on the page at the same size as one that lapses in ninety days.
      */
     heading: string;
     /**
-     * The same escalation for a list, where a page of `#` headings would be
-     * unreadable. The top rung still steps up; the other two stay inline.
+     * The same escalation in a list, where a page of `#` headings turns into a
+     * wall. The top rung still steps up and the other two stay inline.
      */
     listHeading: string;
     /** Ordering, lowest first. Used to sort a record so the worst reads last. */
@@ -80,23 +78,23 @@ export const TIERS_BY_RANK: readonly ConductTier[] = (
 /**
  * What the rung does to the record, as a sentence, bold on every surface.
  *
- * This is the part with actual consequences and the only thing that genuinely
- * differs between rungs, so it is stated as plainly as the name is — not left
- * as a footnote for somebody to find. Never says what happens next: the bot
- * does not escalate and must not imply that it will.
+ * The lifetime is what separates one rung from another, so it reads at the
+ * same weight as the name instead of sitting in a footnote. It never says what
+ * happens next, because the bot does not escalate and should not hint that it
+ * might.
  */
 export function tierConsequenceLine(days: number): string {
     return days <= 0
-        ? "**This never stops counting.** It stays on the record permanently."
-        : `**Counts for ${days} days**, then stops counting. It stays on the record either way.`;
+        ? "**This never stops counting.** The record keeps it for good."
+        : `**Counts for ${days} days.** The record keeps it after that.`;
 }
 
 /**
  * The title a warning card leads with, at the weight its rung earns.
  *
- * An activity warning has no rung and takes the plain form: it is issued off a
- * figure the bot computed, and dressing it in the conduct ladder's colours
- * would say something about it that nobody decided.
+ * An activity warning has no rung and takes the plain form. The bot computed
+ * the figure behind it, so dressing it in the conduct ladder's colours would
+ * claim a severity no Executive chose.
  */
 export function tierTitle(tier: ConductTier | null, inList = false): string {
     if (!tier) return "### ⚠️ Activity warning";

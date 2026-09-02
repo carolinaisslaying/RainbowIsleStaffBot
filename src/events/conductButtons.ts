@@ -111,14 +111,14 @@ export async function handleConductWarnModal(
             `**${name}** (<@${subjectDiscordId}>)\n\n` +
                 `**Why:** ${reason}\n\n` +
                 (days <= 0
-                    ? "This stays on their record permanently and does not stop counting."
-                    : `This counts against them for ${days} days.`) +
+                    ? "It never stops counting against them."
+                    : `It counts against them for ${days} days.`) +
                 "\n\n" +
                 (delivered
-                    ? "They have been messaged and can appeal it."
-                    : "⚠️ **They could not be messaged.** Their direct messages are closed, so " +
-                      "they have not seen this. It stands on the record either way, and the " +
-                      "appeal window has not opened because nothing reached them.") +
+                    ? "They have the message and can appeal it."
+                    : "⚠️ **Their direct messages are closed, so they did not get it.** The " +
+                      "warning stands on their record. Their appeal window stays shut until " +
+                      "something reaches them, so tell them yourself.") +
                 (config.warningChannelId ? "" : "\n\n-# No warning channel is configured, so " +
                     "there is no card for this in the log."),
             { colour: delivered ? COLOUR.pending : COLOUR.adverse, ephemeral: true }
@@ -150,7 +150,7 @@ export async function handleConductButton(
             interaction,
             noticeCard(
                 "Already withdrawn",
-                "Somebody got to this one first. The card shows where it stands.",
+                "Another Executive withdrew it. Its card shows where it stands.",
                 { colour: COLOUR.settled }
             )
         );
@@ -195,7 +195,7 @@ export async function handleConductWithdrawModal(
             interaction,
             noticeCard(
                 "Already withdrawn",
-                "Somebody got to this one first, and their reason is the one on the record.",
+                "Another Executive withdrew it first, and their reason is the one on record.",
                 { colour: COLOUR.settled }
             )
         );
@@ -215,11 +215,11 @@ export async function handleConductWithdrawModal(
     const told = subject
         ? await tryDm(client, subject.discordId, {
               ...noticeCard(
-                  "A warning against you has been withdrawn",
-                  "It counts against you nowhere, and no longer forms part of your total.\n\n" +
+                  "An Executive has withdrawn a warning against you",
+                  "It no longer counts against you.\n\n" +
                       `**Why:** ${reason}\n\n` +
-                      "-# It stays on your record marked as withdrawn, so the record says what " +
-                      "happened rather than showing a gap.",
+                      "-# Your record still lists it, marked withdrawn, so it shows what " +
+                      "happened instead of a gap.",
                   { colour: COLOUR.settled }
               )
           })
@@ -231,11 +231,11 @@ export async function handleConductWithdrawModal(
         interaction,
         noticeCard(
             "Withdrawn",
-            "It counts against them nowhere. The record keeps both reasons, so it says what " +
-                `happened rather than showing a gap.\n\n**Why:** ${reason}\n\n` +
+            `It no longer counts against them.\n\n**Why:** ${reason}\n\n` +
+                "-# Their record keeps both reasons, yours and the one it was issued for.\n\n" +
                 (told
-                    ? "They have been told."
-                    : "⚠️ They could not be told: their direct messages are closed."),
+                    ? "They have the message."
+                    : "⚠️ Their direct messages are closed, so they did not get the message."),
             { colour: COLOUR.settled, ephemeral: true }
         )
     );

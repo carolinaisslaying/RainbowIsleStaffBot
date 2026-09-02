@@ -5,11 +5,10 @@ import type { Tier } from "./permissions.js";
 /**
  * Who may be warned for conduct, and by whom.
  *
- * Pure, and taking every fact as an argument, so the cases can be enumerated
- * without a guild or a database. The rules are narrower than for an activity
- * warning, and deliberately so: an activity warning is issued off a figure the
- * bot computed, and this one is issued off somebody's judgement about a
- * colleague.
+ * Pure, and taking every fact as an argument, so a test can enumerate the cases
+ * without a guild or a database. These rules run narrower than the ones for an
+ * activity warning. The bot computes the figure behind an activity warning; an
+ * Executive forms a judgement about a colleague behind this one.
  */
 
 export type ConductRefusal = { ok: false; reason: string };
@@ -29,8 +28,8 @@ export function conductWarningPermitted(options: {
         return {
             ok: false,
             reason:
-                "Issuing a warning is Executive only. Leads can read the record and the " +
-                "warning history, and that is the whole of it."
+                "Only an Executive can issue a warning. Leads can read the record and the " +
+                "warning history."
         };
     }
 
@@ -38,22 +37,21 @@ export function conductWarningPermitted(options: {
         return {
             ok: false,
             reason:
-                "You cannot warn yourself. A self-issued warning is either theatre or a way " +
-                "to pre-empt somebody else's, and neither belongs on a record."
+                "You cannot warn yourself. Ask another Executive to look at it."
         };
     }
 
-    // An Executive is not warnable through this bot at all. Conduct at that
-    // level is not something one peer should be able to put on another's
-    // permanent record unilaterally, and there is no second signature here to
-    // make that safe. It is handled outside the bot, on purpose.
+    // Nobody can warn an Executive here. This bot takes one person's word and
+    // writes it to a permanent record with no second signature, which is too
+    // much power to hand one peer over another. That conversation happens
+    // outside the bot.
     if (options.subjectTier === "executive") {
         return {
             ok: false,
             reason:
-                "Executives cannot be warned through this bot. That is deliberate: a warning " +
-                "here is one person's decision, with no second signature, and it would go on " +
-                "a peer's permanent record. Handle it outside the bot."
+                "You cannot warn an Executive here. One person deciding this alone would put " +
+                "it on a peer's permanent record with nobody signing off on it. Take it up " +
+                "outside the bot."
         };
     }
 
@@ -61,8 +59,7 @@ export function conductWarningPermitted(options: {
         return {
             ok: false,
             reason:
-                "They are not Moderation staff, so there is no record to warn against and " +
-                "nothing this bot can serve on them."
+                "They are not Moderation staff, so they have no record to warn against."
         };
     }
 
@@ -70,8 +67,8 @@ export function conductWarningPermitted(options: {
         return {
             ok: false,
             reason:
-                "They have left the team, so there is nobody to serve a warning on. Their " +
-                "record is kept as it stands."
+                "They have left the team, so nobody can serve a warning on them. Their record " +
+                "stays as it is."
         };
     }
 
@@ -81,8 +78,8 @@ export function conductWarningPermitted(options: {
 /**
  * Whether a string names a rung.
  *
- * The tier arrives from a modal, which is to say from the network, so it is
- * checked rather than cast.
+ * The tier arrives from a modal, which means it arrives from the network. So we
+ * check it instead of casting it.
  */
 export function isConductTier(value: string | null): value is ConductTier {
     return value === "caution" || value === "misconduct" || value === "seriousMisconduct";

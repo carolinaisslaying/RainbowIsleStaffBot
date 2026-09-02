@@ -8,7 +8,8 @@ import {
     findWarningById,
     windowForIndex
 } from "../domain/assessments.js";
-import { appealPermitted, appealWindowCloses } from "../domain/review.js";
+import { appealPermitted, appealWindowCloses, lifetimeDaysFor } from "../domain/review.js";
+import { tierConsequenceLine } from "../render/tiers.js";
 import { ensureStaff, findStaffByDiscordId, findStaffById } from "../domain/staff.js";
 import { fetchPublicMember, isExecutive, resolveTier } from "../domain/permissions.js";
 import { audit } from "../domain/audit.js";
@@ -33,17 +34,16 @@ import { log } from "../log.js";
 /**
  * A member answering back.
  *
- * The button lives on the warning DM, so the person pressing it is the person
- * it is about — but that is checked rather than assumed, the same way the
- * acknowledgement button checks it. The window and the one-appeal limit are
- * re-derived here and again on the modal submission, never carried from where
- * the button was drawn: a DM sits in an inbox indefinitely, and a guard
- * enforced only at render time is not a guard.
+ * The button lives on the warning DM, so whoever presses it should be the person
+ * it is about. We check that anyway, the same way the acknowledgement button
+ * does. The window and the one-appeal limit get re-derived here and again on the
+ * modal submission, never carried from where the button was drawn: a DM sits in
+ * an inbox for as long as it likes, and a guard that only runs at render time
+ * guards nothing.
  *
- * Nothing about the appeal is announced. The row turns amber and the header
- * counts it, which is where an Executive is already looking. A ping would be a
- * second message about one assessment, and the one-card rule exists to stop
- * exactly that.
+ * Filing an appeal announces nothing. The row turns amber and the header counts
+ * it, which is where an Executive is already looking. A ping would make one
+ * assessment into two messages, which is what the one-card rule exists to stop.
  */
 
 /** Both entry points need the same four facts, resolved the same way. */
@@ -63,8 +63,7 @@ async function resolveAppeal(
             ok: false as const,
             card: noticeCard(
                 "Nothing to appeal",
-                "That warning has been withdrawn. There is nothing left to contest, and " +
-                    "nothing on your record.",
+                "An Executive withdrew that warning. It no longer counts against you.",
                 { colour: COLOUR.settled }
             )
         };
@@ -89,9 +88,8 @@ async function resolveAppeal(
             permitted.reason === "already-filed"
                 ? noticeCard(
                       "Already appealed",
-                      "You have appealed this one. Your Executives have it and will decide " +
-                          "again; there is one appeal per warning so that a decision can " +
-                          "actually be reached.",
+                      "You have already appealed this one. Your Executives have it and will " +
+                          "decide again. You get one appeal per warning.",
                       { colour: COLOUR.settled }
                   )
                 : permitted.reason === "window-closed"
@@ -104,8 +102,8 @@ async function resolveAppeal(
                     )
                   : noticeCard(
                         "Nothing to appeal yet",
-                        "This warning was never delivered to you, so the appeal window has " +
-                            "not opened. Speak to the Executive team.",
+                        "This warning never reached you, so your appeal window has not " +
+                            "opened. Speak to the Executive team.",
                         { colour: COLOUR.settled }
                     );
         return { ok: false as const, card };
@@ -137,7 +135,7 @@ export async function handleAppealButton(
                 interaction,
                 noticeCard(
                     "Already answered",
-                    "This appeal has been decided, or the warning it was about is gone.",
+                    "Another Executive decided this appeal, or the warning it was about is gone.",
                     { colour: COLOUR.settled }
                 )
             );
@@ -234,9 +232,10 @@ export async function handleAppealModal(
         interaction,
         noticeCard(
             "Appeal filed",
-            "Your Executives can see it on the record beside the warning, and will decide " +
-                "again.\n\nThey may uphold it, which deletes the warning, or leave it standing " +
-                "and tell you why. Either way you will hear back here.",
+            "Your Executives can see it beside the warning on your record, and will decide " +
+                "again.\n\nIf they uphold it, the warning stops counting against you and " +
+                "your record shows it as withdrawn. If they leave it standing, they tell you " +
+                "why. You hear back here either way.",
             { colour: COLOUR.settled }
         )
     );
@@ -246,11 +245,10 @@ export async function handleAppealModal(
 /**
  * The Executive's answer, when the warning stands.
  *
- * The appeal is marked decided, the outcome is untouched, and the member is
- * told why — they asked a question and the silence would be its own answer.
- * Upholding an appeal does not come through here: that is reopen, which deletes
- * the warning and writes its own audit row, and remains the only path in this
- * codebase that removes one.
+ * We mark the appeal decided, leave the outcome alone, and tell the member why.
+ * They asked a question, and saying nothing would answer it badly. Upholding an
+ * appeal does not come through here. That is reopen, which withdraws the warning
+ * and writes its own audit row.
  */
 export async function handleAppealDeclineModal(
     client: Client,
@@ -276,7 +274,7 @@ export async function handleAppealDeclineModal(
             interaction,
             noticeCard(
                 "Already answered",
-                "Somebody got to this one first, or the warning has been withdrawn.",
+                "Another Executive decided it first, or the warning has gone.",
                 { colour: COLOUR.settled }
             )
         );
@@ -294,14 +292,19 @@ export async function handleAppealDeclineModal(
     });
 
     const subject = await findStaffById(warning.staffId);
+    // What the warning does to their record, taken from its own rung.
+    // This used to promise that it would "expire on its own in time", which is
+    // false of a Serious Misconduct warning and was being sent to somebody who
+    // had just had an appeal against one declined.
+    const consequence = tierConsequenceLine(lifetimeDaysFor(warning, config));
+
     const told = subject
         ? await tryDm(client, subject.discordId, {
               ...noticeCard(
                   "Your appeal has been decided",
-                  "The warning stands.\n\n" +
-                      `**Why:** ${reason}\n\n` +
-                      "It expires on its own in time, and you can still raise it with the " +
-                      "Executive team if you want to take it further.",
+                  `The warning stands.\n\n**Why:** ${reason}\n\n` +
+                      `${consequence}\n\n` +
+                      "-# Raise it with the Executive team if you want to take it further.",
                   { colour: COLOUR.pending }
               )
           })

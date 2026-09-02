@@ -21,8 +21,8 @@ import { log } from "../log.js";
 /**
  * Warnings that are not about attendance, and the log every warning lives in.
  *
- * The bot still never issues one by itself. An Executive decides, writes why,
- * and this records it, tells the member, and draws the card.
+ * The bot still issues nothing by itself. An Executive decides and writes why;
+ * this records it, tells the member, and draws the card.
  */
 
 /** Write the record. Delivery is recorded separately, once it is known. */
@@ -39,7 +39,7 @@ export async function issueConductWarning(options: {
         staffId: options.subjectStaffId,
         kind: "conduct",
         // A conduct warning belongs to no fortnight. Every path that reads this
-        // guards for null rather than assuming a fortnight exists.
+        // guards for null instead of assuming a fortnight exists.
         assessmentId: null,
         tier: options.tier,
         issuedBy: options.issuedBy,
@@ -67,10 +67,14 @@ export async function deliverConductWarning(
     subject: StaffDoc
 ): Promise<boolean> {
     const tier = warning.tier as ConductTier;
+    const issuer = await findStaffById(warning.issuedBy);
     const delivered = await tryDm(client, subject.discordId, {
         ...conductWarnDmCard({
             warningId: warning._id.toHexString(),
             tier,
+            // Named. "You have been issued a warning" hides the fact that a
+            // person decided this, and the member is owed that name.
+            issuedBy: issuer ? `<@${issuer.discordId}>` : "An Executive",
             consequence: tierConsequenceLine(lifetimeDaysFor(warning, config)),
             reason: warning.note,
             appealWindowDays: config.appealWindowDays,
@@ -141,12 +145,13 @@ export async function warningCardFor(
 /**
  * Post or refresh a warning's card in the log.
  *
- * Converges rather than appends: a card that already exists is edited, one that
- * has gone is reposted and its location updated. One warning is one card for its
- * whole life, from issued through acknowledged, appealed and withdrawn.
+ * Converges instead of appending. A card that exists gets edited; one that has
+ * gone gets reposted and its location updated. One warning keeps one card for
+ * its whole life, from issued through acknowledged, appealed and withdrawn.
  *
- * Silent when no channel is configured. A warning still issues and still counts;
- * only the channel copy is missing, the same way `recapChannelId` behaves.
+ * Does nothing when no channel is configured. The warning still issues and
+ * still counts, and only the channel copy goes missing, which is how
+ * `recapChannelId` already behaves.
  */
 export async function upsertWarningCard(
     client: Client,
@@ -156,8 +161,8 @@ export async function upsertWarningCard(
     const warning = await collections.warnings().findOne({ _id: warningId });
     if (!warning) return;
 
-    // A rehearsal's warning was never real and must not appear in a log that is
-    // read as the record of what has actually been issued.
+    // A rehearsal's warning was never real, and this channel is where people
+    // look to find out what has been issued.
     if (warning.rehearsal) return;
 
     const channel = await staffChannel(client, config, config.warningChannelId);
@@ -187,8 +192,7 @@ export async function upsertWarningCard(
                 { $set: { logChannelId: posted.channelId, logMessageId: posted.id } }
             );
     } catch (error) {
-        // The warning is issued either way. A log that could not be written is a
-        // missing card, not a missing warning.
+        // The warning is issued either way. Losing the card loses the card.
         log.error(`Could not post the warning card for ${warningId.toHexString()}`, error);
     }
 }

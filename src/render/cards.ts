@@ -777,7 +777,7 @@ function warningRowLines(row: WarningRow): string {
     const heading =
         row.kind === "conduct" && row.tier
             ? `${tierTitle(row.tier, true)} · ${ts(row.issuedAt, "D")}`
-            : `### ⚠️ Activity warning · ${ts(row.issuedAt, "D")}`;
+            : `⚠️ ${ts(row.issuedAt, "D")}`;
 
     const state = row.withdrawn
         ? " · _withdrawn_"
@@ -835,12 +835,11 @@ export function warningsCard(input: {
                         ? input.isSelf
                             ? "You have never been warned. Nothing is on your record."
                             : "They have never been warned. Nothing is on their record."
-                        : `**${input.tally.total}** currently count` +
-                          `${input.tally.total === 1 ? "s" : ""}, of ${input.rows.length} ` +
-                          "ever issued.\n-# A warning stays on the record whatever happens " +
-                          "to it. Activity warnings stop counting after " +
-                          `${input.expiryDays} days; a conduct warning runs on its own clock, ` +
-                          "and the most serious never stops counting."
+                        : `**${input.tally.total}** of ${input.rows.length} ` +
+                          `still count${input.tally.total === 1 ? "s" : ""} against ` +
+                          `${input.isSelf ? "you" : "them"}.\n` +
+                          "-# Each warning below says how long it counts for. Nothing ever " +
+                          "leaves the record, whether it still counts or not."
                     )
             )
         );
@@ -849,11 +848,11 @@ export function warningsCard(input: {
     // because they are not the same thing — one list would say they were.
     const sections: { title: string; rows: WarningRow[] }[] = [
         {
-            title: `Conduct — ${input.tally.conduct} counting`,
+            title: `Conduct (${input.tally.conduct} counting)`,
             rows: input.rows.filter((row) => row.kind === "conduct")
         },
         {
-            title: `Activity — ${input.tally.activity} counting`,
+            title: `Activity (${input.tally.activity} counting)`,
             rows: input.rows.filter((row) => row.kind === "activity")
         }
     ];
@@ -1610,8 +1609,8 @@ export function warningLogCard(input: {
           `${input.withdrawn.by}. It counts against them nowhere.\n` +
           `> ${input.withdrawn.reason.split("\n").join("\n> ")}`
         : input.delivery === "failed"
-          ? "⚠️ **Never delivered** — their direct messages are closed, so they have not seen " +
-            "this. It stands on the record either way."
+          ? "⚠️ **Never delivered.** Their direct messages are closed, so they have not seen " +
+            "this. It stands on their record regardless."
           : input.acknowledgedAt
             ? `-# ✅ Acknowledged ${ts(input.acknowledgedAt, "R")}`
             : input.delivery === "delivered"
@@ -1672,6 +1671,8 @@ export function warningLogCard(input: {
 export function conductWarnDmCard(input: {
     warningId: string;
     tier: ConductTier;
+    /** The Executive who issued it, as a mention. A warning has an author. */
+    issuedBy: string;
     consequence: string;
     reason: string;
     appealWindowDays: number;
@@ -1688,15 +1689,15 @@ export function conductWarnDmCard(input: {
         .addTextDisplayComponents(
             text(
                 `${tierTitle(input.tier)}\n` +
-                    "You have been issued a formal written warning.\n\n" +
+                    `${input.issuedBy} has issued you a formal written warning.\n\n` +
                     `${input.consequence}\n\n` +
                     `**What happened**\n> ${input.reason.split("\n").join("\n> ")}\n\n` +
                     (input.appealable
-                        ? "If you think this is wrong, or there is something we should know, " +
-                          `**appeal it** below. You have ${input.appealWindowDays} days, and ` +
-                          "one appeal.\n\n"
-                        : "If you think this is wrong, reply to the Executive team.\n\n") +
-                    `-# You can see everything held about you with ${cmd("mydata export")}.`
+                        ? "You can appeal this. Say what we have wrong, or what we did not " +
+                          `know, and another Executive decides again. You get one appeal, ` +
+                          `within ${input.appealWindowDays} days.\n\n`
+                        : "Reply to the Executive team if you want to contest this.\n\n") +
+                    `-# ${cmd("mydata export")} shows you everything this bot holds about you.`
             )
         )
         .addActionRowComponents(

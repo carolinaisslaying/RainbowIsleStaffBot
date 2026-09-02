@@ -288,13 +288,12 @@ export function reviewBulkModal(
 /**
  * The member's own account of a warning.
  *
- * Deliberately not called a "reason": the Executive gave a reason, and this is
- * the other side of it. The prompt asks what they want the Executives to know,
- * because a member reading "why are you appealing" writes a defence, and a
- * member reading this writes what actually happened.
+ * Not called a "reason". The Executive gave a reason; this is the other side of
+ * it. Ask a member why they are appealing and they write a defence. Ask what
+ * you should know and they write what happened.
  *
- * Longer than a decision reason. Somebody explaining a fortnight of their life
- * needs more room than somebody recording a verdict on it.
+ * Longer than a decision reason, because explaining a fortnight of your life
+ * takes more room than recording a verdict on it.
  */
 export function appealModal(warningId: string, windowLabel: string): ModalBuilder {
     return new ModalBuilder()
@@ -309,8 +308,8 @@ export function appealModal(warningId: string, windowLabel: string): ModalBuilde
             new LabelBuilder()
                 .setLabel("What should they know?")
                 .setDescription(
-                    "Anything that explains the fortnight, or anything you think the record " +
-                        "has wrong. You get one of these."
+                    "Anything that explains the fortnight, or anything the record has wrong. " +
+                        "You get one."
                 )
                 .setTextInputComponent(
                     new TextInputBuilder()
@@ -327,10 +326,10 @@ export function appealModal(warningId: string, windowLabel: string): ModalBuilde
 /**
  * An Executive leaving a warning standing after an appeal.
  *
- * A reason is required, as every other review outcome requires one, and this one
- * is read by the member rather than only by the queue: they asked a question and
- * this is the answer. Upholding an appeal has no modal of its own — that is
- * reopen, which already asks why and already deletes the warning.
+ * Every review outcome asks for a reason, and the member reads this one rather
+ * than only the queue. They asked a question; this answers it. Upholding an
+ * appeal needs no modal of its own, because reopen already asks why and already
+ * withdraws the warning.
  */
 export function appealDeclineModal(warningId: string, displayName: string): ModalBuilder {
     return new ModalBuilder()
@@ -345,8 +344,8 @@ export function appealDeclineModal(warningId: string, displayName: string): Moda
             new LabelBuilder()
                 .setLabel("Why does it stand?")
                 .setDescription(
-                    "They read this. Answer what they actually raised rather than restating " +
-                        "the original decision."
+                    "They read this. Answer what they raised instead of restating the " +
+                        "original decision."
                 )
                 .setTextInputComponent(
                     new TextInputBuilder()
@@ -363,19 +362,18 @@ export function appealDeclineModal(warningId: string, displayName: string): Moda
 /**
  * Deciding a chosen few rather than everybody.
  *
- * One modal carrying the whole decision: which rows, what outcome, and why.
- * The alternative was a card of buttons per member, which is a click per row on
- * the queue where clicking per row is exactly what the reader is trying to
- * avoid.
+ * One modal carries the whole decision: which rows, what outcome, and why. A
+ * card of buttons per member would cost a click per row, which is what anybody
+ * reaching for a bulk control wants to avoid.
  *
- * Nothing starts ticked. This is the subset path, so the safe empty state is
- * none: a mistimed submit decides nobody rather than everybody, and the button
- * beside it already exists for the everyone case.
+ * Nothing starts ticked. On the subset path an empty selection should decide
+ * nobody, so a mistimed submit costs nothing, and the button beside it already
+ * handles the everyone case.
  *
- * Discord caps a checkbox group at ten options, so a longer queue is offered its
- * first ten and told so. Decided rows leave the undecided set, so pressing the
- * button again offers the next ten — it converges without anybody having to hold
- * a page number.
+ * Discord caps a checkbox group at ten options. A longer queue gets its first
+ * ten and a line saying so. Decided rows drop out of the undecided set, so
+ * pressing the button again offers the next ten and the queue converges without
+ * anybody holding a page number.
  */
 export function reviewSubsetModal(input: {
     fortnightIndex: number;
@@ -464,14 +462,13 @@ export function reviewSubsetModal(input: {
 /**
  * Issuing a formal warning for conduct.
  *
- * The rung and the reason in one modal, because they are one decision. The rung
- * descriptions say what each does to the record rather than trying to define the
- * conduct — an Executive knows what happened; what they are choosing is how long
- * it should count for.
+ * The rung and the reason sit in one modal, because they are one decision. Each
+ * rung says what it does to the record instead of trying to define the conduct.
+ * You know what happened; you are choosing how long it counts for.
  *
- * The reason box is longer than a review decision's. This one is quoted to the
- * member in full and is the whole of what they are told, so it has room for a
- * message link and an account of what happened.
+ * The reason box runs longer than a review decision's. The member reads this one
+ * in full and gets nothing else, so it has room for a message link and an
+ * account of what happened.
  */
 export function conductWarnModal(input: {
     /** Carried in the id: this modal is opened from a command, so there is no
@@ -491,7 +488,7 @@ export function conductWarnModal(input: {
         .addLabelComponents(
             new LabelBuilder()
                 .setLabel("How serious?")
-                .setDescription("This decides how long the warning counts for, not how much.")
+                .setDescription("This sets how long the warning counts for.")
                 .setRadioGroupComponent(
                     new RadioGroupBuilder()
                         .setCustomId(FIELD_TIER)
@@ -508,7 +505,7 @@ export function conductWarnModal(input: {
             new LabelBuilder()
                 .setLabel("What happened?")
                 .setDescription(
-                    "They read this in full. Put message or image links in here if you have them."
+                    "They read this in full. Paste message or image links in here."
                 )
                 .setTextInputComponent(
                     new TextInputBuilder()
