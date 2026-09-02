@@ -120,12 +120,22 @@ describe("the total across a mixed record", () => {
 
     it("splits that total by kind without changing it", () => {
         const tally = warningTally(record, now, config);
-        expect(tally).toEqual({ total: 3, conduct: 2, activity: 1 });
+        expect(tally).toEqual({
+            total: 3,
+            conduct: 2,
+            activity: 1,
+            tiers: { caution: 0, misconduct: 1, seriousMisconduct: 1 }
+        });
         expect(tally.conduct + tally.activity).toBe(tally.total);
     });
 
     it("counts nothing on an empty record", () => {
-        expect(warningTally([], now, config)).toEqual({ total: 0, conduct: 0, activity: 0 });
+        expect(warningTally([], now, config)).toEqual({
+            total: 0,
+            conduct: 0,
+            activity: 0,
+            tiers: { caution: 0, misconduct: 0, seriousMisconduct: 0 }
+        });
     });
 
     it("keeps every entry on the record even when none of them count", () => {

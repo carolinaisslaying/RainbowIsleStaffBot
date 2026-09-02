@@ -11,10 +11,10 @@ import { lifetimeDaysFor } from "../domain/review.js";
 import { CONDUCT_TIERS, type ConductTier } from "../db/types.js";
 import type { StaffBotConfig } from "../config/guildConfig.js";
 import { conductWarnModal } from "../render/modals.js";
+import { TIER_STYLE } from "../render/tiers.js";
 import { staffDisplayName } from "../discord/displayName.js";
 import { EMOJI } from "../render/emoji.js";
 import {
-    CONDUCT_TIER_LABEL,
     containersMessage,
     errorCard,
     noticeCard,
@@ -137,7 +137,7 @@ export const adminCommand: Command = {
                     ),
                     tiers: CONDUCT_TIERS.map((value) => ({
                         value,
-                        label: CONDUCT_TIER_LABEL[value],
+                        label: TIER_STYLE[value].label,
                         description: describeTierLifetime(config, value)
                     }))
                 })

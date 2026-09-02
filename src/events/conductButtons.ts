@@ -3,7 +3,7 @@ import { ComponentType } from "discord.js";
 import { ObjectId } from "mongodb";
 import type { StaffBotConfig } from "../config/guildConfig.js";
 import { collections } from "../db/client.js";
-import { CONDUCT_TIER_LABEL } from "../render/cards.js";
+import { TIER_STYLE } from "../render/tiers.js";
 import { conductWarningPermitted, isConductTier } from "../domain/conduct.js";
 import { lifetimeDaysFor } from "../domain/review.js";
 import { withdrawWarning } from "../domain/assessments.js";
@@ -107,7 +107,7 @@ export async function handleConductWarnModal(
     await respond(
         interaction,
         noticeCard(
-            `${CONDUCT_TIER_LABEL[rawTier]} issued`,
+            `${TIER_STYLE[rawTier].emoji} ${TIER_STYLE[rawTier].label} issued`,
             `**${name}** (<@${subjectDiscordId}>)\n\n` +
                 `**Why:** ${reason}\n\n` +
                 (days <= 0

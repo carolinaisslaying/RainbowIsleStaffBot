@@ -27,6 +27,7 @@ import { describeFaces, renderFacePicker } from "./facePicker.js";
 import { formatDuration, formatMinutes, percent, ts } from "../time/format.js";
 import type { ReviewAction } from "../domain/review.js";
 import { EMOJI, emojiForColour } from "./emoji.js";
+import { TIER_STYLE, tierConsequenceLine, tierTitle } from "./tiers.js";
 import { COLOUR } from "./theme.js";
 
 /**
@@ -753,16 +754,12 @@ export function warningDmCard(input: {
  * just no longer counts, and hiding it would make the record disagree with the
  * member's own memory of it.
  */
-/** How each rung reads on a card. Never "minor": all of these are formal. */
-export const CONDUCT_TIER_LABEL: Record<ConductTier, string> = {
-    caution: "Caution",
-    misconduct: "Misconduct",
-    seriousMisconduct: "Serious Misconduct"
-};
 
 export interface WarningRow {
     kind: "activity" | "conduct";
     tier: ConductTier | null;
+    /** Days it counts for; zero is permanent. Shown at every rung. */
+    lifetimeDays: number;
     issuedAt: Date;
     issuedBy: string;
     note: string;
@@ -774,20 +771,31 @@ export interface WarningRow {
 
 /** One entry, in both the record view and, later, the log. */
 function warningRowLines(row: WarningRow): string {
+    // The rung leads the entry at its own weight. Five warnings used to read as
+    // five identical lines, so a Serious Misconduct sat in a list looking
+    // exactly like a Caution.
     const heading =
         row.kind === "conduct" && row.tier
-            ? `**${CONDUCT_TIER_LABEL[row.tier]}** · ${ts(row.issuedAt, "D")}`
-            : `**${ts(row.issuedAt, "D")}**`;
+            ? `${tierTitle(row.tier, true)} · ${ts(row.issuedAt, "D")}`
+            : `### ⚠️ Activity warning · ${ts(row.issuedAt, "D")}`;
 
     const state = row.withdrawn
         ? " · _withdrawn_"
         : row.spent
           ? " · _spent_"
-          : row.permanent
-            ? " · _permanent_"
-            : "";
+          : "";
 
-    const lines = [`${heading}${state}, by ${row.issuedBy}`, `> ${row.note}`];
+    const lines = [
+        `${heading}${state}`,
+        // Stated at every rung, in bold, because it is the thing that actually
+        // differs between them -- but not once it has been withdrawn, when it
+        // is no longer true of the record.
+        ...(row.withdrawn
+            ? []
+            : [tierConsequenceLine(row.permanent ? 0 : row.lifetimeDays)]),
+        `-# Issued by ${row.issuedBy}`,
+        `> ${row.note}`
+    ];
 
     if (row.withdrawn) {
         // Both reasons stay on the record: why it was issued, and why it was
@@ -1580,46 +1588,56 @@ export function warningLogCard(input: {
 }): RenderedMessage {
     const openAppeal = input.appeal !== null && input.withdrawn === null;
 
+    // The rung owns the accent here, which is the one place in this bot where
+    // colour means severity rather than state. Three rungs drawn in state
+    // colours were indistinguishable from each other, and severity is the thing
+    // a reader must not miss while scrolling past.
+    //
+    // Withdrawal is the exception to the exception. A withdrawn warning counts
+    // against nobody and was often taken back because it was wrong; leaving it
+    // the loudest red in the channel would misrepresent the record to anybody
+    // who did not stop to read. Grey-means-finished is the one state reading
+    // that survives everywhere else in the bot, and it survives here.
     const colour = input.withdrawn
         ? COLOUR.settled
+        : input.tier
+          ? TIER_STYLE[input.tier].colour
+          : COLOUR.adverse;
+
+    // State moved out of the accent, so it has to be unmistakable in words.
+    const stateLine = input.withdrawn
+        ? `${EMOJI.purge} **Withdrawn** ${ts(input.withdrawn.at, "R")} by ` +
+          `${input.withdrawn.by}. It counts against them nowhere.\n` +
+          `> ${input.withdrawn.reason.split("\n").join("\n> ")}`
         : input.delivery === "failed"
-          ? COLOUR.adverse
-          : openAppeal || input.acknowledgedAt === null
-            ? COLOUR.pending
-            : COLOUR.admin;
-
-    const heading =
-        input.kind === "conduct" && input.tier
-            ? CONDUCT_TIER_LABEL[input.tier]
-            : "Activity warning";
-
-    const lifetime = input.permanent
-        ? "Permanent — never stops counting"
-        : `Counts for ${input.lifetimeDays} days`;
+          ? "⚠️ **Never delivered** — their direct messages are closed, so they have not seen " +
+            "this. It stands on the record either way."
+          : input.acknowledgedAt
+            ? `-# ✅ Acknowledged ${ts(input.acknowledgedAt, "R")}`
+            : input.delivery === "delivered"
+              ? "-# 📨 Delivered, not yet acknowledged"
+              : "-# Not yet acknowledged";
 
     const lines = [
-        `### ${emojiForColour(colour)} ${heading}`,
+        tierTitle(input.tier),
         `**${input.displayName}** (${input.mention})`,
-        `-# Issued ${ts(input.issuedAt, "F")} by ${input.issuedBy} · ${lifetime}`,
+        // The consequence, at every rung, in bold. It is the only thing that
+        // genuinely differs between the rungs, so it reads as plainly as the
+        // name does rather than sitting in a footnote.
+        //
+        // Except once it has been withdrawn, when it is simply false: a
+        // withdrawn warning counts against nobody, and "this never stops
+        // counting" sitting above "it counts against them nowhere" is a card
+        // arguing with itself. The withdrawal line says what is true now.
+        ...(input.withdrawn
+            ? []
+            : [tierConsequenceLine(input.permanent ? 0 : input.lifetimeDays)]),
+        `-# Issued ${ts(input.issuedAt, "F")} by ${input.issuedBy}`,
         "",
-        `> ${input.reason.split("\n").join("\n> ")}`
+        `> ${input.reason.split("\n").join("\n> ")}`,
+        "",
+        stateLine
     ];
-
-    lines.push(
-        "",
-        input.withdrawn
-            ? `${EMOJI.purge} **Withdrawn** ${ts(input.withdrawn.at, "R")} by ` +
-              `${input.withdrawn.by}. It counts against them nowhere.\n` +
-              `> ${input.withdrawn.reason.split("\n").join("\n> ")}`
-            : input.delivery === "failed"
-              ? "⚠️ **Never delivered** — their direct messages are closed, so they have not " +
-                "seen this. It stands on the record either way."
-              : input.acknowledgedAt
-                ? `-# Acknowledged ${ts(input.acknowledgedAt, "R")}`
-                : input.delivery === "delivered"
-                  ? "-# Delivered, not yet acknowledged"
-                  : "-# Not yet acknowledged"
-    );
 
     if (openAppeal && input.appeal) {
         lines.push(
@@ -1654,20 +1672,25 @@ export function warningLogCard(input: {
 export function conductWarnDmCard(input: {
     warningId: string;
     tier: ConductTier;
-    tierLabel: string;
     consequence: string;
     reason: string;
     appealWindowDays: number;
     appealable: boolean;
 }): RenderedMessage {
+    const style = TIER_STYLE[input.tier];
+
+    // The rung is the heading, not a subtitle beneath a generic one. What this
+    // card has to convey in its first line is how serious it is; "You have been
+    // issued a formal warning" was identical at every rung and buried the one
+    // word that differed.
     const container = new ContainerBuilder()
-        .setAccentColor(COLOUR.adverse)
+        .setAccentColor(style.colour)
         .addTextDisplayComponents(
             text(
-                `### ${emojiForColour(COLOUR.adverse)} You have been issued a formal warning\n` +
-                    `**${input.tierLabel}**\n\n` +
+                `${tierTitle(input.tier)}\n` +
+                    "You have been issued a formal written warning.\n\n" +
+                    `${input.consequence}\n\n` +
                     `**What happened**\n> ${input.reason.split("\n").join("\n> ")}\n\n` +
-                    `-# ${input.consequence}\n\n` +
                     (input.appealable
                         ? "If you think this is wrong, or there is something we should know, " +
                           `**appeal it** below. You have ${input.appealWindowDays} days, and ` +

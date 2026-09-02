@@ -87,21 +87,3 @@ export function conductWarningPermitted(options: {
 export function isConductTier(value: string | null): value is ConductTier {
     return value === "caution" || value === "misconduct" || value === "seriousMisconduct";
 }
-
-/**
- * What the member is told a rung means.
- *
- * Written for the person receiving it, not for the Executive issuing it: it says
- * what the warning does to their record, because that is the part they cannot
- * look up. Never states a next step — the bot does not escalate and must not
- * imply that it will.
- */
-export function tierConsequence(tier: ConductTier, days: number): string {
-    if (days <= 0) {
-        return "This stays on your record permanently and does not stop counting.";
-    }
-    return (
-        `This counts against you for ${days} days, then stops counting. It stays on your ` +
-        "record either way."
-    );
-}

@@ -225,6 +225,29 @@ as raw text. Arguments go in the sentence beside the chip.
 **Nothing user-facing names a file, a repository or an environment variable.** The cards are read by
 Moderators. Operator detail belongs in `log.*`, which is where it now lives.
 
+**Severity is the one thing colour is allowed to mean instead of state.** `render/tiers.ts` holds
+`TIER_STYLE`, and every surface reads its accent, mark, heading size and consequence sentence from
+there — the DM, the log card, the record list and the review row's breakdown. Nothing at a call site
+picks any of them, because the four had already drifted into looking identical: a colleague reading
+the log said they could not see any difference between the rungs at all until they really looked,
+which for a disciplinary record is a defect and not a matter of taste.
+
+Four signals at once, deliberately. Colour climbs gold → amber → red, but colour alone would not be
+enough even if it were consistent: roughly one man in twelve cannot separate gold from red reliably,
+and a notification preview shows the mark and the text before any accent. So the heading also climbs
+`###` → `##` → `#`, the mark climbs ⚠️ → 🔶 → 🚨, and the consequence — the only thing that actually
+differs between the rungs — is stated in bold on every surface rather than left as a footnote.
+
+**Two exceptions, both load-bearing.** A **withdrawn** warning goes grey whatever its rung: grey
+means finished everywhere else in this bot, it counts against nobody, and one left blood red would
+misrepresent the record to anybody scrolling. It also drops the consequence line entirely, because
+"this never stops counting" sitting above "it counts against them nowhere" is a card arguing with
+itself. And an **activity** warning stays out of the ladder's colours: it is issued off a figure the
+bot computed, and dressing it in a rung would say something about it that nobody decided.
+
+In a list the top rung steps down to `###` and the others to no heading at all — five entries at `#`
+is a wall, not an escalation.
+
 **Emoji come from the colour, not from the call site.** `render/emoji.ts` maps each `COLOUR` value
 to one mark and `noticeCard` prefixes the title with it, so the forty-odd cards that already declare
 their state by accent get the matching emoji for free and the two cannot drift. Two pairs of roles

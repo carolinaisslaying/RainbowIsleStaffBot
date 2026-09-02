@@ -4,16 +4,15 @@ import type { ConductTier, StaffDoc, WarningDoc } from "../db/types.js";
 import type { StaffBotConfig } from "../config/guildConfig.js";
 import { collections } from "../db/client.js";
 import { deliveryState, lifetimeDaysFor } from "../domain/review.js";
-import { tierConsequence } from "../domain/conduct.js";
 import { findStaffById } from "../domain/staff.js";
 import { recordWarningDelivery } from "../domain/assessments.js";
 import { staffChannel } from "./leaveService.js";
 import {
-    CONDUCT_TIER_LABEL,
     conductWarnDmCard,
     warningLogCard,
     type RenderedMessage
 } from "../render/cards.js";
+import { tierConsequenceLine } from "../render/tiers.js";
 import { sendOptions } from "../discord/respond.js";
 import { tryDm } from "../discord/roles.js";
 import { staffDisplayName } from "../discord/displayName.js";
@@ -72,8 +71,7 @@ export async function deliverConductWarning(
         ...conductWarnDmCard({
             warningId: warning._id.toHexString(),
             tier,
-            tierLabel: CONDUCT_TIER_LABEL[tier],
-            consequence: tierConsequence(tier, lifetimeDaysFor(warning, config)),
+            consequence: tierConsequenceLine(lifetimeDaysFor(warning, config)),
             reason: warning.note,
             appealWindowDays: config.appealWindowDays,
             // The appeal window runs from delivery, so a warning that never

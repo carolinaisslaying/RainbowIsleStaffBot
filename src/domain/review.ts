@@ -308,13 +308,32 @@ export function warningTally(
     warnings: WarningLike[],
     now: Date,
     config: WarningExpiryConfig
-): { total: number; conduct: number; activity: number } {
+): {
+    total: number;
+    conduct: number;
+    activity: number;
+    /** Counting conduct warnings, per rung. Absent rungs are zero. */
+    tiers: Record<ConductTier, number>;
+} {
     const counting = warnings.filter((warning) => countsNow(warning, now, config));
-    const conduct = counting.filter((warning) => warning.kind === "conduct").length;
+    const conduct = counting.filter((warning) => warning.kind === "conduct");
+
+    const tiers: Record<ConductTier, number> = {
+        caution: 0,
+        misconduct: 0,
+        seriousMisconduct: 0
+    };
+    for (const warning of conduct) {
+        // A conduct warning with no rung is read as the middle one everywhere
+        // else, so it is counted there too rather than dropped.
+        tiers[warning.tier ?? "misconduct"] += 1;
+    }
+
     return {
         total: counting.length,
-        conduct,
-        activity: counting.length - conduct
+        conduct: conduct.length,
+        activity: counting.length - conduct.length,
+        tiers
     };
 }
 
@@ -327,16 +346,24 @@ export function warningWeightLine(tally: {
     total: number;
     conduct: number;
     activity: number;
+    tiers?: Record<ConductTier, number>;
 }): string {
     if (tally.total === 0) return "No warnings currently count against them.";
 
     // One total, because a warning is a warning and that is what the member is
-    // told they have. The breakdown, because activity and conduct are not the
-    // same thing and a bare number would say they were — an Executive deciding
-    // an attendance shortfall should see that the member also has conduct
-    // history, without the card pretending the two weigh differently.
+    // told they have. The breakdown names the rungs rather than saying "2
+    // conduct", because an Executive deciding an attendance shortfall should
+    // see whether that conduct history is two Cautions or a Serious Misconduct
+    // — those are different facts and the card should not flatten them.
     const parts: string[] = [];
-    if (tally.conduct > 0) parts.push(`${tally.conduct} conduct`);
+    if (tally.tiers) {
+        for (const tier of ["seriousMisconduct", "misconduct", "caution"] as const) {
+            const count = tally.tiers[tier];
+            if (count > 0) parts.push(`${count} ${TIER_NAME[tier]}`);
+        }
+    } else if (tally.conduct > 0) {
+        parts.push(`${tally.conduct} conduct`);
+    }
     if (tally.activity > 0) parts.push(`${tally.activity} activity`);
 
     return (
@@ -345,6 +372,19 @@ export function warningWeightLine(tally: {
         `This would be their ${ordinal(tally.total + 1)}.`
     );
 }
+
+/**
+ * Rung names for the one line in the domain layer that has to say them.
+ *
+ * Duplicated from `render/tiers.ts` on purpose: `domain/` holds no rendering
+ * and imports nothing from `render/`, and one line of prose is a smaller cost
+ * than pointing the dependency arrow backwards. The test asserts they match.
+ */
+const TIER_NAME: Record<ConductTier, string> = {
+    caution: "Caution",
+    misconduct: "Misconduct",
+    seriousMisconduct: "Serious Misconduct"
+};
 
 function ordinal(value: number): string {
     const tens = value % 100;

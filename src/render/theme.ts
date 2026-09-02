@@ -37,7 +37,27 @@ export const COLOUR = {
     /** Configuration and administration. */
     admin: 0x5865f2,
     /** Something to celebrate. */
-    milestone: 0xffd60a
+    milestone: 0xffd60a,
+
+    /**
+     * The conduct ladder, and the one place colour means severity rather than
+     * state.
+     *
+     * Everywhere else in this bot the accent says what a card is waiting on.
+     * A warning card is the deliberate exception: the rung is the thing a
+     * reader must not miss while scrolling, and state is something they can
+     * read. It earned the exception — three rungs drawn identically were
+     * indistinguishable until somebody looked closely, which is the opposite
+     * of what a disciplinary record should do.
+     *
+     * The values are the palette's existing gold, amber and red rather than new
+     * ones: they are already tuned against Discord's dark background, and a
+     * fourth red would be the only red in the bot that is not `adverse`. Named
+     * separately so the intent is explicit even though the values are shared.
+     */
+    caution: 0xf0b232,
+    misconduct: 0xff9f0a,
+    seriousMisconduct: 0xff453a
 } as const;
 
 /**

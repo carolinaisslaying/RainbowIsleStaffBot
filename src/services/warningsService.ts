@@ -54,6 +54,7 @@ export async function warningsViewFor(
                       reason: warning.withdrawalReason ?? ""
                   }
                 : null,
+            lifetimeDays: lifetimeDaysFor(warning, config),
             permanent: lifetimeDaysFor(warning, config) <= 0,
             spent: !warning.withdrawnAt && warningIsSpent(warning, now, config)
         });

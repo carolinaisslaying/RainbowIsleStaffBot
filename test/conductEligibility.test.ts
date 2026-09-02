@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ObjectId } from "mongodb";
-import {
-    conductWarningPermitted,
-    isConductTier,
-    tierConsequence
-} from "../src/domain/conduct.js";
+import { conductWarningPermitted, isConductTier } from "../src/domain/conduct.js";
 import type { Tier } from "../src/domain/permissions.js";
 
 const issuer = new ObjectId();
@@ -108,28 +104,5 @@ describe("the tier arriving from a modal", () => {
         expect(isConductTier("")).toBe(false);
         expect(isConductTier("minor")).toBe(false);
         expect(isConductTier("SeriousMisconduct")).toBe(false);
-    });
-});
-
-describe("what the member is told a rung means", () => {
-    it("names the number of days for a rung that expires", () => {
-        const text = tierConsequence("caution", 90);
-        expect(text).toContain("90 days");
-        expect(text).toContain("stays on your record");
-    });
-
-    it("says permanent for a rung that never expires", () => {
-        const text = tierConsequence("seriousMisconduct", 0);
-        expect(text).toContain("permanently");
-        expect(text).not.toContain("0 days");
-    });
-
-    it("never implies a next step", () => {
-        // The bot does not escalate and must not suggest that it will.
-        for (const days of [0, 90, 180]) {
-            const text = tierConsequence("misconduct", days);
-            expect(text.toLowerCase()).not.toContain("dismiss");
-            expect(text.toLowerCase()).not.toContain("final");
-        }
     });
 });

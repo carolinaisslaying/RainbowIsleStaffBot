@@ -283,11 +283,17 @@ not by how formal they are — everything issued through this bot is a formal
 written warning, and informal correction happens in a DM and never reaches the
 record:
 
-| Rung | Counts for |
-| --- | --- |
-| Caution | 90 days |
-| Misconduct | 180 days |
-| Serious Misconduct | never stops counting |
+| Rung | Counts for | Reads as |
+| --- | --- | --- |
+| ⚠️ Caution | 90 days | gold, small heading |
+| 🔶 Misconduct | 180 days | amber, larger |
+| 🚨 Serious Misconduct | never stops counting | red, largest heading Discord renders |
+
+Severity is carried four ways at once — colour, heading size, mark and a bold
+line saying what the rung does to the record — because colour alone fails a
+colour-blind reader and never survives a notification preview. A withdrawn
+warning goes grey whatever its rung: it counts against nobody, and leaving it
+red would misrepresent the record.
 
 Each is a config key, and `0` means permanent. Every warning still weighs one:
 the rung decides how long it counts, never how much, and the bot never adds them
@@ -437,7 +443,7 @@ instead. Say the word and I will add the linter.
 pnpm test
 ```
 
-578 tests covering what section 17 requires: week and fortnight boundary maths
+596 tests covering what section 17 requires: week and fortnight boundary maths
 including DST in both directions in a non-UTC zone, fortnight index derivation
 from the anchor, bitmap set/popcount/cross-day window summation, crediting
 idempotency, the shift state machine including a pause spanning a UTC day
