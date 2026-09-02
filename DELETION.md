@@ -1,10 +1,17 @@
 # Deletion procedure
 
-The bot deletes in three places, all of them Executive-only, all of them
-confirmed, and all of them writing the audit row before anything goes: **Purge
-this record** on a leave card, **Reopen** on a fortnight review row, and
-`/dev purge`. Everything else is removed by hand, with `mongosh`, by someone
-who has decided to do it.
+The bot deletes in two places, both Executive-only, both confirmed, and both
+writing the audit row before anything goes: **Purge this record** on a leave
+card, and `/dev purge`. Everything else is removed by hand, with `mongosh`, by
+someone who has decided to do it.
+
+**No path in this bot deletes a warning.** Withdrawing one — by reopening a
+review row, by the button on its card in the warning channel, or by upholding an
+appeal — marks the record withdrawn and leaves it in place, carrying both
+reasons: why it was issued and why it was taken back. A withdrawn warning counts
+against nobody, and shows on the record as withdrawn. The only warnings that are
+ever removed are the ones `/dev purge` takes with the fortnight that issued them,
+and a conduct warning belongs to no fortnight, so a purge never touches one.
 
 That one exception exists because removing a leave record was the only routine
 removal, and asking an Executive to open a database shell for it meant either
@@ -19,11 +26,19 @@ buttons will and will not do.
 **Reopen**, on a decided row in the fortnight review channel.
 
 - Executive only, and it asks for a reason like every other review outcome.
-- Deletes the `warnings` documents that row issued, and clears the outcome,
-  the reviewer and the note from the `fortnightAssessments` document. The
-  assessment itself is not deleted: the figures stand, only the decision goes.
-- This is the **only** way a warning is ever removed. There is no separate
-  delete, so every withdrawal is a reviewed decision with a reason attached.
+- **Withdraws** the `warnings` documents that row issued — sets `withdrawnAt`,
+  `withdrawnBy` and `withdrawalReason` on them — and clears the outcome, the
+  reviewer and the note from the `fortnightAssessments` document. The assessment
+  itself is not deleted: the figures stand, only the decision goes.
+- Nothing is removed. This used to delete the warning outright, which left the
+  audit log as the only trace that it had existed; the record now says what
+  happened instead. A withdrawn warning counts against nobody and is shown on
+  the member's own record marked as withdrawn.
+- A row that is warned, reopened and warned again carries two warning documents:
+  one withdrawn and one standing. That is the history, and it is correct.
+- Warnings withdrawn this way from **before** this change are simply gone — they
+  were deleted at the time, and nothing reconstructs them. The audit rows for
+  those reopenings remain the only record of them.
 - The member is told the decision was withdrawn, unless it was a dismissal:
   they were never told about that one, and announcing its reversal would raise
   the issue the silence existed to avoid.

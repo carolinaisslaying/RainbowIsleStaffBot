@@ -10,7 +10,7 @@ import type { StaffBotConfig } from "../config/guildConfig.js";
 import {
     belowThresholdFor,
     clearReview,
-    deleteWarningsFor,
+    withdrawWarningsFor,
     findAssessment,
     isAssessableFortnight,
     issueWarning,
@@ -426,7 +426,14 @@ async function applyDecision(
     const label = labelWindow(window.week1Start, window.end, config.accountingTimezone);
 
     if (action === "reopen") {
-        const removed = await deleteWarningsFor(assessment._id);
+        // Marked withdrawn, not deleted. The record keeps both reasons and
+        // counts nowhere; the audit log stops being the only trace that a
+        // warning ever existed.
+        const removed = await withdrawWarningsFor(
+            assessment._id,
+            actorStaffId,
+            reason
+        );
         await clearReview(assessment._id);
         await audit("assessment.reopen", {
             actorId: actorDiscordId,
@@ -434,7 +441,7 @@ async function applyDecision(
             detail: {
                 assessmentId: assessment._id.toHexString(),
                 previousOutcome: assessment.reviewOutcome,
-                warningsDeleted: removed,
+                warningsWithdrawn: removed,
                 reason
             }
         });
@@ -455,7 +462,8 @@ async function applyDecision(
                     "A decision about you has been withdrawn",
                     `Fortnight ${label}. The outcome recorded against you has been reopened` +
                         (removed > 0
-                            ? " and the warning it carried has been deleted."
+                            ? " and the warning it carried has been withdrawn. It stays on " +
+                              "your record marked as withdrawn, and counts against you nowhere."
                             : ".") +
                         `\n\n**Why:** ${reason}\n\n` +
                         "The fortnight is back with the Executives to decide again.",
@@ -470,7 +478,7 @@ async function applyDecision(
                 "The row is back in the queue" +
                 (removed > 0
                     ? `, and the warning it carried ${removed === 1 ? "was" : "warnings were"} ` +
-                      "deleted"
+                      "withdrawn"
                     : "") +
                 ".\n\n" +
                 (assessment.reviewOutcome === "dismissed"

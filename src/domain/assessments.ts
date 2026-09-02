@@ -316,9 +316,47 @@ export async function clearReview(assessmentId: ObjectId): Promise<FortnightAsse
 }
 
 /** Remove the warnings an assessment issued. Returns how many went. */
-export async function deleteWarningsFor(assessmentId: ObjectId): Promise<number> {
-    const result = await collections.warnings().deleteMany({ assessmentId });
-    return result.deletedCount;
+/**
+ * Withdraw the warnings an assessment issued. Formerly a delete.
+ *
+ * Reopening a review row used to remove the warning outright, which left the
+ * audit log as the only trace that it had ever existed. It is marked withdrawn
+ * instead: the record says what happened — issued for this reason, taken back
+ * for that one — and `countsNow` excludes it from every total whatever its clock
+ * says.
+ *
+ * There is now no path in this codebase that deletes a warning outside a
+ * fortnight purge. That is a stronger position than "reopen is the only one",
+ * and `DELETION.md` says so.
+ *
+ * Already-withdrawn warnings are left alone, so reopening a row twice does not
+ * rewrite the first withdrawal's reason with the second one's.
+ */
+export async function withdrawWarningsFor(
+    assessmentId: ObjectId,
+    withdrawnBy: ObjectId,
+    reason: string,
+    at = new Date()
+): Promise<number> {
+    const result = await collections.warnings().updateMany(
+        { assessmentId, withdrawnAt: { $in: [null, undefined] } },
+        { $set: { withdrawnAt: at, withdrawnBy, withdrawalReason: reason } }
+    );
+    return result.modifiedCount;
+}
+
+/** Withdraw one warning by its own id. The conduct path, which has no row. */
+export async function withdrawWarning(
+    warningId: ObjectId,
+    withdrawnBy: ObjectId,
+    reason: string,
+    at = new Date()
+): Promise<boolean> {
+    const result = await collections.warnings().updateOne(
+        { _id: warningId, withdrawnAt: { $in: [null, undefined] } },
+        { $set: { withdrawnAt: at, withdrawnBy, withdrawalReason: reason } }
+    );
+    return result.modifiedCount === 1;
 }
 
 export async function recordReview(

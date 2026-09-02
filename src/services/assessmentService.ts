@@ -364,8 +364,14 @@ export async function reviewRowFor(
     const active = activeWarningCount(others, now, config);
 
     const decider = assessment.reviewedBy ? await findStaffById(assessment.reviewedBy) : null;
-    const issued = warnings.find((warning) =>
-        warning.assessmentId?.equals(assessment._id)
+    // The live warning this assessment issued, if it has one.
+    //
+    // Withdrawn ones are skipped deliberately. Reopening no longer deletes the
+    // warning, so a row that was warned, reopened and warned again has two
+    // records against it — and the acknowledgement and appeal lines belong to
+    // the one that still stands, not to the one that was taken back.
+    const issued = warnings.find(
+        (warning) => warning.assessmentId?.equals(assessment._id) && !warning.withdrawnAt
     );
     const trend = await trendFor(assessment.staffId, index, config);
 
