@@ -354,11 +354,19 @@ export async function reviewRowFor(
     const warnings = staff ? await warningsFor(staff._id) : [];
     // The count that matters is what already counts, so a warning issued by
     // this very assessment is left out of "this would be their nth".
-    const others = warnings.filter((warning) => !warning.assessmentId.equals(assessment._id));
-    const active = activeWarningCount(others, now, config.warningExpiryDays);
+    // A conduct warning belongs to no assessment, so it is never the one this
+    // row issued and always counts toward "this would be their nth". That is
+    // the point of one total: an Executive deciding an attendance shortfall
+    // should see that the member also has conduct history.
+    const others = warnings.filter(
+        (warning) => !warning.assessmentId?.equals(assessment._id)
+    );
+    const active = activeWarningCount(others, now, config);
 
     const decider = assessment.reviewedBy ? await findStaffById(assessment.reviewedBy) : null;
-    const issued = warnings.find((warning) => warning.assessmentId.equals(assessment._id));
+    const issued = warnings.find((warning) =>
+        warning.assessmentId?.equals(assessment._id)
+    );
     const trend = await trendFor(assessment.staffId, index, config);
 
     const decidedLine =

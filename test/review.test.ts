@@ -91,23 +91,33 @@ describe("who may decide what", () => {
 describe("what still counts against somebody", () => {
     const day = 86_400_000;
 
+    // Each rung has its own key now, so a warning's clock depends on what it is.
+    const EXPIRY = {
+        warningExpiryDays: 180,
+        cautionExpiryDays: 90,
+        misconductExpiryDays: 180,
+        seriousMisconductExpiryDays: 0
+    };
+
+    const ago = (days: number) => new Date(now.getTime() - days * day);
+
     it("spends a warning past the expiry window", () => {
-        expect(warningIsSpent(new Date(now.getTime() - 181 * day), now, 180)).toBe(true);
-        expect(warningIsSpent(new Date(now.getTime() - 179 * day), now, 180)).toBe(false);
+        expect(warningIsSpent({ issuedAt: ago(181) }, now, EXPIRY)).toBe(true);
+        expect(warningIsSpent({ issuedAt: ago(179) }, now, EXPIRY)).toBe(false);
     });
 
     it("counts a warning issued exactly on the boundary", () => {
         // Spent is strictly past the window, so the boundary day still counts.
-        expect(warningIsSpent(new Date(now.getTime() - 180 * day), now, 180)).toBe(false);
+        expect(warningIsSpent({ issuedAt: ago(180) }, now, EXPIRY)).toBe(false);
     });
 
     it("ignores spent and rehearsal warnings in the total", () => {
         const warnings = [
-            { issuedAt: new Date(now.getTime() - 10 * day) },
-            { issuedAt: new Date(now.getTime() - 200 * day) },
-            { issuedAt: new Date(now.getTime() - 1 * day), rehearsal: true }
+            { issuedAt: ago(10) },
+            { issuedAt: ago(200) },
+            { issuedAt: ago(1), rehearsal: true }
         ];
-        expect(activeWarningCount(warnings, now, 180)).toBe(1);
+        expect(activeWarningCount(warnings, now, EXPIRY)).toBe(1);
     });
 
     it("says what the next warning would be without deciding anything", () => {

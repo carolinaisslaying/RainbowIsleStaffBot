@@ -14,7 +14,7 @@ import {
     ThumbnailBuilder
 } from "discord.js";
 import type { APIMessageTopLevelComponent, JSONEncodable } from "discord.js";
-import type { LeaveStatus, ReviewOutcome, RingState } from "../db/types.js";
+import type { ConductTier, LeaveStatus, ReviewOutcome, RingState } from "../db/types.js";
 import { cmd } from "../discord/commandMentions.js";
 import { RING_STATE_COLOUR, RING_STATE_LABEL } from "../domain/rings.js";
 import {
@@ -753,47 +753,110 @@ export function warningDmCard(input: {
  * just no longer counts, and hiding it would make the record disagree with the
  * member's own memory of it.
  */
+/** How each rung reads on a card. Never "minor": all of these are formal. */
+export const CONDUCT_TIER_LABEL: Record<ConductTier, string> = {
+    caution: "Caution",
+    misconduct: "Misconduct",
+    seriousMisconduct: "Serious Misconduct"
+};
+
+export interface WarningRow {
+    kind: "activity" | "conduct";
+    tier: ConductTier | null;
+    issuedAt: Date;
+    issuedBy: string;
+    note: string;
+    acknowledged: boolean;
+    withdrawn: { at: Date; by: string; reason: string } | null;
+    permanent: boolean;
+    spent: boolean;
+}
+
+/** One entry, in both the record view and, later, the log. */
+function warningRowLines(row: WarningRow): string {
+    const heading =
+        row.kind === "conduct" && row.tier
+            ? `**${CONDUCT_TIER_LABEL[row.tier]}** · ${ts(row.issuedAt, "D")}`
+            : `**${ts(row.issuedAt, "D")}**`;
+
+    const state = row.withdrawn
+        ? " · _withdrawn_"
+        : row.spent
+          ? " · _spent_"
+          : row.permanent
+            ? " · _permanent_"
+            : "";
+
+    const lines = [`${heading}${state}, by ${row.issuedBy}`, `> ${row.note}`];
+
+    if (row.withdrawn) {
+        // Both reasons stay on the record: why it was issued, and why it was
+        // taken back. A withdrawal that hid the original would make the entry
+        // unreadable to anybody asking what happened.
+        lines.push(
+            `-# Withdrawn ${ts(row.withdrawn.at, "R")} by ${row.withdrawn.by}` +
+                (row.withdrawn.reason ? `\n> ${row.withdrawn.reason}` : "")
+        );
+    } else {
+        lines.push(`-# ${row.acknowledged ? "Acknowledged" : "Not acknowledged"}`);
+    }
+
+    return lines.join("\n");
+}
+
 export function warningsCard(input: {
     displayName: string;
     isSelf: boolean;
-    activeCount: number;
+    tally: { total: number; conduct: number; activity: number };
     expiryDays: number;
-    rows: {
-        issuedAt: Date;
-        issuedBy: string;
-        note: string;
-        acknowledged: boolean;
-        spent: boolean;
-    }[];
+    rows: WarningRow[];
     historyLine: string;
     windowLabel: (start: Date, end: Date) => string;
 }): RenderedMessage {
     const clean = input.rows.length === 0;
+    const counting = input.tally.total > 0;
+    const colour = counting ? COLOUR.pending : COLOUR.approved;
+
     const container = new ContainerBuilder()
-        .setAccentColor(input.activeCount > 0 ? COLOUR.pending : COLOUR.approved)
+        .setAccentColor(colour)
         .addTextDisplayComponents(
             text(
-                `## ${emojiForColour(input.activeCount > 0 ? COLOUR.pending : COLOUR.approved)} ` +
+                `## ${emojiForColour(colour)} ` +
                     `${input.isSelf ? "Your warnings" : `Warnings: ${input.displayName}`}\n` +
                     (clean
                         ? input.isSelf
                             ? "You have never been warned. Nothing is on your record."
                             : "They have never been warned. Nothing is on their record."
-                        : `**${input.activeCount}** currently count` +
-                          `${input.activeCount === 1 ? "s" : ""}, of ${input.rows.length} ` +
-                          `ever issued.\n-# A warning stops counting after ` +
-                          `${input.expiryDays} days. It stays on the record either way.`)
+                        : `**${input.tally.total}** currently count` +
+                          `${input.tally.total === 1 ? "s" : ""}, of ${input.rows.length} ` +
+                          "ever issued.\n-# A warning stays on the record whatever happens " +
+                          "to it. Activity warnings stop counting after " +
+                          `${input.expiryDays} days; a conduct warning runs on its own clock, ` +
+                          "and the most serious never stops counting."
+                    )
             )
         );
 
-    for (const row of input.rows) {
+    // Conduct first, because it is the more serious of the two, and split
+    // because they are not the same thing — one list would say they were.
+    const sections: { title: string; rows: WarningRow[] }[] = [
+        {
+            title: `Conduct — ${input.tally.conduct} counting`,
+            rows: input.rows.filter((row) => row.kind === "conduct")
+        },
+        {
+            title: `Activity — ${input.tally.activity} counting`,
+            rows: input.rows.filter((row) => row.kind === "activity")
+        }
+    ];
+
+    for (const section of sections) {
+        if (section.rows.length === 0) continue;
         container.addSeparatorComponents(separator());
         container.addTextDisplayComponents(
             text(
-                `**${ts(row.issuedAt, "D")}**` +
-                    (row.spent ? " · _spent_" : "") +
-                    `, by ${row.issuedBy}\n> ${row.note}\n` +
-                    `-# ${row.acknowledged ? "Acknowledged" : "Not acknowledged"}`
+                `### ${section.title}\n` +
+                    section.rows.map(warningRowLines).join("\n\n")
             )
         );
     }

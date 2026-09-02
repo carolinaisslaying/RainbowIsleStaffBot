@@ -42,7 +42,12 @@ export function partitionByRealness(target: ScrubTarget): {
             .map((entry) => entry._id.toHexString())
     );
 
+    // A conduct warning has no assessment, so it belongs to no rehearsal and to
+    // no fortnight. It can never be a purge's leftovers, and it is never in
+    // scope for one: `real` is where it lands, and `real` is what a purge
+    // refuses to touch without the deployment switch.
     const belongsToRehearsal = (warning: WarningDoc): boolean =>
+        warning.assessmentId !== null &&
         rehearsalIds.has(warning.assessmentId.toHexString());
 
     return {

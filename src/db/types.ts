@@ -131,14 +131,73 @@ export interface FortnightReviewDoc {
     remindedAt: Date | null;
 }
 
+/**
+ * The three rungs a conduct warning can be issued at.
+ *
+ * They differ by the gravity of the conduct, never by how formal they are:
+ * everything issued through this bot is a formal written warning, and informal
+ * correction happens in a DM and never reaches this record. The bottom two are
+ * New Zealand employment terms, so they mean something outside this bot as well.
+ *
+ * A tier decides how long a warning counts for and nothing else. Every warning
+ * weighs one, whatever its tier — the bot has never escalated on its own and
+ * does not start by summing these into an action.
+ */
+export type ConductTier = "caution" | "misconduct" | "seriousMisconduct";
+
+export const CONDUCT_TIERS: readonly ConductTier[] = [
+    "caution",
+    "misconduct",
+    "seriousMisconduct"
+];
+
 export interface WarningDoc {
     _id: ObjectId;
     staffId: ObjectId;
-    assessmentId: ObjectId;
+
+    /**
+     * What kind of warning this is.
+     *
+     * Absent on every warning written before conduct warnings existed, and read
+     * as `activity` when absent — which is what all of them were.
+     */
+    kind?: "activity" | "conduct";
+
+    /**
+     * The assessment that issued it. **Null for a conduct warning**, which
+     * belongs to no fortnight.
+     *
+     * This was required, and several paths still assume they can dereference
+     * it. Each of those now guards explicitly rather than trusting the shape.
+     */
+    assessmentId: ObjectId | null;
+
+    /** The rung. Null for an activity warning, which has no ladder. */
+    tier?: ConductTier | null;
+
     issuedBy: ObjectId;
     issuedAt: Date;
     note: string;
     acknowledgedAt: Date | null;
+
+    /**
+     * Withdrawal, which is the only way a warning leaves somebody's total.
+     *
+     * The record is kept and marked rather than deleted, so it says what
+     * happened: issued for this reason, taken back for that one. A withdrawn
+     * warning counts nowhere, whatever its clock says.
+     */
+    withdrawnAt?: Date | null;
+    withdrawnBy?: ObjectId | null;
+    withdrawalReason?: string | null;
+
+    /**
+     * Where its card lives in the warning channel. The same pair `LeaveDoc`
+     * carries, and for the same reason: one card, edited in place for the whole
+     * life of the record rather than replaced.
+     */
+    logChannelId?: string | null;
+    logMessageId?: string | null;
     /** Written by a rehearsal, and never counted against anyone. */
     rehearsal?: boolean;
 

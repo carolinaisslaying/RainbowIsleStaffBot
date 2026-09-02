@@ -1,5 +1,5 @@
 import type { ObjectId } from "mongodb";
-import type { ReviewOutcome } from "../db/types.js";
+import type { ConductTier, ReviewOutcome } from "../db/types.js";
 
 /**
  * The fortnight review, as rules rather than as a card.
@@ -211,19 +211,111 @@ export function appealWindowCloses(
  * no longer counted. Nobody should carry one bad fortnight for ever, and a
  * total that only ever grows stops meaning anything.
  */
-export function warningIsSpent(issuedAt: Date, now: Date, expiryDays: number): boolean {
-    return now.getTime() - issuedAt.getTime() > expiryDays * 86_400_000;
+export interface WarningLike {
+    issuedAt: Date;
+    kind?: "activity" | "conduct";
+    tier?: ConductTier | null;
+    rehearsal?: boolean;
+    withdrawnAt?: Date | null;
+}
+
+/**
+ * How long this particular warning counts for, in days. Zero means never spent.
+ *
+ * There is no single expiry any more. An activity warning uses
+ * `warningExpiryDays`; a conduct warning uses the key for its own rung, because
+ * "rude in tickets" and a serious conduct matter should plainly not fall off the
+ * record on the same day.
+ *
+ * A conduct warning with no tier — which nothing writes, but a hand-edited
+ * document could — is read as the middle rung rather than as permanent. Guessing
+ * upward would make a data error harsher than any decision anybody took.
+ */
+export function lifetimeDaysFor(warning: WarningLike, config: WarningExpiryConfig): number {
+    if (warning.kind !== "conduct") return config.warningExpiryDays;
+    switch (warning.tier) {
+        case "caution":
+            return config.cautionExpiryDays;
+        case "seriousMisconduct":
+            return config.seriousMisconductExpiryDays;
+        default:
+            return config.misconductExpiryDays;
+    }
+}
+
+/** The keys these rules read. Narrowed so the tests need no whole config. */
+export interface WarningExpiryConfig {
+    warningExpiryDays: number;
+    cautionExpiryDays: number;
+    misconductExpiryDays: number;
+    seriousMisconductExpiryDays: number;
+}
+
+/**
+ * A warning past its expiry is spent: still on the record, still readable, and
+ * no longer counted. Nobody should carry one bad fortnight for ever, and a
+ * total that only ever grows stops meaning anything.
+ *
+ * A lifetime of **zero means never spent**, which is how the top conduct rung is
+ * configured. That is the one case where the rule above does not apply, and it
+ * is deliberate: some conduct should not quietly stop counting because enough
+ * months went by.
+ */
+export function warningIsSpent(
+    warning: WarningLike,
+    now: Date,
+    config: WarningExpiryConfig
+): boolean {
+    const days = lifetimeDaysFor(warning, config);
+    if (days <= 0) return false;
+    return now.getTime() - warning.issuedAt.getTime() > days * 86_400_000;
 }
 
 /** Warnings that still count: not spent, and not written by a rehearsal. */
 export function activeWarningCount(
-    warnings: { issuedAt: Date; rehearsal?: boolean }[],
+    warnings: WarningLike[],
     now: Date,
-    expiryDays: number
+    config: WarningExpiryConfig
 ): number {
-    return warnings.filter(
-        (warning) => !warning.rehearsal && !warningIsSpent(warning.issuedAt, now, expiryDays)
-    ).length;
+    return warnings.filter((warning) => countsNow(warning, now, config)).length;
+}
+
+/**
+ * Whether one warning counts against somebody right now.
+ *
+ * Three ways it does not: it was written by a rehearsal and was never real, it
+ * has been withdrawn, or it is spent. Withdrawal beats every clock — a warning
+ * taken back counts nowhere whatever its lifetime says.
+ */
+export function countsNow(
+    warning: WarningLike,
+    now: Date,
+    config: WarningExpiryConfig
+): boolean {
+    if (warning.rehearsal) return false;
+    if (warning.withdrawnAt) return false;
+    return !warningIsSpent(warning, now, config);
+}
+
+/**
+ * The same count, split by kind.
+ *
+ * One total is what a member is told they have, because a warning is a warning.
+ * The breakdown exists because activity and conduct are not the same thing, and
+ * a card that showed only the total would be saying they were.
+ */
+export function warningTally(
+    warnings: WarningLike[],
+    now: Date,
+    config: WarningExpiryConfig
+): { total: number; conduct: number; activity: number } {
+    const counting = warnings.filter((warning) => countsNow(warning, now, config));
+    const conduct = counting.filter((warning) => warning.kind === "conduct").length;
+    return {
+        total: counting.length,
+        conduct,
+        activity: counting.length - conduct
+    };
 }
 
 /**

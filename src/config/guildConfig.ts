@@ -23,6 +23,7 @@ export interface StaffBotConfig {
     leaveChannelId: string;
     reportChannelId: string;
     recapChannelId: string;
+    warningChannelId: string;
 
     accountingTimezone: string;
     weekStartDay: number;
@@ -36,6 +37,9 @@ export interface StaffBotConfig {
     softRingsEnabled: boolean;
     assessmentDryRun: boolean;
     warningExpiryDays: number;
+    cautionExpiryDays: number;
+    misconductExpiryDays: number;
+    seriousMisconductExpiryDays: number;
     appealWindowDays: number;
     reviewReminderDays: number;
 
@@ -164,6 +168,14 @@ export const CONFIG_KEYS: Record<keyof StaffBotConfig, KeySpec> = {
         group: "channels",
         consequence: "No team summary is posted; members still get their own by DM"
     },
+    warningChannelId: {
+        kind: "string",
+        description: "Where every warning's card is kept, of either kind",
+        target: "channel",
+        importance: "recommended",
+        group: "channels",
+        consequence: "Warnings still issue; there is just no durable log of them"
+    },
     weeklyTargetMinutes: {
         kind: "number",
         description: "Outer ring target",
@@ -231,6 +243,33 @@ export const CONFIG_KEYS: Record<keyof StaffBotConfig, KeySpec> = {
         importance: "optional",
         group: "timings",
         min: 1,
+        max: 3650
+    },
+    cautionExpiryDays: {
+        kind: "number",
+        description: "Days a Caution counts for. 0 means it never stops counting",
+        target: "plain",
+        importance: "optional",
+        group: "timings",
+        min: 0,
+        max: 3650
+    },
+    misconductExpiryDays: {
+        kind: "number",
+        description: "Days a Misconduct warning counts for. 0 means never",
+        target: "plain",
+        importance: "optional",
+        group: "timings",
+        min: 0,
+        max: 3650
+    },
+    seriousMisconductExpiryDays: {
+        kind: "number",
+        description: "Days a Serious Misconduct warning counts for. 0 means never",
+        target: "plain",
+        importance: "optional",
+        group: "timings",
+        min: 0,
         max: 3650
     },
     appealWindowDays: {
@@ -360,6 +399,7 @@ export const DEFAULT_CONFIG: StaffBotConfig = {
     leaveChannelId: "",
     reportChannelId: "",
     recapChannelId: "",
+    warningChannelId: "",
     accountingTimezone: "UTC",
     weekStartDay: 1,
     fortnightAnchor: "2026-09-28T00:00:00Z",
@@ -371,6 +411,13 @@ export const DEFAULT_CONFIG: StaffBotConfig = {
     softRingsEnabled: true,
     assessmentDryRun: false,
     warningExpiryDays: 180,
+    // The ladder. Every rung is a formal written warning; they differ by the
+    // gravity of the conduct, which is why they differ by how long they count.
+    // Zero is never, and the top rung ships that way on purpose: some conduct
+    // should not stop counting because enough months went by.
+    cautionExpiryDays: 90,
+    misconductExpiryDays: 180,
+    seriousMisconductExpiryDays: 0,
     appealWindowDays: 14,
     reviewReminderDays: 3,
     awayAfterMinutes: 20,

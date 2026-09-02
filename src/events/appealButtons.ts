@@ -163,7 +163,9 @@ export async function handleAppealButton(
         return;
     }
 
-    const assessment = await findAssessment(resolved.warning.assessmentId);
+    const assessment = resolved.warning.assessmentId
+        ? await findAssessment(resolved.warning.assessmentId)
+        : null;
     const label = assessment
         ? labelWindow(
               windowForIndex(assessment.fortnightIndex, config).week1Start,
@@ -201,8 +203,12 @@ export async function handleAppealModal(
     });
 
     // The row is the only notification. It turns amber and the header counts
-    // it, which is where an Executive working the queue is already looking.
-    const assessment = await findAssessment(resolved.warning.assessmentId);
+    // it, which is where an Executive working the queue is already looking. A
+    // conduct warning has no row; its own card in the warning channel is what
+    // changes instead.
+    const assessment = resolved.warning.assessmentId
+        ? await findAssessment(resolved.warning.assessmentId)
+        : null;
     if (assessment) {
         try {
             await upsertReviewRow(
@@ -296,7 +302,9 @@ export async function handleAppealDeclineModal(
           })
         : false;
 
-    const assessment = await findAssessment(warning.assessmentId);
+    const assessment = warning.assessmentId
+        ? await findAssessment(warning.assessmentId)
+        : null;
     if (assessment) {
         await upsertReviewRow(
             client,
