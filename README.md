@@ -262,8 +262,30 @@ both keep these apart deliberately; do not let them merge.
   content, nothing attributable to a person.
 - `/mydata export` returns everything held about the requester as JSON. That
   answers an IPP 6 access request under the Privacy Act 2020 without anyone
-  needing to think about it.
+  needing to think about it. It ships whole warning documents, so a member's own
+  appeal text comes back with them.
 - No command deletes anything. See `DELETION.md`.
+
+## Warnings, and answering one
+
+The bot never issues a warning by itself. It assesses, posts a review card per
+member below the requirement, and waits for an Executive to decide and say why.
+
+A warning arrives by DM with two buttons. **I have read this** records that they
+saw it, which is the difference between a warning somebody has ignored and one
+they never received — and the review row now says which, because the bot records
+whether the DM actually arrived rather than assuming it did.
+
+**Appeal this** gives them one reply, within `appealWindowDays` (14 by default).
+The window is counted from the moment the warning **reached** them, not from when
+it was issued: a member whose DMs are closed never received it, and a deadline
+running from issue could expire before they had any chance to contest it.
+
+An appeal turns their review row amber and adds it to the header's count, so it
+is visible where the Executives are already working rather than as a new message.
+Upholding it is the existing **Reopen** button, which deletes the warning
+outright. Leaving it standing asks for a reason, which the member is sent —
+they asked a question, and silence would be its own answer.
 
 ## Time
 
@@ -333,9 +355,17 @@ container will restart:
 | `recaps` | hourly | Held until each recipient's local 09:00 |
 | `week-close` | weekly, 00:05 | Rebuilds the closed week, assesses a completed fortnight |
 | `count-recompute` | nightly | Rebuilds the advisory popcount cache |
+| `review-reminders` | hourly | Chases a review queue nobody has worked |
 
 Boot reconciliation runs before any of them: orphaned availability roles are
-stripped, orphaned shifts closed, and missing weekly rollups rebuilt.
+stripped, orphaned shifts closed, missing weekly rollups rebuilt, and every
+surviving open shift given a fresh inactivity grace period so a redeploy does
+not sweep the whole on-shift team Away.
+
+`/dev status` shows all of this at runtime — each job's last and next run,
+gateway latency, whether Mongo answers a ping, which required config keys are
+unset, and whether the dangerous-command switch is on. It is limited to the
+deployment's seeded administrators.
 
 ## Three deviations from the spec, and why
 
@@ -377,13 +407,17 @@ instead. Say the word and I will add the linter.
 npm test
 ```
 
-154 tests covering what section 17 requires: week and fortnight boundary maths
+511 tests covering what section 17 requires: week and fortnight boundary maths
 including DST in both directions in a non-UTC zone, fortnight index derivation
 from the anchor, bitmap set/popcount/cross-day window summation, crediting
 idempotency, the shift state machine including a pause spanning a UTC day
 boundary, leave role snapshot and restore including a role deleted while the
 member was away, ring thresholds at 74/75/99/100/over, and reconciliation
 against a seeded fixture with orphans in both directions.
+
+Beyond the spec's list: the appeal window at and either side of its boundary and
+against a warning that was never delivered, the three delivery states a review
+row can draw, the configuration sanity guards, and the API's paging arguments.
 
 Reconciliation, leave restoration and boot repair are tested through pure
 planning functions (`src/domain/reconcile.ts`) that take a seeded state and

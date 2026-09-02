@@ -18,6 +18,7 @@ import {
     type StaffBotConfig
 } from "../config/guildConfig.js";
 import { exportConfig, type ConfigChange, type ImportReport } from "../config/configTransfer.js";
+import { configWarnings } from "../config/configGuards.js";
 import {
     V2_FLAGS,
     containersMessage,
@@ -27,6 +28,8 @@ import {
     type RenderedMessage
 } from "./cards.js";
 import { COLOUR } from "./theme.js";
+import { formatDuration, ts } from "../time/format.js";
+import { emojiForColour } from "./emoji.js";
 
 /**
  * The configuration viewer.
@@ -257,7 +260,63 @@ export function configViewCard(
         )
     );
 
-    return containersMessage([statusContainer(config, setCommand), wiring, policy]);
+    // Settings that parse, validate, and still will not do what their author
+    // expects: a cycle whose anchor has not arrived, a requirement nobody can
+    // reach, a shift that ends before the member is marked Away. A card that
+    // lists every key and none of their consequences is a card that reads as
+    // healthy while the bot assesses nobody.
+    const warnings = configWarnings(config, new Date());
+    const containers = [statusContainer(config, setCommand), wiring, policy];
+
+    if (warnings.length > 0) {
+        const problems = new ContainerBuilder()
+            .setAccentColor(COLOUR.pending)
+            .addTextDisplayComponents(
+                text(
+                    `### ${emojiForColour(COLOUR.pending)} Worth knowing\n` +
+                        warnings
+                            .map((warning) => `**${String(warning.key)}**\n${warning.text}`)
+                            .join("\n\n")
+                )
+            );
+        // Second, under the setup status: what is missing matters before what
+        // is set oddly, and both matter before the full listing.
+        containers.splice(1, 0, problems);
+    }
+
+    return containersMessage(containers);
+}
+
+/**
+ * The second click on a key that moves every boundary ever recorded.
+ *
+ * `weekStartDay` and `accountingTimezone` are the only two keys that reach
+ * backwards. Everything else applies from now on, and applies immediately.
+ */
+export function configHistoryConfirmCard(input: {
+    key: string;
+    value: string;
+    body: string;
+}): RenderedMessage {
+    const container = new ContainerBuilder()
+        .setAccentColor(COLOUR.pending)
+        .addTextDisplayComponents(
+            text(`### ${emojiForColour(COLOUR.pending)} This moves every week ever recorded\n${input.body}`)
+        )
+        .addActionRowComponents(
+            new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`config:setConfirm:${input.key}|${input.value}`)
+                    .setLabel("Change it anyway")
+                    .setStyle(ButtonStyle.Danger),
+                new ButtonBuilder()
+                    .setCustomId("config:setCancel:none")
+                    .setLabel("Leave it alone")
+                    .setStyle(ButtonStyle.Secondary)
+            )
+        );
+
+    return { components: [container], files: [], flags: V2_FLAGS };
 }
 
 /** The export, as a file rather than as a wall of text in the channel. */
@@ -372,4 +431,93 @@ export function configImportCard(
     );
 
     return { components: [container], files: [], flags: V2_FLAGS | MessageFlags.Ephemeral };
+}
+
+/**
+ * The operator's card: what the bot is doing, and what is stopping it.
+ *
+ * `/dev status` is seededOnly, which is what lets this name a deployment switch
+ * at all. The rule that nothing user-facing names an environment variable holds
+ * for every card a Moderator can reach; this one is reachable only by the person
+ * who would have to go and change it, and telling them a switch exists without
+ * naming it makes the card useless. Same exemption `/dev purge` already has.
+ */
+export function devStatusCard(input: {
+    uptimeMs: number;
+    gatewayMs: number | null;
+    databaseOk: boolean;
+    schedulerRunning: boolean;
+    jobs: {
+        name: string;
+        lastRunAt: Date | null;
+        lastOutcome: "ok" | "failed" | null;
+        lastError: string | null;
+        nextRunAt: Date | null;
+        failures: number;
+    }[];
+    missingRequired: string[];
+    warnings: { key: string; text: string }[];
+    dangerousCommands: boolean;
+}): RenderedMessage {
+    // Red when something is actually broken, amber when something is merely
+    // unset or oddly configured, green when there is nothing to say. The
+    // accent is the summary; the reader should not have to find it in the text.
+    const broken =
+        !input.databaseOk ||
+        !input.schedulerRunning ||
+        input.jobs.some((job) => job.lastOutcome === "failed");
+    const unsettled = input.missingRequired.length > 0 || input.warnings.length > 0;
+    const colour = broken ? COLOUR.adverse : unsettled ? COLOUR.pending : COLOUR.approved;
+
+    const health = [
+        `**Up** ${formatDuration(input.uptimeMs)}`,
+        `**Gateway** ${input.gatewayMs === null || input.gatewayMs < 0 ? "not measured yet" : `${Math.round(input.gatewayMs)}ms`}`,
+        `**Database** ${input.databaseOk ? "reachable" : "**unreachable**"}`,
+        `**Scheduler** ${input.schedulerRunning ? `${input.jobs.length} jobs armed` : "**not running**"}`
+    ].join("\n");
+
+    const jobLines = input.jobs.map((job) => {
+        const last =
+            job.lastRunAt === null
+                ? "not yet run"
+                : `${job.lastOutcome === "failed" ? "⚠️ failed " : ""}${ts(job.lastRunAt, "R")}`;
+        const next = job.nextRunAt === null ? "not armed" : ts(job.nextRunAt, "R");
+        const failures = job.failures > 0 ? ` · ${job.failures} failure${job.failures === 1 ? "" : "s"}` : "";
+        return (
+            `**${job.name}** — ran ${last}, next ${next}${failures}` +
+            (job.lastError ? `\n-# ${job.lastError.slice(0, 180)}` : "")
+        );
+    });
+
+    const configLines: string[] = [];
+    if (input.missingRequired.length > 0) {
+        configLines.push(
+            `⚠️ **${input.missingRequired.length} required ${
+                input.missingRequired.length === 1 ? "key is" : "keys are"
+            } unset:** ${input.missingRequired.join(", ")}`
+        );
+    }
+    for (const warning of input.warnings) configLines.push(`⚠️ **${warning.key}** — ${warning.text}`);
+    if (configLines.length === 0) configLines.push("Everything required is set and nothing looks wrong.");
+
+    const container = new ContainerBuilder()
+        .setAccentColor(colour)
+        .addTextDisplayComponents(text(`### ${emojiForColour(colour)} Bot status\n${health}`))
+        .addSeparatorComponents(separator())
+        .addTextDisplayComponents(text(`### Jobs\n${jobLines.join("\n")}`))
+        .addSeparatorComponents(separator())
+        .addTextDisplayComponents(text(`### Configuration\n${configLines.join("\n\n")}`));
+
+    if (input.dangerousCommands) {
+        container.addSeparatorComponents(separator());
+        container.addTextDisplayComponents(
+            text(
+                "### ⚠️ Deployment\n**DEV_DANGEROUS_COMMANDS is on.** `/dev purge` can delete " +
+                    "real assessment history, not just rehearsals. Unset it and restart when " +
+                    "you are done."
+            )
+        );
+    }
+
+    return { components: [container], files: [], flags: V2_FLAGS };
 }

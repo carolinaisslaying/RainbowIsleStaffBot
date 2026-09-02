@@ -15,6 +15,9 @@ import { startApiServer } from "./api/server.js";
 import { warmTimezoneIndexes } from "./time/timezones.js";
 import { log } from "./log.js";
 
+/** Kept so shutdown can close it rather than relying on process.exit. */
+let apiServer: ReturnType<typeof startApiServer> = null;
+
 async function main(): Promise<void> {
     assertEnvironment();
 
@@ -66,7 +69,7 @@ async function main(): Promise<void> {
         await reconcileOnBoot(client, config);
 
         await registerJobs(client);
-        startApiServer();
+        apiServer = startApiServer();
 
         // Said once, loudly, because a deployment left with this on is one
         // mistyped fortnight number away from deleting real history.
@@ -95,6 +98,20 @@ async function main(): Promise<void> {
 
 async function shutdown(client: ReturnType<typeof createClient>): Promise<void> {
     stopScheduler();
+
+    // Stop accepting requests before the database goes, or an in-flight one
+    // fails on a closed client and logs an error that describes the shutdown
+    // rather than a fault.
+    if (apiServer) {
+        await new Promise<void>((resolve) => {
+            apiServer?.close(() => resolve());
+            // close() waits for keep-alive connections to drain, which a held
+            // socket can delay indefinitely. The shutdown is not allowed to
+            // hang on one.
+            setTimeout(resolve, 5000).unref?.();
+        });
+    }
+
     try {
         await client.destroy();
     } catch (error) {

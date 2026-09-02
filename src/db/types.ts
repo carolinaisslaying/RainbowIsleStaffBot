@@ -141,6 +141,35 @@ export interface WarningDoc {
     acknowledgedAt: Date | null;
     /** Written by a rehearsal, and never counted against anyone. */
     rehearsal?: boolean;
+
+    /**
+     * Whether the DM carrying this warning actually arrived.
+     *
+     * Both absent on a warning written before these existed, which reads as
+     * "unknown" rather than as a failure — the bot did not record it either way
+     * then, and inventing a delivery it never observed would be worse than
+     * saying so. Exactly one is set on every warning issued since.
+     */
+    deliveredAt?: Date | null;
+    deliveryFailedAt?: Date | null;
+
+    /**
+     * The member's answer, if they gave one. One per warning, inside
+     * `appealWindowDays`; the window runs from delivery, because a warning
+     * nobody received is not one anybody could have contested.
+     */
+    appeal?: WarningAppeal | null;
+}
+
+export interface WarningAppeal {
+    text: string;
+    filedAt: Date;
+    /** Set when an Executive has answered it, either way. */
+    decidedAt: Date | null;
+    /** `upheld` deletes the warning through the existing reopen path. */
+    decision: "upheld" | "declined" | null;
+    decidedBy: ObjectId | null;
+    decisionNote: string | null;
 }
 
 export type LeaveStatus = "pending" | "approved" | "declined" | "active" | "ended";

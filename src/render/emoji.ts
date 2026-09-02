@@ -48,7 +48,13 @@ export const EMOJI = {
     /** Something recomputed rather than decided. */
     recompute: "🔄",
     /** An outcome that needs a human to finish it by hand. */
-    warning: "⚠️"
+    warning: "⚠️",
+    /**
+     * A member answering back. Not the warning mark: this is the member
+     * speaking, and a row already carrying an adverse decision must not read
+     * as two warnings stacked on each other.
+     */
+    appeal: "🗣️"
 } as const;
 
 /**

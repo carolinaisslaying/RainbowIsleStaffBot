@@ -356,10 +356,116 @@ export async function issueWarning(
         issuedAt: new Date(),
         note,
         acknowledgedAt: null,
-        rehearsal
+        rehearsal,
+        // Unknown until the DM has been attempted. recordWarningDelivery sets
+        // exactly one of these the moment we know.
+        deliveredAt: null,
+        deliveryFailedAt: null,
+        appeal: null
     };
     await collections.warnings().insertOne(warning);
     return warning;
+}
+
+/**
+ * What happened when we tried to tell them.
+ *
+ * Written straight after the attempt, because "they have not acknowledged it"
+ * and "they never received it" are the same silence on a card and completely
+ * different facts to an Executive deciding whether somebody has ignored a
+ * warning. The row draws them apart.
+ */
+export async function recordWarningDelivery(
+    warningId: ObjectId,
+    delivered: boolean,
+    at = new Date()
+): Promise<void> {
+    await collections.warnings().updateOne(
+        { _id: warningId },
+        {
+            $set: delivered
+                ? { deliveredAt: at, deliveryFailedAt: null }
+                : { deliveredAt: null, deliveryFailedAt: at }
+        }
+    );
+}
+
+/** The member's appeal, filed. One per warning; the caller checks the window. */
+export async function fileAppeal(
+    warningId: ObjectId,
+    text: string,
+    at = new Date()
+): Promise<void> {
+    await collections.warnings().updateOne(
+        { _id: warningId },
+        {
+            $set: {
+                appeal: {
+                    text,
+                    filedAt: at,
+                    decidedAt: null,
+                    decision: null,
+                    decidedBy: null,
+                    decisionNote: null
+                }
+            }
+        }
+    );
+}
+
+/**
+ * An Executive's answer to an appeal.
+ *
+ * Only ever `declined` here. Upholding one runs through reopen, which deletes
+ * the warning outright — and a deleted warning has no appeal left to decide.
+ * That asymmetry is the point: a withdrawal is a reviewed decision with an
+ * audit row behind it, and reopen is the only path that removes a warning.
+ */
+export async function declineAppeal(
+    warningId: ObjectId,
+    decidedBy: ObjectId,
+    note: string,
+    at = new Date()
+): Promise<void> {
+    await collections.warnings().updateOne(
+        { _id: warningId },
+        {
+            $set: {
+                "appeal.decidedAt": at,
+                "appeal.decision": "declined",
+                "appeal.decidedBy": decidedBy,
+                "appeal.decisionNote": note
+            }
+        }
+    );
+}
+
+/**
+ * Which of these assessments have an appeal nobody has answered.
+ *
+ * One query for the whole queue rather than one per row: the header is redrawn
+ * on every decision, and a per-row lookup would make each click cost a query
+ * per member below the requirement.
+ */
+export async function appealedAssessmentIds(
+    assessmentIds: ObjectId[]
+): Promise<Set<string>> {
+    if (assessmentIds.length === 0) return new Set();
+    const docs = await collections
+        .warnings()
+        .find({
+            assessmentId: { $in: assessmentIds },
+            "appeal.filedAt": { $exists: true },
+            "appeal.decidedAt": null
+        })
+        .project<{ assessmentId: ObjectId }>({ assessmentId: 1 })
+        .toArray();
+    return new Set(docs.map((doc) => doc.assessmentId.toHexString()));
+}
+
+/** One warning by its own id, for the appeal path where the DM carries it. */
+export async function findWarningById(warningId: ObjectId): Promise<WarningDoc | null> {
+    return collections.warnings().findOne({ _id: warningId });
 }
 
 /** Every real warning against a member, newest first. Rehearsals are not real. */

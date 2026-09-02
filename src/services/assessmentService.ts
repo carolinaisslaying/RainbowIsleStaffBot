@@ -1,11 +1,12 @@
 import type { Client } from "discord.js";
 import { ObjectId } from "mongodb";
-import type { FortnightAssessmentDoc, ReviewOutcome } from "../db/types.js";
+import type { FortnightAssessmentDoc, ReviewOutcome, WarningDoc } from "../db/types.js";
 import type { StaffBotConfig } from "../config/guildConfig.js";
 import {
     announcementPlan,
     assessFortnight,
     assessmentHistory,
+    appealedAssessmentIds,
     assessmentsForFortnight,
     belowThresholdFor,
     isAssessableFortnight,
@@ -16,6 +17,7 @@ import {
 } from "../domain/assessments.js";
 import {
     activeWarningCount,
+    deliveryState,
     priorOutcomesLine,
     queueCounts,
     queueHeadline,
@@ -142,6 +144,7 @@ export async function runFortnightAssessment(
 
     // Every member gets their own outcome, met or not. A rehearsal tells none
     // of them: the point is to read the card, not to wake the roster.
+    let undelivered = 0;
     for (const assessment of plan === "rehearse" ? [] : assessments) {
         const staff = await findStaffById(assessment.staffId);
         if (!staff) continue;
@@ -158,7 +161,7 @@ export async function runFortnightAssessment(
                     `${assessment.requiredMinutes - assessment.totalMinutes}. An Executive ` +
                     "will review it and decide what happens.";
 
-        await sendFortnightOutcome(
+        const delivered = await sendFortnightOutcome(
             client,
             staff.discordId,
             body,
@@ -167,6 +170,17 @@ export async function runFortnightAssessment(
                 : assessment.status === "exempt"
                   ? COLOUR.settled
                   : COLOUR.pending
+        );
+        if (!delivered) undelivered += 1;
+    }
+
+    // Said once, at info, rather than per member at debug. A fortnight where a
+    // third of the roster never heard the outcome is a fact about the
+    // deployment, not a detail of one send.
+    if (undelivered > 0) {
+        log.warn(
+            `Fortnight ${index}: ${undelivered} member(s) could not be DMed their outcome. ` +
+                "Their direct messages are closed."
         );
     }
 
@@ -226,7 +240,16 @@ export async function refreshQueueHeader(
     const below = await belowThresholdFor(index);
     const window = windowForIndex(index, config);
     const label = labelWindow(window.week1Start, window.end, config.accountingTimezone);
-    const counts = queueCounts(below.map((row) => ({ outcome: row.reviewOutcome })));
+    // An appeal is the one thing that can be outstanding on a queue where every
+    // row already has an outcome, so the header has to know about them or a
+    // finished-looking queue silently holds somebody waiting for an answer.
+    const appealed = await appealedAssessmentIds(below.map((row) => row._id));
+    const counts = queueCounts(
+        below.map((row) => ({
+            outcome: row.reviewOutcome,
+            underAppeal: appealed.has(row._id.toHexString())
+        }))
+    );
 
     // The header first, so it sits above the rows on a first posting.
     const existing = await findReview(index);
@@ -372,12 +395,20 @@ export async function reviewRowFor(
         outcome: assessment.reviewOutcome,
         decidedLine,
         reason: assessment.reviewNote,
-        acknowledgedLine:
-            issued && issued.acknowledgedAt
-                ? `Acknowledged ${ts(issued.acknowledgedAt, "R")}`
-                : issued
-                  ? "Not yet acknowledged"
-                  : null,
+        // Three states where there used to be two. "Not yet acknowledged" was
+        // drawn both for a member who read it and never pressed the button and
+        // for one whose DMs are closed, who never saw it at all — the same
+        // silence, and opposite facts to anybody deciding whether a warning has
+        // been ignored.
+        acknowledgedLine: issued ? acknowledgementLine(issued) : null,
+        appeal:
+            issued?.appeal && !issued.appeal.decidedAt
+                ? {
+                      text: issued.appeal.text,
+                      filedLine: `Appealed ${ts(issued.appeal.filedAt, "R")}`,
+                      warningId: issued._id.toHexString()
+                  }
+                : null,
         departed,
         rehearsal: assessment.rehearsal === true,
         trend: trend.points.length > 0
@@ -399,6 +430,26 @@ export async function reviewRowFor(
                   "above still stands; reopen it if it should not."
                 : null
     });
+}
+
+/**
+ * What the row says about a warning's delivery, in one place.
+ *
+ * A warning issued before delivery was recorded carries neither timestamp, and
+ * reads as unknown rather than as delivered: the bot did not observe it either
+ * way, and asserting a delivery it never saw is the whole mistake this replaced.
+ */
+function acknowledgementLine(warning: WarningDoc): string {
+    switch (deliveryState(warning)) {
+        case "acknowledged":
+            return `Acknowledged ${ts(warning.acknowledgedAt as Date, "R")}`;
+        case "failed":
+            return "⚠️ Never delivered — their direct messages are closed, so they have not seen this";
+        case "delivered":
+            return "Delivered, not yet acknowledged";
+        default:
+            return "Not yet acknowledged";
+    }
 }
 
 export async function fortnightSummary(index: number): Promise<{

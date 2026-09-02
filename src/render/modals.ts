@@ -24,11 +24,14 @@ export const LEAVE_EXTEND_MODAL = "leaveExtend";
 export const CONFIG_IMPORT_MODAL = "configImport";
 export const REVIEW_DECISION_MODAL = "reviewDecision";
 export const REVIEW_BULK_MODAL = "reviewBulk";
+export const APPEAL_MODAL = "warningAppeal";
+export const APPEAL_DECLINE_MODAL = "appealDecline";
 
 export const FIELD_START = "start";
 export const FIELD_END = "end";
 export const FIELD_REASON = "reason";
 export const FIELD_CONFIG_JSON = "configJson";
+export const FIELD_APPEAL = "appeal";
 
 function dateField(
     customId: string,
@@ -266,6 +269,81 @@ export function reviewBulkModal(
                         .setRequired(true)
                         .setMinLength(4)
                         .setMaxLength(1000)
+                )
+        );
+}
+
+
+/**
+ * The member's own account of a warning.
+ *
+ * Deliberately not called a "reason": the Executive gave a reason, and this is
+ * the other side of it. The prompt asks what they want the Executives to know,
+ * because a member reading "why are you appealing" writes a defence, and a
+ * member reading this writes what actually happened.
+ *
+ * Longer than a decision reason. Somebody explaining a fortnight of their life
+ * needs more room than somebody recording a verdict on it.
+ */
+export function appealModal(warningId: string, windowLabel: string): ModalBuilder {
+    return new ModalBuilder()
+        .setCustomId(`${APPEAL_MODAL}:${warningId}`)
+        .setTitle("Appeal this warning".slice(0, 45))
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(
+                `-# Fortnight ${windowLabel}. Your Executives will read this and decide again.`
+            )
+        )
+        .addLabelComponents(
+            new LabelBuilder()
+                .setLabel("What should they know?")
+                .setDescription(
+                    "Anything that explains the fortnight, or anything you think the record " +
+                        "has wrong. You get one of these."
+                )
+                .setTextInputComponent(
+                    new TextInputBuilder()
+                        .setCustomId(FIELD_APPEAL)
+                        .setStyle(TextInputStyle.Paragraph)
+                        .setRequired(true)
+                        .setMinLength(10)
+                        .setMaxLength(2000)
+                )
+        );
+}
+
+
+/**
+ * An Executive leaving a warning standing after an appeal.
+ *
+ * A reason is required, as every other review outcome requires one, and this one
+ * is read by the member rather than only by the queue: they asked a question and
+ * this is the answer. Upholding an appeal has no modal of its own — that is
+ * reopen, which already asks why and already deletes the warning.
+ */
+export function appealDeclineModal(warningId: string, displayName: string): ModalBuilder {
+    return new ModalBuilder()
+        .setCustomId(`${APPEAL_DECLINE_MODAL}:${warningId}`)
+        .setTitle("Leave the warning standing".slice(0, 45))
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(
+                `-# **${displayName}** will be sent this. Reopen instead if the appeal is right.`
+            )
+        )
+        .addLabelComponents(
+            new LabelBuilder()
+                .setLabel("Why does it stand?")
+                .setDescription(
+                    "They read this. Answer what they actually raised rather than restating " +
+                        "the original decision."
+                )
+                .setTextInputComponent(
+                    new TextInputBuilder()
+                        .setCustomId(FIELD_REASON)
+                        .setStyle(TextInputStyle.Paragraph)
+                        .setRequired(true)
+                        .setMinLength(10)
+                        .setMaxLength(1500)
                 )
         );
 }

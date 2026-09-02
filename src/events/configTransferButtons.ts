@@ -1,6 +1,13 @@
 import { randomBytes } from "node:crypto";
 import type { ButtonInteraction, Client, ModalSubmitInteraction } from "discord.js";
-import { loadConfig, setConfigValue, type StaffBotConfig } from "../config/guildConfig.js";
+import {
+    cachedConfig,
+    isKey,
+    loadConfig,
+    parseConfigValue,
+    setConfigValue,
+    type StaffBotConfig
+} from "../config/guildConfig.js";
 import { readImport, type ConfigChange } from "../config/configTransfer.js";
 import { isExecutive, resolveTier, fetchPublicMember } from "../domain/permissions.js";
 import { audit } from "../domain/audit.js";
@@ -109,6 +116,72 @@ export async function handleConfigButton(
         // A modal is the reply and cannot follow anything else, so the tier
         // check above is the only thing allowed to touch this interaction.
         await interaction.showModal(configImportModal());
+        return;
+    }
+
+    // The second click on weekStartDay or accountingTimezone. The value is
+    // carried in the customId rather than staged in memory: it is one key and
+    // one short value, and a restart between the two clicks should lose the
+    // pending change rather than apply something the operator has forgotten
+    // about. The guard is re-derived here too — a button that only checks
+    // Executive where it was drawn is not a guard.
+    if (action === "setCancel") {
+        await interaction.update(
+            sendOptions(
+                noticeCard("Left alone", "The boundaries are unchanged.", {
+                    colour: COLOUR.settled
+                })
+            ) as never
+        );
+        return;
+    }
+
+    if (action === "setConfirm") {
+        const separatorAt = token.indexOf("|");
+        const key = token.slice(0, separatorAt);
+        const raw = token.slice(separatorAt + 1);
+
+        if (separatorAt < 0 || !isKey(key)) {
+            await interaction.update(
+                sendOptions(errorCard("That setting is no longer one this bot has.")) as never
+            );
+            return;
+        }
+
+        const parsed = parseConfigValue(key, raw);
+        if (!parsed.ok) {
+            await interaction.update(
+                sendOptions(errorCard(`**${key}**: ${parsed.error}`)) as never
+            );
+            return;
+        }
+
+        const previous = cachedConfig()[key];
+        await interaction.deferUpdate();
+        await setConfigValue(key, parsed.value);
+        const fresh = await loadConfig();
+
+        await audit("config.set", {
+            actorId: interaction.user.id,
+            detail: { key, previous, value: parsed.value, confirmed: true }
+        });
+        log.warn(
+            `Calendar key ${key} changed from ${String(previous)} to ${String(parsed.value)}. ` +
+                "Stored rollups and assessments no longer match the calendar until a recompute."
+        );
+
+        await interaction.editReply(
+            sendOptions(
+                noticeCard(
+                    "Boundaries moved",
+                    `**${key}** is now \`${String(parsed.value)}\`.\n\n` +
+                        "Every week and fortnight now begins somewhere new, including the ones " +
+                        "already recorded. Run a recompute to rebuild the rollups against the " +
+                        "new boundaries; until you do, stored figures describe the old ones.",
+                    { colour: COLOUR.settled }
+                )
+            ) as never
+        );
         return;
     }
 

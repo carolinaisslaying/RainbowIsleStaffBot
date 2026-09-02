@@ -26,7 +26,7 @@ import {
 import { describeFaces, renderFacePicker } from "./facePicker.js";
 import { formatDuration, formatMinutes, percent, ts } from "../time/format.js";
 import type { ReviewAction } from "../domain/review.js";
-import { emojiForColour } from "./emoji.js";
+import { EMOJI, emojiForColour } from "./emoji.js";
 import { COLOUR } from "./theme.js";
 
 /**
@@ -380,6 +380,12 @@ export interface ReviewRowInput {
     decidedLine: string | null;
     reason: string | null;
     acknowledgedLine: string | null;
+    /**
+     * The member's own answer, when they have given one and nobody has replied.
+     * Colours the row amber whatever its outcome, because an appeal is the one
+     * thing that can be outstanding on a row that already has a decision.
+     */
+    appeal?: { text: string; filedLine: string; warningId: string } | null;
     departed: boolean;
     rehearsal: boolean;
     /** Set when a recompute has moved them above the requirement since. */
@@ -420,7 +426,15 @@ const REVIEW_BUTTON: Record<
 export function reviewRowCard(row: ReviewRowInput): ContainerBuilder {
     const shortfall = Math.max(0, row.requiredMinutes - row.totalMinutes);
     const reached = percent(row.totalMinutes, row.requiredMinutes);
-    const colour = row.outcome ? REVIEW_OUTCOME_COLOUR[row.outcome] : COLOUR.adverse;
+    // An open appeal is amber whatever the outcome underneath it, because amber
+    // is what "waiting on a human" means everywhere else in this bot and that is
+    // exactly what the row is again. A green excusal under appeal is not
+    // settled, and drawing it settled is how it gets missed.
+    const colour = row.appeal
+        ? COLOUR.pending
+        : row.outcome
+          ? REVIEW_OUTCOME_COLOUR[row.outcome]
+          : COLOUR.adverse;
 
     const lines = [
         `**${row.displayName}**`,
@@ -451,6 +465,30 @@ export function reviewRowCard(row: ReviewRowInput): ContainerBuilder {
             settled.push("-# Rehearsal. Nothing was recorded against them and nobody was told.");
         }
         container.addTextDisplayComponents(text(settled.join("\n")));
+    }
+
+    // Their own words, quoted, under the decision they are about. Its own block
+    // rather than a line in the settled one: this is the member talking and
+    // everything above it is the Executives, and a reader deciding again needs
+    // to see which is which.
+    if (row.appeal) {
+        container.addSeparatorComponents(separator());
+        container.addTextDisplayComponents(
+            text(
+                `${EMOJI.appeal} **They have appealed this.**\n` +
+                    `> ${row.appeal.text.split("\n").join("\n> ")}\n` +
+                    `-# ${row.appeal.filedLine}. Reopen to withdraw the warning, or leave it ` +
+                    "standing and tell them why."
+            )
+        );
+        container.addActionRowComponents(
+            new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`appeal:${row.appeal.warningId}:decline`)
+                    .setLabel("Leave it standing")
+                    .setStyle(ButtonStyle.Secondary)
+            )
+        );
     }
 
     if (row.contradiction) {
@@ -636,7 +674,15 @@ export function reviewBulkConfirmCard(input: {
  * thing an Executive can fairly act on later.
  */
 export function warningDmCard(input: {
+    /** The ASSESSMENT id. Both ends already know it when the DM is composed. */
     warningId: string;
+    /**
+     * The warning's own id, for the appeal button. Absent when there is no live
+     * appeal window — a rehearsal, or a deployment where appeals are shut off —
+     * and the button is simply not drawn rather than drawn to refuse.
+     */
+    appealId?: string | null;
+    appealWindowDays?: number;
     windowLabel: string;
     totalMinutes: number;
     requiredMinutes: number;
@@ -652,17 +698,35 @@ export function warningDmCard(input: {
                     `**${input.totalMinutes} of ${input.requiredMinutes} activity minutes**, ` +
                     `short by **${shortfall}**.\n\n` +
                     `**Why**\n> ${input.reason}\n\n` +
-                    "If you think this is wrong, or something was going on we should know " +
-                    "about, reply to the Executive team.\n\n" +
+                    (input.appealId
+                        ? "If you think this is wrong, or something was going on we should " +
+                          "know about, **appeal it** below and an Executive will decide " +
+                          `again. You have ${input.appealWindowDays ?? 14} days, and one ` +
+                          "appeal.\n\n"
+                        : "If you think this is wrong, or something was going on we should " +
+                          "know about, reply to the Executive team.\n\n") +
                     `-# You can see everything held about you with ${cmd("mydata export")}.`
             )
         )
         .addActionRowComponents(
             new ActionRowBuilder<ButtonBuilder>().addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`warning:${input.warningId}:ack`)
-                    .setLabel("I have read this")
-                    .setStyle(ButtonStyle.Secondary)
+                ...[
+                    new ButtonBuilder()
+                        .setCustomId(`warning:${input.warningId}:ack`)
+                        .setLabel("I have read this")
+                        .setStyle(ButtonStyle.Secondary),
+                    // Acknowledging is not agreeing, and appealing is not
+                    // refusing to acknowledge. Both are offered at once so
+                    // neither reads as the price of the other.
+                    ...(input.appealId
+                        ? [
+                              new ButtonBuilder()
+                                  .setCustomId(`appeal:${input.appealId}:open`)
+                                  .setLabel("Appeal this")
+                                  .setStyle(ButtonStyle.Primary)
+                          ]
+                        : [])
+                ]
             )
         );
 

@@ -126,7 +126,12 @@ describe("the header's sentence", () => {
         }));
 
     it("counts what is left", () => {
-        expect(queueCounts(rows(1, 3))).toEqual({ below: 3, decided: 1, remaining: 2 });
+        expect(queueCounts(rows(1, 3))).toEqual({
+            below: 3,
+            decided: 1,
+            remaining: 2,
+            underAppeal: 0
+        });
     });
 
     it("reads correctly with nobody below", () => {
