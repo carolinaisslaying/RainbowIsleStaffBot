@@ -154,6 +154,7 @@ crosses that gap by fetching from whichever server the key refers to.
 | `onLeaveRole` | Leave activates but the member is not visibly on leave |
 | `staffRankRoles` | Leave removes the department role only, not ranks |
 | `recapChannelId` | Recaps still DM; only the channel copy is missing |
+| `warningChannelId` | Warnings still issue; there is just no durable log of them |
 
 Everything else has a working default from the spec: targets, thresholds,
 timings, `accountingTimezone`, `weekStartDay` and `fortnightAnchor`. All can be
