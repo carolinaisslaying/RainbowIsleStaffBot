@@ -100,6 +100,29 @@ export interface StartResult {
     card: RenderedMessage;
 }
 
+/**
+ * What somebody is told when they are already on shift.
+ *
+ * Two callers now: the check before the insert, and the insert losing the race
+ * to itself. Both are the same fact about the same member, so both say it the
+ * same way.
+ */
+function alreadyOnShiftCard(
+    open: ShiftDoc,
+    config: StaffBotConfig,
+    guildId?: string | null
+): RenderedMessage {
+    return noticeCard(
+        "You are already on shift",
+        stateOf(open) === "away"
+            ? `Your shift is open but marked away. Send a message in ${publicGuildName()}, ` +
+              "or come back online, and you will be available again.\n\n" +
+              `It ends itself ${ts(awayDeadline(open, config), "R")} if you stay away.`
+            : `Use ${cmd("shift end", guildId)} when you are finished.`,
+        { ephemeral: true }
+    );
+}
+
 export async function beginShift(
     client: Client,
     config: StaffBotConfig,
@@ -113,20 +136,7 @@ export async function beginShift(
     guildId?: string | null
 ): Promise<StartResult> {
     const existing = await getOpenShift(staff._id);
-    if (existing) {
-        return {
-            ok: false,
-            card: noticeCard(
-                "You are already on shift",
-                stateOf(existing) === "away"
-                    ? `Your shift is open but marked away. Send a message in ${publicGuildName()}, ` +
-                      "or come back online, and you will be available again.\n\n" +
-                      `It ends itself ${ts(awayDeadline(existing, config), "R")} if you stay away.`
-                    : `Use ${cmd("shift end", guildId)} when you are finished.`,
-                { ephemeral: true }
-            )
-        };
-    }
+    if (existing) return { ok: false, card: alreadyOnShiftCard(existing, config, guildId) };
 
     const leave = await activeLeaveFor(staff._id);
     if (leave) {
@@ -141,7 +151,20 @@ export async function beginShift(
         };
     }
 
-    const shift = await startShift(staff._id);
+    let shift: ShiftDoc;
+    try {
+        shift = await startShift(staff._id);
+    } catch (error) {
+        // The unique partial index on open shifts refused it, which means one
+        // already exists: two clicks landed either side of the read above. The
+        // second is answered with the truth rather than with a failure card,
+        // because from the member's side they are on shift and that is what
+        // they were trying to be.
+        const raced = await getOpenShift(staff._id);
+        if (!raced) throw error;
+        log.debug(`Second concurrent /shift start for ${staff._id.toHexString()}`, error);
+        return { ok: false, card: alreadyOnShiftCard(raced, config, guildId) };
+    }
     markSeen(staff._id);
 
     const member = await fetchMember(client, config.publicGuildId, staff.discordId);

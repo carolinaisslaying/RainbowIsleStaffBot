@@ -61,6 +61,31 @@ export const collections = {
     fortnightReviews: () => db().collection<FortnightReviewDoc>("fortnightReviews")
 };
 
+/**
+ * Index creation that a single bad index cannot turn into a failed boot.
+ *
+ * The unique open-shift index is the only one that can be refused by data
+ * already in the collection: a deployment that accumulated a duplicate open
+ * shift before the constraint existed cannot build it until somebody closes
+ * one. Failing startup over that would take the bot down to protect against a
+ * race it has already lost, and `/dev status` is where an operator would go to
+ * find out why.
+ */
+async function tryIndex(
+    label: string,
+    create: () => Promise<unknown>
+): Promise<void> {
+    try {
+        await create();
+    } catch (error) {
+        log.error(
+            `Could not create the ${label} index. The bot is running without it; ` +
+                "the constraint it enforces is not being enforced.",
+            error
+        );
+    }
+}
+
 async function ensureIndexes(target: Db): Promise<void> {
     const staff = target.collection<StaffDoc>("staff");
     await staff.createIndex({ discordId: 1 }, { unique: true });
@@ -72,6 +97,19 @@ async function ensureIndexes(target: Db): Promise<void> {
 
     const shifts = target.collection<ShiftDoc>("shifts");
     await shifts.createIndex({ staffId: 1, startedAt: -1 });
+    // One open shift per member, enforced by the database rather than by the
+    // check-then-insert in `beginShift`. Two clicks a few milliseconds apart
+    // both read "no open shift" and both inserted one, and from then on
+    // `getOpenShift` answered with whichever the driver happened to return:
+    // the other stayed open, invisible, until a sweep closed it hours later
+    // under a reason nobody could explain. The partial filter is what keeps
+    // the constraint off every closed shift, of which there are many per member.
+    await tryIndex("one open shift per member", () =>
+        shifts.createIndex(
+            { staffId: 1 },
+            { unique: true, partialFilterExpression: { endedAt: null } }
+        )
+    );
     await shifts.createIndex(
         { endedAt: 1 },
         { partialFilterExpression: { endedAt: null } }

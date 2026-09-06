@@ -115,10 +115,9 @@ export async function handleConductWarnModal(
                     : `It counts against them for ${days} days.`) +
                 "\n\n" +
                 (delivered
-                    ? "They have the message and can appeal it."
+                    ? "They have the message."
                     : "⚠️ **Their direct messages are closed, so they did not get it.** The " +
-                      "warning stands on their record. Their appeal window stays shut until " +
-                      "something reaches them, so tell them yourself.") +
+                      "warning stands on their record, so tell them yourself.") +
                 (config.warningChannelId ? "" : "\n\n-# No warning channel is configured, so " +
                     "there is no card for this in the log."),
             { colour: delivered ? COLOUR.pending : COLOUR.adverse, ephemeral: true }

@@ -211,24 +211,6 @@ export interface WarningDoc {
      */
     deliveredAt?: Date | null;
     deliveryFailedAt?: Date | null;
-
-    /**
-     * The member's answer, if they gave one. One per warning, inside
-     * `appealWindowDays`; the window runs from delivery, because a warning
-     * nobody received is not one anybody could have contested.
-     */
-    appeal?: WarningAppeal | null;
-}
-
-export interface WarningAppeal {
-    text: string;
-    filedAt: Date;
-    /** Set when an Executive has answered it, either way. */
-    decidedAt: Date | null;
-    /** `upheld` deletes the warning through the existing reopen path. */
-    decision: "upheld" | "declined" | null;
-    decidedBy: ObjectId | null;
-    decisionNote: string | null;
 }
 
 export type LeaveStatus = "pending" | "approved" | "declined" | "active" | "ended";

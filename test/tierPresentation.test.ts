@@ -136,8 +136,7 @@ describe("a withdrawn warning does not argue with itself", () => {
             permanent: true,
             lifetimeDays: 0,
             acknowledgedAt: null,
-            delivery: "delivered" as const,
-            appeal: null
+            delivery: "delivered" as const
         };
 
         const live = JSON.stringify(
@@ -176,7 +175,6 @@ describe("a withdrawn warning does not argue with itself", () => {
                 lifetimeDays: 0,
                 acknowledgedAt: null,
                 delivery: "delivered",
-                appeal: null,
                 withdrawn: {
                     at: new Date("2026-09-02T10:00:00Z"),
                     by: "<@999>",

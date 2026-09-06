@@ -6,9 +6,9 @@ card, and `/dev purge`. Everything else is removed by hand, with `mongosh`, by
 someone who has decided to do it.
 
 **No path in this bot deletes a warning.** Withdrawing one — by reopening a
-review row, by the button on its card in the warning channel, or by upholding an
-appeal — marks the record withdrawn and leaves it in place, carrying both
-reasons: why it was issued and why it was taken back. A withdrawn warning counts
+review row, or by the button on its card in the warning channel — marks the
+record withdrawn and leaves it in place, carrying both reasons: why it was
+issued and why it was taken back. A withdrawn warning counts
 against nobody, and shows on the record as withdrawn. The only warnings that are
 ever removed are the ones `/dev purge` takes with the fortnight that issued them,
 and a conduct warning belongs to no fortnight, so a purge never touches one.
@@ -35,7 +35,11 @@ buttons will and will not do.
   happened instead. A withdrawn warning counts against nobody and is shown on
   the member's own record marked as withdrawn.
 - A row that is warned, reopened and warned again carries two warning documents:
-  one withdrawn and one standing. That is the history, and it is correct.
+  one withdrawn and one standing. That is the history, and it is correct. Every
+  read that has to pick one takes the standing warning: `reviewRowFor` for the
+  acknowledgement line, and `findWarning` for the acknowledgement button, which
+  used to be an unordered `findOne` and so could tell a member their live
+  warning had been withdrawn.
 - Warnings withdrawn this way from **before** this change are simply gone — they
   were deleted at the time, and nothing reconstructs them. The audit rows for
   those reopenings remain the only record of them.

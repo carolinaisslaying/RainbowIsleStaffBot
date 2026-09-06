@@ -107,3 +107,33 @@ export function leaderboardVisibility(audience: LeaderboardAudience): Leaderboar
         note: "Everyone in this channel can see this. Every Moderator is listed."
     };
 }
+
+/**
+ * Whether one member's row belongs on a particular copy of the leaderboard.
+ *
+ * Three ways a hidden row is admitted, and the third was the leak. A privileged
+ * reader sees every row, flagged, because the ranks they read have to be the
+ * real ranks. A member always sees their own. And a card going into a channel
+ * has neither of those readers: `publicView` is the everyone view, where the
+ * person who pressed the button is not the audience.
+ *
+ * That last case is not hypothetical. Paging edits the message the buttons are
+ * on, so a member who had hidden themselves, pressing Next on a leaderboard
+ * sitting in a channel, rewrote that public message with their own row on it —
+ * admitted by the "always sees their own" exception, and pinned at the bottom
+ * whatever their rank, in front of the room they had hidden from. Forcing the
+ * reader's tier down to Staff covered the Lead case and not this one, because
+ * this exception is by identity rather than by rank.
+ *
+ * Pure, so every combination can be enumerated without a Discord fixture.
+ */
+export function leaderboardRowVisible(options: {
+    optedOut: boolean;
+    isViewer: boolean;
+    privileged: boolean;
+    publicView: boolean;
+}): boolean {
+    if (!options.optedOut) return true;
+    if (options.publicView) return false;
+    return options.privileged || options.isViewer;
+}

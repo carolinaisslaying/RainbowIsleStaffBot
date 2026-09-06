@@ -144,8 +144,7 @@ describe("the header's sentence", () => {
         expect(queueCounts(rows(1, 3))).toEqual({
             below: 3,
             decided: 1,
-            remaining: 2,
-            underAppeal: 0
+            remaining: 2
         });
     });
 

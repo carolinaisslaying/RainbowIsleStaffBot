@@ -6,7 +6,6 @@ import {
     announcementPlan,
     assessFortnight,
     assessmentHistory,
-    appealedAssessmentIds,
     assessmentsForFortnight,
     belowThresholdFor,
     isAssessableFortnight,
@@ -240,16 +239,7 @@ export async function refreshQueueHeader(
     const below = await belowThresholdFor(index);
     const window = windowForIndex(index, config);
     const label = labelWindow(window.week1Start, window.end, config.accountingTimezone);
-    // An appeal is the one thing that can be outstanding on a queue where every
-    // row already has an outcome, so the header has to know about them or a
-    // finished-looking queue silently holds somebody waiting for an answer.
-    const appealed = await appealedAssessmentIds(below.map((row) => row._id));
-    const counts = queueCounts(
-        below.map((row) => ({
-            outcome: row.reviewOutcome,
-            underAppeal: appealed.has(row._id.toHexString())
-        }))
-    );
+    const counts = queueCounts(below.map((row) => ({ outcome: row.reviewOutcome })));
 
     // The header first, so it sits above the rows on a first posting.
     const existing = await findReview(index);
@@ -368,8 +358,8 @@ export async function reviewRowFor(
     //
     // Withdrawn ones are skipped deliberately. Reopening no longer deletes the
     // warning, so a row that was warned, reopened and warned again has two
-    // records against it — and the acknowledgement and appeal lines belong to
-    // the one that still stands, not to the one that was taken back.
+    // records against it — and the acknowledgement line belongs to the one that
+    // still stands, not to the one that was taken back.
     const issued = warnings.find(
         (warning) => warning.assessmentId?.equals(assessment._id) && !warning.withdrawnAt
     );
@@ -415,14 +405,6 @@ export async function reviewRowFor(
         // silence, and opposite facts to anybody deciding whether a warning has
         // been ignored.
         acknowledgedLine: issued ? acknowledgementLine(issued) : null,
-        appeal:
-            issued?.appeal && !issued.appeal.decidedAt
-                ? {
-                      text: issued.appeal.text,
-                      filedLine: `Appealed ${ts(issued.appeal.filedAt, "R")}`,
-                      warningId: issued._id.toHexString()
-                  }
-                : null,
         departed,
         rehearsal: assessment.rehearsal === true,
         trend: trend.points.length > 0

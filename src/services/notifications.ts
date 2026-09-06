@@ -151,6 +151,13 @@ export async function deliverDueRecaps(
         if (!member.timezone) continue;
         if (localHourIn(now, member.timezone) !== 9) continue;
 
+        // Nothing to recap is not a delivery. `sendRecap` returns null when the
+        // closed week has no rollup for this member, and claiming the receipt
+        // first spent their one recap on a week that could not be sent — so a
+        // recompute that filled the rollup in an hour later found the receipt
+        // already gone and they were never told.
+        if (!(await hasRollupFor(member._id, closed))) continue;
+
         const key = `recap:${member._id.toHexString()}:${closed.start.getTime()}`;
         if (!(await claim(key))) continue;
 
@@ -162,6 +169,19 @@ export async function deliverDueRecaps(
         }
     }
     return sent;
+}
+
+/**
+ * Whether the closed week left this member anything to recap.
+ *
+ * Asked before the receipt is claimed rather than discovered inside the send,
+ * because a claim is spent whether or not anything went out.
+ */
+async function hasRollupFor(staffId: ObjectId, closed: WeekWindow): Promise<boolean> {
+    const one = await collections
+        .weeklyStats()
+        .findOne({ staffId, weekStart: closed.start }, { projection: { _id: 1 } });
+    return one !== null;
 }
 
 /**

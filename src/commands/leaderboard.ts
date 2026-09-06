@@ -9,7 +9,7 @@ import { weekWindowFor } from "../domain/weekly.js";
 import { currentFortnightIndex, windowForIndex } from "../domain/assessments.js";
 import { ringStateFor } from "../domain/rings.js";
 import { isLeadOrAbove } from "../domain/permissions.js";
-import { leaderboardVisibility } from "../domain/leaderboard.js";
+import { leaderboardRowVisible, leaderboardVisibility } from "../domain/leaderboard.js";
 import { leaderboardCard, type LeaderboardRowView } from "../render/cards.js";
 import { describeRings, renderRings, ringsCacheKey } from "../render/rings.js";
 import { currentWeekStats } from "../domain/weekly.js";
@@ -134,7 +134,19 @@ export async function renderLeaderboard(
     viewer: StaffDoc,
     tier: import("../domain/permissions.js").Tier,
     scope: LeaderboardScope,
-    page: number
+    page: number,
+    /**
+     * The card is going into a channel, so it must be the everyone view.
+     *
+     * Paging edits the message the buttons are on, and anybody can press them.
+     * Forcing the reader's tier down to Staff covers a Lead turning the page —
+     * but not a member who has hidden themselves, because their own row is
+     * admitted by the exception below and pinned at the bottom whatever their
+     * rank. Pressing Next on a public card therefore rewrote that public card
+     * with their hidden row, and their rings, in front of the room they had
+     * hidden from. In a channel there is no viewer to make an exception for.
+     */
+    publicView = false
 ) {
     const { entries, label, target } = await buildLeaderboard(scope, config);
 
@@ -142,12 +154,14 @@ export async function renderLeaderboard(
     // and assessment remain mandatory, and Lead and Executive views still show
     // everybody: a hidden row is marked rather than removed for them, so the
     // ranks they read are the real ranks.
-    const privileged = isLeadOrAbove(tier);
-    const visible = entries.filter(
-        (entry) =>
-            privileged ||
-            !entry.staff.leaderboardOptOut ||
-            entry.staff._id.equals(viewer._id)
+    const privileged = isLeadOrAbove(tier) && !publicView;
+    const visible = entries.filter((entry) =>
+        leaderboardRowVisible({
+            optedOut: entry.staff.leaderboardOptOut,
+            isViewer: entry.staff._id.equals(viewer._id),
+            privileged,
+            publicView
+        })
     );
 
     const ranked = [...visible].sort((left, right) => right.minutes - left.minutes);
@@ -187,8 +201,13 @@ export async function renderLeaderboard(
         rows.push(await toView(slice[index], (safePage - 1) * PAGE_SIZE + index + 1));
     }
 
-    // The viewer's own row is pinned at the bottom regardless of position.
-    const viewerIndex = ranked.findIndex((entry) => entry.staff._id.equals(viewer._id));
+    // The viewer's own row is pinned at the bottom regardless of position —
+    // except on a card going into a channel, where the person who pressed the
+    // button is not the audience. `leaderboardCard` draws the viewer's rings
+    // inside this block, so dropping the row drops those with it.
+    const viewerIndex = publicView
+        ? -1
+        : ranked.findIndex((entry) => entry.staff._id.equals(viewer._id));
     const viewerRow =
         viewerIndex >= 0 ? await toView(ranked[viewerIndex], viewerIndex + 1) : null;
 
@@ -239,7 +258,10 @@ export async function renderLeaderboard(
         // then counted the hidden in the same breath.
         footnote: leaderboardVisibility({
             privileged,
-            viewerHidden: viewer.leaderboardOptOut,
+            // Nothing on a public card is the viewer's own, so nothing on it is
+            // withheld from the room. Passing their hidden flag here would make
+            // the card claim to be private while sitting in a channel.
+            viewerHidden: publicView ? false : viewer.leaderboardOptOut,
             hiddenCount: optedOut
         }).note
     });

@@ -37,11 +37,6 @@ import { handleReviewBulkButton, handleReviewButton } from "./reviewButtons.js";
 import { handleReviewModal } from "./reviewModals.js";
 import { handleWarningButton } from "./warningButtons.js";
 import {
-    handleAppealButton,
-    handleAppealDeclineModal,
-    handleAppealModal
-} from "./appealButtons.js";
-import {
     handleConductButton,
     handleConductWarnModal,
     handleConductWithdrawModal
@@ -56,8 +51,6 @@ import {
     handleConfigImportModal
 } from "./configTransferButtons.js";
 import {
-    APPEAL_DECLINE_MODAL,
-    APPEAL_MODAL,
     CONDUCT_WARN_MODAL,
     CONDUCT_WITHDRAW_MODAL,
     CONFIG_IMPORT_MODAL,
@@ -313,21 +306,6 @@ async function routeModal(
         return;
     }
 
-    // The member's own appeal, from the DM carrying their warning. Routed
-    // before the review modals: those are Executive work on somebody else's
-    // row, and this is the one modal whose author is its subject.
-    if (interaction.customId.startsWith(`${APPEAL_MODAL}:`)) {
-        await handleAppealModal(client, config, interaction);
-        return;
-    }
-
-    // The Executive's answer to one. Its own handler because it is the opposite
-    // permission: the appeal belongs to its subject, the decision does not.
-    if (interaction.customId.startsWith(`${APPEAL_DECLINE_MODAL}:`)) {
-        await handleAppealDeclineModal(client, config, interaction);
-        return;
-    }
-
     // Conduct warnings: issuing one, and taking one back. The subject rides in
     // the id, because the warn modal is opened from a command rather than from
     // a message and has nothing else to carry it.
@@ -405,11 +383,6 @@ async function routeButton(client: Client, interaction: import("discord.js").But
     }
     if (namespace === "warning") {
         await handleWarningButton(client, config, interaction, new ObjectId(first), second);
-        return;
-    }
-    // Lives on the member's warning DM, like the acknowledgement beside it.
-    if (namespace === "appeal") {
-        await handleAppealButton(client, config, interaction, first, second);
         return;
     }
     // The Withdraw button on a warning's card in the log.
@@ -526,7 +499,11 @@ async function routeButton(client: Client, interaction: import("discord.js").But
             staff,
             readerTier,
             first as LeaderboardScope,
-            Number.parseInt(second, 10) || 1
+            Number.parseInt(second, 10) || 1,
+            // The everyone view, whoever pressed it. The tier alone was not
+            // enough: a member who has hidden themselves is admitted to their
+            // own copy by name, not by rank, so paging published their row.
+            inChannel
         );
         await interaction.editReply({
             components: card.components,

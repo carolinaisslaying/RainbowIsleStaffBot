@@ -9,7 +9,14 @@ import {
     type StaffBotConfig
 } from "../config/guildConfig.js";
 import { readImport, type ConfigChange } from "../config/configTransfer.js";
-import { isExecutive, resolveTier, fetchPublicMember } from "../domain/permissions.js";
+import {
+    bootstrapAdminsConfigured,
+    fetchPublicMember,
+    isBootstrapAdmin,
+    isExecutive,
+    resolveTier,
+    seededGatePermits
+} from "../domain/permissions.js";
 import { audit } from "../domain/audit.js";
 import { configExportCard, configImportCard, resolveGuildNames } from "../render/configCards.js";
 import { errorCard, noticeCard } from "../render/cards.js";
@@ -55,14 +62,46 @@ export function pendingImportCount(): number {
     return pending.size;
 }
 
+/**
+ * The same two gates `/config` itself carries, re-derived on every click.
+ *
+ * Executive is the tier, and `seededOnly` is the part the tier lattice cannot
+ * express: `resolveTier` promotes a seeded admin to Executive, so an Executive
+ * who could change the configuration could name themselves in it. The command
+ * has said so since it was written; these handlers checked only the tier, which
+ * left the invariant true of the command and merely unreachable on the buttons.
+ * A guard that holds only where the button is drawn is the thing this codebase
+ * keeps deciding is not a guard.
+ *
+ * A deployment naming no administrators falls back to the tier, exactly as
+ * `seededGatePermits` does everywhere else, or the recovery hatch would refuse
+ * the person trying to configure a fresh install.
+ */
 async function refuseUnlessExecutive(
     client: Client,
     config: StaffBotConfig,
     interaction: ButtonInteraction | ModalSubmitInteraction
 ): Promise<boolean> {
     const member = await fetchPublicMember(client, config, interaction.user.id);
-    if (isExecutive(resolveTier(interaction.user.id, member, config))) return false;
-    await respond(interaction, errorCard("Configuration is Executive only."));
+    const executive = isExecutive(resolveTier(interaction.user.id, member, config));
+    const seeded = seededGatePermits({
+        seededOnly: true,
+        anyAdminsConfigured: bootstrapAdminsConfigured(),
+        callerIsAdmin: isBootstrapAdmin(interaction.user.id)
+    });
+
+    if (executive && seeded) return false;
+
+    await respond(
+        interaction,
+        errorCard(
+            executive
+                ? "Configuration is limited to the administrators named when this bot was " +
+                      "deployed. Executive rank does not reach it, on purpose: it changes how " +
+                      "the bot itself behaves rather than what it decides about anyone."
+                : "Configuration is Executive only."
+        )
+    );
     return true;
 }
 

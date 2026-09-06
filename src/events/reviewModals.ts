@@ -505,8 +505,7 @@ async function applyDecision(
     const outcome = OUTCOME_FOR[action];
     await recordReview(assessment._id, actorStaffId, outcome, reason);
 
-    // Held, because the DM below carries its id on the appeal button and the
-    // delivery result is written back against it afterwards.
+    // Held, because the delivery result is written back against it afterwards.
     const issued =
         action === "warn" && subject
             ? await issueWarning(subject._id, assessment._id, actorStaffId, reason, rehearsal)
@@ -546,11 +545,6 @@ async function applyDecision(
                 ? await tryDm(client, subject.discordId, {
                       ...warningDmCard({
                           warningId: assessment._id.toHexString(),
-                          // A rehearsal's warning is not real, so it gets no
-                          // appeal: there would be nothing to decide and the
-                          // row it points at is going to be purged.
-                          appealId: rehearsal ? null : (issued?._id.toHexString() ?? null),
-                          appealWindowDays: config.appealWindowDays,
                           windowLabel: label,
                           totalMinutes: assessment.totalMinutes,
                           requiredMinutes: assessment.requiredMinutes,

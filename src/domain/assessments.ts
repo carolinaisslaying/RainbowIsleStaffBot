@@ -103,6 +103,26 @@ export async function computeAssessment(
 }
 
 /**
+ * What a run of the assessment does to the `rehearsal` flag on a row it finds.
+ *
+ * A real run **promotes**; a rehearsal never demotes. The flag used to live in
+ * `$setOnInsert` alone, which handed realness to whoever created the document —
+ * and `/dev assess` is always a rehearsal, so reading a fortnight's card before
+ * it went out for real branded every row of it a rehearsal for ever. The real
+ * run afterwards refreshed the figures, claimed the announcement and DMed the
+ * roster, over documents that still said they were not real: the warnings it
+ * issued counted against nobody, went to no one but Executives, and the whole
+ * fortnight was filtered out of `assessmentHistory`, `warningsFor` and
+ * `/mydata export`. Nothing said so.
+ *
+ * Pure, and separate, because the asymmetry is the rule and it is worth being
+ * able to state it without a database.
+ */
+export function rehearsalUpdate(rehearsal: boolean): { rehearsal: false } | Record<string, never> {
+    return rehearsal ? {} : { rehearsal: false };
+}
+
+/**
  * Persist an assessment. requiredMinutes is snapshotted here and never re-read
  * from live config: changing the target must not retroactively rewrite past
  * outcomes. A re-run refreshes the figures but leaves any review decision alone.
@@ -120,7 +140,9 @@ export async function saveAssessment(
                 week1Minutes: computation.week1Minutes,
                 week2Minutes: computation.week2Minutes,
                 totalMinutes: computation.totalMinutes,
-                status: computation.status
+                status: computation.status,
+                // A real run promotes a rehearsal's row to real. See above.
+                ...rehearsalUpdate(rehearsal)
             },
             $setOnInsert: {
                 _id: new ObjectId(),
@@ -384,6 +406,20 @@ export async function recordReview(
     );
 }
 
+/**
+ * An activity warning: the record a fortnight review writes when it warns.
+ *
+ * The same document a conduct warning is, written the same way — every field
+ * present and explicit, `kind` included, so an activity warning is a complete
+ * record rather than one the readers have to reconstruct from absences. It
+ * lands in the same log channel, carries the same Withdraw button and counts
+ * the same one against the member.
+ *
+ * What stays different is the two things that genuinely differ: it carries an
+ * `assessmentId` because a fortnight issued it, and it carries **no `tier`**,
+ * because the rungs grade conduct somebody judged and this is a figure the bot
+ * computed. `lifetimeDaysFor` reads `warningExpiryDays` for it on that basis.
+ */
 export async function issueWarning(
     staffId: ObjectId,
     assessmentId: ObjectId,
@@ -394,7 +430,14 @@ export async function issueWarning(
     const warning: WarningDoc = {
         _id: new ObjectId(),
         staffId,
+        // Written rather than left absent. Absent still reads as `activity`,
+        // which is what protects every warning issued before conduct warnings
+        // existed, but nothing new should rely on that fallback.
+        kind: "activity",
         assessmentId,
+        // No rung. An activity warning is issued off a figure the bot computed,
+        // and dressing it in one would say something about it nobody decided.
+        tier: null,
         issuedBy,
         issuedAt: new Date(),
         note,
@@ -404,7 +447,12 @@ export async function issueWarning(
         // exactly one of these the moment we know.
         deliveredAt: null,
         deliveryFailedAt: null,
-        appeal: null
+        withdrawnAt: null,
+        withdrawnBy: null,
+        withdrawalReason: null,
+        // Filled in by `upsertWarningCard`, the same as a conduct warning's.
+        logChannelId: null,
+        logMessageId: null
     };
     await collections.warnings().insertOne(warning);
     return warning;
@@ -433,80 +481,7 @@ export async function recordWarningDelivery(
     );
 }
 
-/** The member's appeal, filed. One per warning; the caller checks the window. */
-export async function fileAppeal(
-    warningId: ObjectId,
-    text: string,
-    at = new Date()
-): Promise<void> {
-    await collections.warnings().updateOne(
-        { _id: warningId },
-        {
-            $set: {
-                appeal: {
-                    text,
-                    filedAt: at,
-                    decidedAt: null,
-                    decision: null,
-                    decidedBy: null,
-                    decisionNote: null
-                }
-            }
-        }
-    );
-}
-
-/**
- * An Executive's answer to an appeal.
- *
- * Only ever `declined` here. Upholding one runs through reopen, which deletes
- * the warning outright — and a deleted warning has no appeal left to decide.
- * That asymmetry is the point: a withdrawal is a reviewed decision with an
- * audit row behind it, and reopen is the only path that removes a warning.
- */
-export async function declineAppeal(
-    warningId: ObjectId,
-    decidedBy: ObjectId,
-    note: string,
-    at = new Date()
-): Promise<void> {
-    await collections.warnings().updateOne(
-        { _id: warningId },
-        {
-            $set: {
-                "appeal.decidedAt": at,
-                "appeal.decision": "declined",
-                "appeal.decidedBy": decidedBy,
-                "appeal.decisionNote": note
-            }
-        }
-    );
-}
-
-/**
- * Which of these assessments have an appeal nobody has answered.
- *
- * One query for the whole queue rather than one per row: the header is redrawn
- * on every decision, and a per-row lookup would make each click cost a query
- * per member below the requirement.
- */
-export async function appealedAssessmentIds(
-    assessmentIds: ObjectId[]
-): Promise<Set<string>> {
-    if (assessmentIds.length === 0) return new Set();
-    const docs = await collections
-        .warnings()
-        .find({
-            assessmentId: { $in: assessmentIds },
-            "appeal.filedAt": { $exists: true },
-            "appeal.decidedAt": null
-        })
-        .project<{ assessmentId: ObjectId }>({ assessmentId: 1 })
-        .toArray();
-    return new Set(docs.map((doc) => doc.assessmentId.toHexString()));
-}
-
-/** One warning by its own id, for the appeal path where the DM carries it. */
+/** One warning by its own id, for the acknowledgement a conduct DM carries. */
 export async function findWarningById(warningId: ObjectId): Promise<WarningDoc | null> {
     return collections.warnings().findOne({ _id: warningId });
 }
@@ -520,12 +495,28 @@ export async function warningsFor(staffId: ObjectId): Promise<WarningDoc[]> {
         .toArray();
 }
 
-/** The warning an assessment issued against a member, if it still exists. */
+/**
+ * The warning an assessment issued against a member: the one that still stands.
+ *
+ * Reopening no longer deletes, so a row warned, reopened and warned again
+ * carries two documents against the same assessment. An unordered `findOne`
+ * could return either, which on the acknowledgement button meant a member
+ * pressing the one in their inbox was told their live warning had been
+ * withdrawn. Withdrawn records are the fallback, never the first answer:
+ * `reviewRowFor` picks the live warning the same way.
+ */
 export async function findWarning(
     assessmentId: ObjectId,
     staffId: ObjectId
 ): Promise<WarningDoc | null> {
-    return collections.warnings().findOne({ assessmentId, staffId });
+    const live = await collections
+        .warnings()
+        .findOne(
+            { assessmentId, staffId, withdrawnAt: { $in: [null, undefined] } },
+            { sort: { issuedAt: -1 } }
+        );
+    if (live) return live;
+    return collections.warnings().findOne({ assessmentId, staffId }, { sort: { issuedAt: -1 } });
 }
 
 export async function acknowledgeWarning(warningId: ObjectId): Promise<void> {

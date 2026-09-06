@@ -166,47 +166,6 @@ export function deliveryState(warning: {
 }
 
 /**
- * Whether an appeal may still be filed, and why not when it may not.
- *
- * The window runs from **delivery**, not from issue. The two come apart exactly
- * where it matters: a member whose DMs are closed never received the warning,
- * and a window counted from issue could expire before they ever saw the thing
- * they are entitled to contest. An undelivered warning therefore has no live
- * window at all, which is honest — there is nothing yet to appeal — and the
- * refusal says so rather than talking about a deadline.
- *
- * Re-derived wherever it is asked, never carried from where the button was
- * drawn: the DM sits in an inbox indefinitely, and a guard enforced only at
- * render time is not a guard.
- */
-export type AppealRefusal =
-    | { ok: true }
-    | { ok: false; reason: "already-filed" | "window-closed" | "never-delivered" };
-
-export function appealPermitted(options: {
-    deliveredAt?: Date | null;
-    appealFiled: boolean;
-    windowDays: number;
-    now: Date;
-}): AppealRefusal {
-    if (options.appealFiled) return { ok: false, reason: "already-filed" };
-    if (!options.deliveredAt) return { ok: false, reason: "never-delivered" };
-
-    const closesAt = options.deliveredAt.getTime() + options.windowDays * 86_400_000;
-    if (options.now.getTime() > closesAt) return { ok: false, reason: "window-closed" };
-    return { ok: true };
-}
-
-/** When a warning's appeal window shuts, or null if it never opened. */
-export function appealWindowCloses(
-    deliveredAt: Date | null | undefined,
-    windowDays: number
-): Date | null {
-    if (!deliveredAt) return null;
-    return new Date(deliveredAt.getTime() + windowDays * 86_400_000);
-}
-
-/**
  * A warning past its expiry is spent: still on the record, still readable, and
  * no longer counted. Nobody should carry one bad fortnight for ever, and a
  * total that only ever grows stops meaning anything.
@@ -405,45 +364,33 @@ export interface QueueCounts {
     below: number;
     decided: number;
     remaining: number;
-    /** Decided rows whose member has answered back and not yet been answered. */
-    underAppeal: number;
 }
 
-export function queueCounts(
-    rows: { outcome: ReviewOutcome | null; underAppeal?: boolean }[]
-): QueueCounts {
+export function queueCounts(rows: { outcome: ReviewOutcome | null }[]): QueueCounts {
     const decided = rows.filter((row) => row.outcome !== null).length;
     return {
         below: rows.length,
         decided,
-        remaining: rows.length - decided,
-        underAppeal: rows.filter((row) => row.underAppeal === true).length
+        remaining: rows.length - decided
     };
 }
 
 /** The header's own sentence, which has to read correctly at every count. */
 export function queueHeadline(counts: QueueCounts, requiredMinutes: number): string {
-    // An appeal is the one thing that can be outstanding on a queue where every
-    // row already has an outcome, so it has to survive the "all reviewed"
-    // sentence. Without it a finished-looking queue silently holds somebody
-    // waiting for an answer.
-    const appeals = counts.underAppeal > 0 ? ` ${counts.underAppeal} under appeal.` : "";
-
     if (counts.below === 0) {
         return `Every active member met the ${requiredMinutes} minute requirement. Nothing to review.`;
     }
     if (counts.remaining === 0) {
         return (
             `${counts.below} ${counts.below === 1 ? "member was" : "members were"} below the ` +
-            `${requiredMinutes} minute requirement. All reviewed.${appeals}`
+            `${requiredMinutes} minute requirement. All reviewed.`
         );
     }
     return (
         `${counts.below} ${counts.below === 1 ? "member is" : "members are"} below the ` +
         `${requiredMinutes} minute requirement. ` +
         `${counts.remaining} still to decide` +
-        (counts.decided > 0 ? `, ${counts.decided} done.` : ".") +
-        appeals
+        (counts.decided > 0 ? `, ${counts.decided} done.` : ".")
     );
 }
 

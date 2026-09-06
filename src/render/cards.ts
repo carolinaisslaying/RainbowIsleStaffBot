@@ -381,12 +381,6 @@ export interface ReviewRowInput {
     decidedLine: string | null;
     reason: string | null;
     acknowledgedLine: string | null;
-    /**
-     * The member's own answer, when they have given one and nobody has replied.
-     * Colours the row amber whatever its outcome, because an appeal is the one
-     * thing that can be outstanding on a row that already has a decision.
-     */
-    appeal?: { text: string; filedLine: string; warningId: string } | null;
     departed: boolean;
     rehearsal: boolean;
     /** Set when a recompute has moved them above the requirement since. */
@@ -427,15 +421,7 @@ const REVIEW_BUTTON: Record<
 export function reviewRowCard(row: ReviewRowInput): ContainerBuilder {
     const shortfall = Math.max(0, row.requiredMinutes - row.totalMinutes);
     const reached = percent(row.totalMinutes, row.requiredMinutes);
-    // An open appeal is amber whatever the outcome underneath it, because amber
-    // is what "waiting on a human" means everywhere else in this bot and that is
-    // exactly what the row is again. A green excusal under appeal is not
-    // settled, and drawing it settled is how it gets missed.
-    const colour = row.appeal
-        ? COLOUR.pending
-        : row.outcome
-          ? REVIEW_OUTCOME_COLOUR[row.outcome]
-          : COLOUR.adverse;
+    const colour = row.outcome ? REVIEW_OUTCOME_COLOUR[row.outcome] : COLOUR.adverse;
 
     const lines = [
         `**${row.displayName}**`,
@@ -466,30 +452,6 @@ export function reviewRowCard(row: ReviewRowInput): ContainerBuilder {
             settled.push("-# Rehearsal. Nothing was recorded against them and nobody was told.");
         }
         container.addTextDisplayComponents(text(settled.join("\n")));
-    }
-
-    // Their own words, quoted, under the decision they are about. Its own block
-    // rather than a line in the settled one: this is the member talking and
-    // everything above it is the Executives, and a reader deciding again needs
-    // to see which is which.
-    if (row.appeal) {
-        container.addSeparatorComponents(separator());
-        container.addTextDisplayComponents(
-            text(
-                `${EMOJI.appeal} **They have appealed this.**\n` +
-                    `> ${row.appeal.text.split("\n").join("\n> ")}\n` +
-                    `-# ${row.appeal.filedLine}. Reopen to withdraw the warning, or leave it ` +
-                    "standing and tell them why."
-            )
-        );
-        container.addActionRowComponents(
-            new ActionRowBuilder<ButtonBuilder>().addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`appeal:${row.appeal.warningId}:decline`)
-                    .setLabel("Leave it standing")
-                    .setStyle(ButtonStyle.Secondary)
-            )
-        );
     }
 
     if (row.contradiction) {
@@ -681,7 +643,7 @@ export function reviewBulkConfirmCard(input: {
  * The warning as the member receives it.
  *
  * It carries the Executive's own words rather than a generated line, because a
- * warning nobody explained is a warning nobody can appeal. The Acknowledge
+ * warning nobody explained is a warning nobody can answer for. The Acknowledge
  * button is the member saying they have read it: the row card and the warnings
  * view then show the difference between unread and ignored, which is the only
  * thing an Executive can fairly act on later.
@@ -689,13 +651,6 @@ export function reviewBulkConfirmCard(input: {
 export function warningDmCard(input: {
     /** The ASSESSMENT id. Both ends already know it when the DM is composed. */
     warningId: string;
-    /**
-     * The warning's own id, for the appeal button. Absent when there is no live
-     * appeal window — a rehearsal, or a deployment where appeals are shut off —
-     * and the button is simply not drawn rather than drawn to refuse.
-     */
-    appealId?: string | null;
-    appealWindowDays?: number;
     windowLabel: string;
     totalMinutes: number;
     requiredMinutes: number;
@@ -711,35 +666,17 @@ export function warningDmCard(input: {
                     `**${input.totalMinutes} of ${input.requiredMinutes} activity minutes**, ` +
                     `short by **${shortfall}**.\n\n` +
                     `**Why**\n> ${input.reason}\n\n` +
-                    (input.appealId
-                        ? "If you think this is wrong, or something was going on we should " +
-                          "know about, **appeal it** below and an Executive will decide " +
-                          `again. You have ${input.appealWindowDays ?? 14} days, and one ` +
-                          "appeal.\n\n"
-                        : "If you think this is wrong, or something was going on we should " +
-                          "know about, reply to the Executive team.\n\n") +
+                    "If you think this is wrong, or something was going on we should " +
+                    "know about, reply to the Executive team.\n\n" +
                     `-# You can see everything held about you with ${cmd("mydata export")}.`
             )
         )
         .addActionRowComponents(
             new ActionRowBuilder<ButtonBuilder>().addComponents(
-                ...[
-                    new ButtonBuilder()
-                        .setCustomId(`warning:${input.warningId}:ack`)
-                        .setLabel("I have read this")
-                        .setStyle(ButtonStyle.Secondary),
-                    // Acknowledging is not agreeing, and appealing is not
-                    // refusing to acknowledge. Both are offered at once so
-                    // neither reads as the price of the other.
-                    ...(input.appealId
-                        ? [
-                              new ButtonBuilder()
-                                  .setCustomId(`appeal:${input.appealId}:open`)
-                                  .setLabel("Appeal this")
-                                  .setStyle(ButtonStyle.Primary)
-                          ]
-                        : [])
-                ]
+                new ButtonBuilder()
+                    .setCustomId(`warning:${input.warningId}:ack`)
+                    .setLabel("I have read this")
+                    .setStyle(ButtonStyle.Secondary)
             )
         );
 
@@ -1565,9 +1502,12 @@ export function containersMessage(
  * amber while it is waiting on somebody, blue once it has landed, grey once it
  * has been taken back, red when it never arrived at all.
  *
- * Both kinds of warning appear here. An activity warning already has a review
- * row, but that row is a decision queue — organised by fortnight, not by member,
- * and purgeable. This is the durable record.
+ * Both kinds of warning appear here, drawn by this one function. An activity
+ * warning already has a review row, but that row is a decision queue — organised
+ * by fortnight, not by member, and purgeable. This is the durable record, and
+ * the two kinds differ on it only where they genuinely differ: an activity
+ * warning carries no rung, so it takes the plain adverse accent rather than one
+ * off the ladder.
  */
 export function warningLogCard(input: {
     warningId: string;
@@ -1582,11 +1522,8 @@ export function warningLogCard(input: {
     lifetimeDays: number;
     acknowledgedAt: Date | null;
     delivery: "delivered" | "failed" | "unknown";
-    appeal: { text: string; filedAt: Date } | null;
     withdrawn: { at: Date; by: string; reason: string } | null;
 }): RenderedMessage {
-    const openAppeal = input.appeal !== null && input.withdrawn === null;
-
     // The rung owns the accent here, which is the one place in this bot where
     // colour means severity rather than state. Three rungs drawn in state
     // colours were indistinguishable from each other, and severity is the thing
@@ -1638,15 +1575,6 @@ export function warningLogCard(input: {
         stateLine
     ];
 
-    if (openAppeal && input.appeal) {
-        lines.push(
-            "",
-            `${EMOJI.appeal} **They have appealed this.**`,
-            `> ${input.appeal.text.split("\n").join("\n> ")}`,
-            `-# Appealed ${ts(input.appeal.filedAt, "R")}`
-        );
-    }
-
     const container = new ContainerBuilder()
         .setAccentColor(colour)
         .addTextDisplayComponents(text(lines.join("\n")));
@@ -1675,8 +1603,6 @@ export function conductWarnDmCard(input: {
     issuedBy: string;
     consequence: string;
     reason: string;
-    appealWindowDays: number;
-    appealable: boolean;
 }): RenderedMessage {
     const style = TIER_STYLE[input.tier];
 
@@ -1692,30 +1618,16 @@ export function conductWarnDmCard(input: {
                     `${input.issuedBy} has issued you a formal written warning.\n\n` +
                     `${input.consequence}\n\n` +
                     `**What happened**\n> ${input.reason.split("\n").join("\n> ")}\n\n` +
-                    (input.appealable
-                        ? "You can appeal this. Say what we have wrong, or what we did not " +
-                          `know, and another Executive decides again. You get one appeal, ` +
-                          `within ${input.appealWindowDays} days.\n\n`
-                        : "Reply to the Executive team if you want to contest this.\n\n") +
+                    "Reply to the Executive team if you want to contest this.\n\n" +
                     `-# ${cmd("mydata export")} shows you everything this bot holds about you.`
             )
         )
         .addActionRowComponents(
             new ActionRowBuilder<ButtonBuilder>().addComponents(
-                ...[
-                    new ButtonBuilder()
-                        .setCustomId(`warning:${input.warningId}:ack`)
-                        .setLabel("I have read this")
-                        .setStyle(ButtonStyle.Secondary),
-                    ...(input.appealable
-                        ? [
-                              new ButtonBuilder()
-                                  .setCustomId(`appeal:${input.warningId}:open`)
-                                  .setLabel("Appeal this")
-                                  .setStyle(ButtonStyle.Primary)
-                          ]
-                        : [])
-                ]
+                new ButtonBuilder()
+                    .setCustomId(`warning:${input.warningId}:ack`)
+                    .setLabel("I have read this")
+                    .setStyle(ButtonStyle.Secondary)
             )
         );
 

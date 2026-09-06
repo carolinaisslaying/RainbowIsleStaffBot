@@ -26,8 +26,6 @@ export const LEAVE_EXTEND_MODAL = "leaveExtend";
 export const CONFIG_IMPORT_MODAL = "configImport";
 export const REVIEW_DECISION_MODAL = "reviewDecision";
 export const REVIEW_BULK_MODAL = "reviewBulk";
-export const APPEAL_MODAL = "warningAppeal";
-export const APPEAL_DECLINE_MODAL = "appealDecline";
 export const REVIEW_SUBSET_MODAL = "reviewSubset";
 export const CONDUCT_WARN_MODAL = "conductWarn";
 export const CONDUCT_WITHDRAW_MODAL = "conductWithdraw";
@@ -36,7 +34,6 @@ export const FIELD_START = "start";
 export const FIELD_END = "end";
 export const FIELD_REASON = "reason";
 export const FIELD_CONFIG_JSON = "configJson";
-export const FIELD_APPEAL = "appeal";
 export const FIELD_SUBSET_ROWS = "rows";
 export const FIELD_SUBSET_ACTION = "outcome";
 export const FIELD_TIER = "tier";
@@ -196,7 +193,7 @@ export function configImportModal(): ModalBuilder {
  * The reason behind a review decision.
  *
  * Every outcome asks for one, including dismissing and reopening. A warning
- * nobody explained is a warning nobody can appeal, and a reopen with no reason
+ * nobody explained is a warning nobody can answer for, and a reopen with no reason
  * is indistinguishable from a mistake. The prompt changes with the action, so
  * the field asks the question the Executive is actually answering rather than
  * a generic "reason".
@@ -280,80 +277,6 @@ export function reviewBulkModal(
                         .setRequired(true)
                         .setMinLength(4)
                         .setMaxLength(1000)
-                )
-        );
-}
-
-
-/**
- * The member's own account of a warning.
- *
- * Not called a "reason". The Executive gave a reason; this is the other side of
- * it. Ask a member why they are appealing and they write a defence. Ask what
- * you should know and they write what happened.
- *
- * Longer than a decision reason, because explaining a fortnight of your life
- * takes more room than recording a verdict on it.
- */
-export function appealModal(warningId: string, windowLabel: string): ModalBuilder {
-    return new ModalBuilder()
-        .setCustomId(`${APPEAL_MODAL}:${warningId}`)
-        .setTitle("Appeal this warning".slice(0, 45))
-        .addTextDisplayComponents(
-            new TextDisplayBuilder().setContent(
-                `-# Fortnight ${windowLabel}. Your Executives will read this and decide again.`
-            )
-        )
-        .addLabelComponents(
-            new LabelBuilder()
-                .setLabel("What should they know?")
-                .setDescription(
-                    "Anything that explains the fortnight, or anything the record has wrong. " +
-                        "You get one."
-                )
-                .setTextInputComponent(
-                    new TextInputBuilder()
-                        .setCustomId(FIELD_APPEAL)
-                        .setStyle(TextInputStyle.Paragraph)
-                        .setRequired(true)
-                        .setMinLength(10)
-                        .setMaxLength(2000)
-                )
-        );
-}
-
-
-/**
- * An Executive leaving a warning standing after an appeal.
- *
- * Every review outcome asks for a reason, and the member reads this one rather
- * than only the queue. They asked a question; this answers it. Upholding an
- * appeal needs no modal of its own, because reopen already asks why and already
- * withdraws the warning.
- */
-export function appealDeclineModal(warningId: string, displayName: string): ModalBuilder {
-    return new ModalBuilder()
-        .setCustomId(`${APPEAL_DECLINE_MODAL}:${warningId}`)
-        .setTitle("Leave the warning standing".slice(0, 45))
-        .addTextDisplayComponents(
-            new TextDisplayBuilder().setContent(
-                `-# **${displayName}** will be sent this. Reopen instead if the appeal is right.`
-            )
-        )
-        .addLabelComponents(
-            new LabelBuilder()
-                .setLabel("Why does it stand?")
-                .setDescription(
-                    "They read this. Answer what they raised instead of restating the " +
-                        "original decision."
-                )
-                .setTextInputComponent(
-                    new TextInputBuilder()
-                        .setCustomId(FIELD_REASON)
-                        .setStyle(TextInputStyle.Paragraph)
-                        .setRequired(true)
-                        .setMinLength(10)
-                        .setMaxLength(1500)
                 )
         );
 }

@@ -40,7 +40,6 @@ export interface StaffBotConfig {
     cautionExpiryDays: number;
     misconductExpiryDays: number;
     seriousMisconductExpiryDays: number;
-    appealWindowDays: number;
     reviewReminderDays: number;
 
     awayAfterMinutes: number;
@@ -272,15 +271,6 @@ export const CONFIG_KEYS: Record<keyof StaffBotConfig, KeySpec> = {
         min: 0,
         max: 3650
     },
-    appealWindowDays: {
-        kind: "number",
-        description: "Days a member has to appeal a warning, counted from delivery",
-        target: "plain",
-        importance: "optional",
-        group: "timings",
-        min: 1,
-        max: 365
-    },
     reviewReminderDays: {
         kind: "number",
         description: "Days before an unworked review queue is chased once",
@@ -418,7 +408,6 @@ export const DEFAULT_CONFIG: StaffBotConfig = {
     cautionExpiryDays: 90,
     misconductExpiryDays: 180,
     seriousMisconductExpiryDays: 0,
-    appealWindowDays: 14,
     reviewReminderDays: 3,
     awayAfterMinutes: 20,
     autoEndAfterAwayMinutes: 30,

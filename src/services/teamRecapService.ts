@@ -141,11 +141,28 @@ export async function postTeamRecap(
         return false;
     }
 
-    if (!(await claimTeamRecap(week.start))) return false;
-
+    // Built before the receipt is claimed, because a claim is spent whether or
+    // not anything is posted: a week with no rollups yet returned null here and
+    // took the week's one recap with it, so the rebuild that filled them in
+    // found the receipt already gone and the channel never heard about it.
     const card = await buildTeamRecap(client, config, week, false);
     if (!card) return false;
 
-    await channel.send({ ...card });
+    if (!(await claimTeamRecap(week.start))) return false;
+
+    try {
+        await channel.send({ ...card });
+    } catch (error) {
+        // The receipt is spent and the post did not land. Said loudly rather
+        // than swallowed: the alternative is claiming it again on the next
+        // rebuild and posting the same week twice, which is the failure the
+        // receipt exists to prevent.
+        log.error(
+            `The team recap for the week starting ${week.start.toISOString()} could not be ` +
+                "posted. Its receipt is spent, so it will not be posted automatically later.",
+            error
+        );
+        return false;
+    }
     return true;
 }

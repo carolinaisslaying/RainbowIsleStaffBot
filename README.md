@@ -263,16 +263,16 @@ both keep these apart deliberately; do not let them merge.
   content, nothing attributable to a person.
 - `/mydata export` returns everything held about the requester as JSON. That
   answers an IPP 6 access request under the Privacy Act 2020 without anyone
-  needing to think about it. It ships whole warning documents, so a member's own
-  appeal text comes back with them.
+  needing to think about it. It ships whole warning documents, so the reason a
+  warning was issued comes back with it.
 - No command deletes anything. See `DELETION.md`.
 
-## Warnings, and answering one
+## Warnings
 
 The bot never issues a warning by itself. It assesses, posts a review card per
 member below the requirement, and waits for an Executive to decide and say why.
 
-A warning arrives by DM with two buttons. **I have read this** records that they
+A warning arrives by DM with one button. **I have read this** records that they
 saw it, which is the difference between a warning somebody has ignored and one
 they never received — and the review row now says which, because the bot records
 whether the DM actually arrived rather than assuming it did.
@@ -304,24 +304,26 @@ warned through this bot at all, because a warning here is one person's decision
 with no second signature and it would go on a peer's permanent record.
 
 Every warning of either kind gets a card in `warningChannelId`, edited in place
-for its whole life — issued, delivered, acknowledged, appealed, withdrawn. That
-channel is the durable record; the fortnight review row is a decision queue,
-organised by fortnight and purgeable.
+for its whole life — issued, delivered, acknowledged, withdrawn. That channel is
+the durable record; the fortnight review row is a decision queue, organised by
+fortnight and purgeable.
 
-**Nothing deletes a warning.** Withdrawing one — by reopening a review row, by
-the button on its card, or by upholding an appeal — marks it withdrawn and keeps
-it, carrying both reasons. It then counts against nobody. See `DELETION.md`.
+An activity warning is written as the same document a conduct warning is, with
+every field present and `kind: "activity"` on it, so it lands in that channel,
+carries the same **Withdraw** button and counts the same one against the member.
+The two kinds differ only where they genuinely differ: an activity warning
+carries the `assessmentId` of the fortnight that issued it and carries no rung,
+because the rungs grade conduct somebody judged and this is a figure the bot
+computed.
 
-**Appeal this** gives them one reply, within `appealWindowDays` (14 by default).
-The window is counted from the moment the warning **reached** them, not from when
-it was issued: a member whose DMs are closed never received it, and a deadline
-running from issue could expire before they had any chance to contest it.
+**Nothing deletes a warning.** Withdrawing one — by reopening a review row, or by
+the button on its card — marks it withdrawn and keeps it, carrying both reasons.
+It then counts against nobody. See `DELETION.md`.
 
-An appeal turns their review row amber and adds it to the header's count, so it
-is visible where the Executives are already working rather than as a new message.
-Upholding it is the existing **Reopen** button, which deletes the warning
-outright. Leaving it standing asks for a reason, which the member is sent —
-they asked a question, and silence would be its own answer.
+There is no appeal mechanic in the bot, deliberately. A member who disagrees
+with a warning takes it up with the Executive team directly, and both warning
+DMs say so. Anything that follows is handled off the bot; what the bot records
+is the decision and, if it is taken back, the withdrawal and its reason.
 
 ## Time
 
@@ -451,9 +453,8 @@ boundary, leave role snapshot and restore including a role deleted while the
 member was away, ring thresholds at 74/75/99/100/over, and reconciliation
 against a seeded fixture with orphans in both directions.
 
-Beyond the spec's list: the appeal window at and either side of its boundary and
-against a warning that was never delivered, the three delivery states a review
-row can draw, the configuration sanity guards, and the API's paging arguments.
+Beyond the spec's list: the three delivery states a review row can draw, the
+configuration sanity guards, and the API's paging arguments.
 
 Reconciliation, leave restoration and boot repair are tested through pure
 planning functions (`src/domain/reconcile.ts`) that take a seeded state and

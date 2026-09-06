@@ -211,8 +211,13 @@ member sees their own row, so either copy goes ephemeral. That only holds while 
 actually hidden; otherwise standings belong in the channel. The decision happens *before* the defer, because
 ephemerality is fixed at defer time, which is why `countHiddenStaff` exists as a count rather than a
 fetch. The card always states which way it went and why. Paging a card that is sitting in a channel
-renders the everyone-view whoever presses it: the buttons edit that public message, so a Lead
-pressing Next would otherwise publish every hidden row to the channel.
+renders the everyone-view whoever presses it (`publicView`, and `leaderboardRowVisible` is the whole
+rule): the buttons edit that public message, so a Lead pressing Next would otherwise publish every
+hidden row to the channel. Forcing the reader's tier down to Staff covers the Lead and **not** the
+hidden member themselves, whose row is admitted by identity rather than by rank and pinned at the
+bottom whatever it ranks — so pressing Next published their own row, and their rings, into the room
+they had hidden from. On a public card there is no viewer to make an exception for, so the own-row
+exception, the pinned row and the "only you can see this" footnote all drop out together.
 
 **A command mention carries the command, never its arguments.** `cmd()`
 (`discord/commandMentions.ts`) builds `</name group subcommand:id>`, and the colon before the id is
@@ -269,12 +274,15 @@ all or nothing: one bad key fails the batch and the report names every problem a
 staged in memory with a 10 minute TTL, shown as a before and after list, and applied only by the
 person who pasted it. The `config` button namespace and the import modal are the one exception to
 the staff-server-only surface rule, because they follow their command into the community server
-recovery hatch.
+recovery hatch. They also carry **both** of the command's gates — Executive *and* `seededOnly`, via
+`seededGatePermits` — rather than the tier alone: `resolveTier` promotes a seeded admin to Executive,
+so an Executive who could change the configuration could name themselves in it, and a rule that holds
+on the command while the buttons check less is the same defect this codebase keeps re-finding.
 
 **Interaction routing.** All buttons go through `routeButton` in `src/events/interactionCreate.ts`,
 which splits `customId` on `:` into `namespace:first:second`. Namespaces in use: `config`
-(`export`/`import`/`apply`/`discard`/`setConfirm`/`setCancel`), `review`, `appeal`
-(`open` on the member's DM, `decline` on the Executives' row), `leave`
+(`export`/`import`/`apply`/`discard`/`setConfirm`/`setCancel`), `review`, `warning`
+(`ack` on the member's DM), `conduct` (`withdraw` on the log card), `leave`
 (`approve`/`decline`/`end`/`endConfirm`/`endCancel`), `leaveConfirm`, `leavePurge`, `tz`,
 `leaderboard`. A pressed button edits its own message in place
 (`interaction.update` / `deferUpdate` + `editReply`) rather than replying beneath it.
@@ -295,27 +303,22 @@ not be finished. `domain/review.ts` holds the rules as pure functions (`rowButto
 `decisionPermitted`, `activeWarningCount`, `queueHeadline`, `reminderDue`), and `fortnightReviews`
 keyed by index remembers where the header is.
 
-**A warning says whether it arrived, and the member can answer it.** `tryDm` returns a boolean and
-every caller now reads it: `WarningDoc.deliveredAt`/`deliveryFailedAt` record what happened and
+**A warning says whether it arrived.** `tryDm` returns a boolean and every caller now reads it: `WarningDoc.deliveredAt`/`deliveryFailedAt` record what happened and
 `deliveryState` (`domain/review.ts`) turns them into the row's line. "Not yet acknowledged" used to
 be drawn both for somebody who read it and never pressed the button and for somebody whose DMs are
 closed — the same silence, opposite facts to an Executive deciding whether a warning has been
 ignored. A warning written before these existed has neither timestamp and reads as **unknown**,
 never as delivered: asserting a delivery the bot did not observe is the bug this replaced.
 
-The warning DM carries **Appeal this** beside the acknowledgement. One appeal per warning, inside
-`appealWindowDays` (default 14), and **the window runs from delivery rather than from issue** — a
-member who never received the warning has nothing to contest yet, and a window counted from issue
-could expire before they ever saw it. `appealPermitted` is re-derived on the button and again on the
-modal, never carried from where the button was drawn: a DM sits in an inbox indefinitely. Filing one
-turns the row amber whatever its outcome (amber is "waiting on a human" everywhere else, and a green
-excusal under appeal is not settled) and the header counts it, so an appeal survives the
-"All reviewed" sentence. **No ping**: it is one assessment and the one-card rule owns it. The cost is
-that an appeal on a fully-decided queue waits until somebody looks; extending `reminderDue` to cover
-it is the obvious follow-up and was left out deliberately rather than guessed at. Upholding an appeal
-is `reopen`, which already deletes the warning; declining it leaves the outcome alone, marks the
-appeal decided and DMs the reason. The text goes to the row, the audit log, and `/mydata export`,
-which ships whole warning documents and so carries it for free.
+**There is no appeal mechanic, deliberately.** A member who disagrees with a warning takes it up
+with the Executive team directly, off the bot; both warning DMs say so in place of a button. This was
+built once and removed before it ever ran in production — an appeal filed through the bot created a
+second decision queue with no owner, no reminder and no deadline of its own, sitting on the review
+row of an assessment that was otherwise finished. Handling it as a conversation costs the audit trail
+of the appeal itself and keeps the one the bot is actually good at: what was decided, by whom, why,
+and — if it is taken back — the withdrawal and its reason. Nothing user-facing mentions appealing, and
+`WarningDoc` carries no field for one. If it ever comes back, it wants its own queue and its own
+clock rather than a flag on a review row.
 
 **Warnings come in two kinds, and every one of them is logged.** `WarningDoc.kind` is `activity` or
 `conduct` and reads as `activity` when absent, which is what every warning written before this was.
@@ -323,6 +326,17 @@ which ships whole warning documents and so carries it for free.
 six sites that silently assumed otherwise into type errors, including the purge path, which would
 have thrown the first time a conduct warning existed. That was the point of changing the shape rather
 than inventing a placeholder assessment.
+
+**Both kinds are written the same way.** `issueWarning` (`domain/assessments.ts`) writes the same
+complete document `issueConductWarning` does — every field present and explicit, `kind: "activity"`
+included — so an activity warning is a record in its own right rather than one the readers
+reconstruct from absences. It lands in `warningChannelId` through the same `upsertWarningCard`,
+carries the same **Withdraw** button, and counts the same one against the member. Absent `kind` still
+reads as `activity`, which is what protects everything written before the field existed, but nothing
+new relies on that fallback. The two differ only where they genuinely differ: an activity warning
+carries the `assessmentId` of the fortnight that issued it, and carries **no `tier`**, because the
+rungs grade conduct somebody judged and this is a figure the bot computed — which is the same reason
+an activity warning stays out of the ladder's colours on every card.
 
 Three rungs (`ConductTier`), differing by the gravity of the conduct and never by how formal they
 are: everything issued through this bot is a formal written warning, and informal correction happens
@@ -332,12 +346,12 @@ employment terms. **Severity is not weight**: every warning counts as one whatev
 decides only how long it counts for, and nothing sums them into an action.
 `lifetimeDaysFor`/`warningIsSpent`/`countsNow`/`warningTally` (`domain/review.ts`) are the whole rule.
 
-**Nothing in this bot deletes a warning.** Reopening a review row, the **Withdraw** button on a log
-card, and upholding an appeal all mark `withdrawnAt`/`withdrawnBy`/`withdrawalReason` and leave the
-record in place carrying both reasons. A withdrawn warning counts nowhere, whatever its clock says.
+**Nothing in this bot deletes a warning.** Reopening a review row and the **Withdraw** button on a
+log card both mark `withdrawnAt`/`withdrawnBy`/`withdrawalReason` and leave the record in place
+carrying both reasons. A withdrawn warning counts nowhere, whatever its clock says.
 Reopen used to delete, leaving the audit log as the only trace; `DELETION.md` is corrected. A row
 warned, reopened and warned again therefore carries two documents, so `reviewRowFor` takes the one
-that still stands — the acknowledgement and appeal lines belong to the live warning.
+that still stands — the acknowledgement line belongs to the live warning.
 
 **`/admin warn user:`** opens a modal carrying the rung and the reason. Executives issue; staff and
 Leads receive. **An Executive cannot be warned through this bot at all** — a warning here is one
@@ -348,7 +362,7 @@ the command.
 
 **One card per warning**, in `warningChannelId`, drawn only by `warningLogCard` so colour, buttons
 and record cannot disagree — `leaveCardFor`'s rule. Edited in place through issued, delivered,
-acknowledged, appealed and withdrawn; **Withdraw** is its one button, and a withdrawn card has none.
+acknowledged and withdrawn; **Withdraw** is its one button, and a withdrawn card has none.
 Both kinds go in it: the review row is a decision queue, organised by fortnight and purgeable, and
 the log is the durable record. Unset means warnings still issue and only the card is missing, as
 `recapChannelId` behaves. The acknowledgement button takes **either** id — a warning id from a
@@ -358,13 +372,20 @@ conduct DM, an assessment id from every activity DM already in an inbox — both
 and require a reason; `showModal` cannot follow a defer, so the button only checks and opens, and
 every write happens in `events/reviewModals.ts`. Dismiss tells the member nothing, and neither does reopening a
 dismissal: announcing that one would raise the very issue the silence exists to avoid. **Reopen is
-the only path that deletes a warning**, so a withdrawal is always a reviewed decision with an audit row
-behind it. Warnings count and expire (`warningExpiryDays`) but the bot never escalates on its own,
+one of the two paths that withdraw a warning**, the **Withdraw** button on its log card being the
+other, so a withdrawal is always a reviewed decision with a reason and an audit row behind it. Warnings count and expire (`warningExpiryDays`) but the bot never escalates on its own,
 the same way it never issues one. An Executive may excuse or dismiss their own row but never warn
 themselves, and a departed member can be cleared but not warned.
 
 **A rehearsal writes, and only Executives hear about it.** `assessmentDryRun` flags the records it
-creates with `rehearsal: true` and **every read that feeds a real decision filters them out** —
+creates with `rehearsal: true`. **A real run promotes; a rehearsal never demotes** (`rehearsalUpdate`
+in `domain/assessments.ts`): the flag was in `$setOnInsert` alone, which handed realness to whichever
+run created the document — and `/dev assess` is always a rehearsal, so reading a fortnight's card
+before it closed branded every row of it for ever. The real run afterwards refreshed the figures,
+claimed the announcement and DMed the roster over documents that still said they were not real, so
+every warning it issued counted against nobody, reached nobody but Executives, and the fortnight was
+filtered out of the member's own history. Nothing said so. **Every read that feeds a real decision
+filters rehearsals out** —
 `assessmentHistory` and `warningsFor` do it in the query, which is where it belongs: one missed
 filter puts a rehearsal warning on somebody's real record. A rehearsal exercises the real write
 path, because one that skips the writes tests nothing; notifications go only to members holding the
@@ -432,7 +453,12 @@ exist. Members on leave for the whole week are counted separately and excluded f
 or a week nobody was expected to work drags the team's figures down. The team recap claims its own
 receipt (`claimTeamRecap`) for the same reason the fortnight announcement does, and a **cold start
 spends the receipt without posting**, so a fresh deployment does not fill the channel with weeks
-that closed before it existed. `/admin recap` rehearses either: `team: true` for the channel
+that closed before it existed. **A receipt is claimed only once there is something to send**: both
+recap paths used to claim first and discover afterwards that the closed week had no rollup, which
+spent the week's one recap on a posting that never happened, so the recompute that filled the rollup
+in an hour later found the receipt already gone. The team card is built before its receipt, and a
+member's rollup is checked before theirs. A send that then fails is logged loudly rather than
+retried, because retrying is how a week gets posted twice. `/admin recap` rehearses either: `team: true` for the channel
 posting, otherwise one member's DM. Neither claims a receipt, so the real ones still go out.
 
 **Review charts.** `render/trend.ts` draws two, both pure string functions like the others.
@@ -503,6 +529,16 @@ fortnight now claims a `deliveries` receipt (`claimFortnightAnnouncement`) befor
 re-running an assessment refreshes the figures without re-notifying the roster. `assessmentDryRun`,
 and `/admin assess rehearse: true`, post the card marked as a rehearsal, DM nobody and claim no
 receipt, so a rehearsal is repeatable and never spends the one real announcement.
+
+**One open shift per member is a unique index, not a check.** `beginShift` read for an open shift and
+then inserted one; two clicks either side of that read both saw none and both inserted, and
+`getOpenShift` then answered with whichever the driver returned while the other stayed open and
+invisible until a sweep closed it hours later. A partial unique index on `{staffId}` where
+`endedAt: null` refuses the second, and `beginShift` answers the loser with the same "you are already
+on shift" card the read produces. Index creation for it goes through `tryIndex`, so a deployment that
+already accumulated a duplicate logs the failure rather than refusing to boot — taking the bot down
+to protect against a race it has already lost helps nobody, and `/dev status` is where somebody would
+go to find out why.
 
 **Collections** (`src/db/client.ts`): `staff`, `activityDays`, `shifts`, `weeklyStats`,
 `fortnightAssessments`, `warnings`, `leave`, `demandBuckets`, `guildConfig`, `auditLog`,

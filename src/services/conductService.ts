@@ -48,7 +48,6 @@ export async function issueConductWarning(options: {
         acknowledgedAt: null,
         deliveredAt: null,
         deliveryFailedAt: null,
-        appeal: null,
         withdrawnAt: null,
         withdrawnBy: null,
         withdrawalReason: null,
@@ -76,11 +75,7 @@ export async function deliverConductWarning(
             // person decided this, and the member is owed that name.
             issuedBy: issuer ? `<@${issuer.discordId}>` : "An Executive",
             consequence: tierConsequenceLine(lifetimeDaysFor(warning, config)),
-            reason: warning.note,
-            appealWindowDays: config.appealWindowDays,
-            // The appeal window runs from delivery, so a warning that never
-            // arrived has no live window and the button would only refuse.
-            appealable: true
+            reason: warning.note
         })
     });
 
@@ -126,10 +121,6 @@ export async function warningCardFor(
             : warning.deliveredAt
               ? "delivered"
               : "unknown",
-        appeal:
-            warning.appeal && !warning.appeal.decidedAt
-                ? { text: warning.appeal.text, filedAt: warning.appeal.filedAt }
-                : null,
         withdrawn: warning.withdrawnAt
             ? {
                   at: warning.withdrawnAt,
@@ -147,7 +138,7 @@ export async function warningCardFor(
  *
  * Converges instead of appending. A card that exists gets edited; one that has
  * gone gets reposted and its location updated. One warning keeps one card for
- * its whole life, from issued through acknowledged, appealed and withdrawn.
+ * its whole life, from issued through delivered, acknowledged and withdrawn.
  *
  * Does nothing when no channel is configured. The warning still issues and
  * still counts, and only the channel copy goes missing, which is how
