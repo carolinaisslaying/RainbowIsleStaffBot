@@ -277,6 +277,7 @@ export async function handleLeaveModal(
                     leave,
                     endDate: end.at
                 })),
+                "",
                 "An Executive decides the extension. Until then your leave still ends " +
                     `${ts(leave.endDate, "f")}.`
             ]

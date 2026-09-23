@@ -228,71 +228,104 @@ function spansWeek(span: LeaveSpan, week: WeekEffect): boolean {
     return span.startDate.getTime() < weekEnd && span.endDate.getTime() > week.weekStart.getTime();
 }
 
+/** Marks a week the leave sets aside. The calendar: it is a week of leave. */
+export const WEEK_SET_ASIDE = "📅";
+/** Marks a week that still counts: a working week. */
+export const WEEK_COUNTS = "💼";
+
 /**
  * What a leave does to the member's requirements, in the lines the
  * confirmation card prints. A request states it as settled, because the
  * member is agreeing to it; an extension states it as what would happen,
  * because an Executive has yet to agree.
  *
+ * Grouped by fortnight, each with both of its weeks beneath it, because that
+ * is how the rule works: a fortnight asks one weekly target per week that
+ * still counts. It used to list every week and then every fortnight, which
+ * left the reader to pair them up, and in a long leave read as a wall.
+ * Each week leads with a mark and ends with its state in words, so neither
+ * carries the meaning alone.
+ *
  * `label` formats a week or fortnight start ("5 Oct"). Passed in, as
  * `priorOutcomesLine` does, so this stays free of timezone formatting.
  */
 export function describeLeaveEffect(
     effect: LeaveEffect,
-    options: { kind: "request" | "extension"; label: (date: Date) => string }
-): string[] {
-    const lines: string[] = [];
-    const days = (count: number) => `${count} ${count === 1 ? "day" : "days"}`;
-
-    for (const week of effect.touchedWeeks) {
-        const when = `Week of ${options.label(week.weekStart)}`;
-        if (options.kind === "extension" && week.daysBefore !== week.daysAfter) {
-            const becomes =
-                week.exemptAfter && !week.exemptBefore
-                    ? "becomes exempt"
-                    : week.exemptAfter
-                      ? "stays exempt"
-                      : "still not exempt";
-            lines.push(
-                `${when}: was ${days(week.daysBefore)}, now ${week.daysAfter}, ${becomes}`
-            );
-        } else {
-            lines.push(`${when}: ${days(week.daysAfter)}, ${week.exemptAfter ? "exempt" : "not exempt"}`);
-        }
+    options: {
+        kind: "request" | "extension";
+        label: (date: Date) => string;
+        minimumLeaveDays: number;
     }
+): string[] {
+    const extension = options.kind === "extension";
+    const days = (count: number) => `${count} ${count === 1 ? "day" : "days"}`;
+    const lines: string[] = [];
 
-    if (options.kind === "request" && effect.exemptsNothing) {
+    // First, because it is the one thing a member most needs to see before
+    // agreeing: the leave they are booking changes nothing.
+    if (!extension && effect.exemptsNothing) {
         lines.push(
             effect.split
-                ? "❗ This leave doesn't exempt either week, because it's split across two."
-                : "❗ This leave doesn't exempt its week."
+                ? "❗ This leave doesn't set aside either week, because it's split across two."
+                : "❗ This leave doesn't set aside its week.",
+            ""
         );
     }
 
-    for (const fortnight of effect.fortnights) {
-        const touched = fortnight.weeks.some((week) => effect.touchedWeeks.includes(week));
-        if (!touched) continue;
-        const when = `The fortnight of ${options.label(fortnight.weeks[0].weekStart)}`;
-        const { before, after } = fortnight;
-        const would = options.kind === "extension" ? "would " : "";
-
-        if (after.kind === "waived") {
+    const fortnights = effect.fortnights.filter((fortnight) =>
+        fortnight.weeks.some((week) => effect.touchedWeeks.includes(week))
+    );
+    fortnights.forEach((fortnight, position) => {
+        if (position > 0) lines.push("");
+        lines.push(
+            `**Fortnight of ${options.label(fortnight.weeks[0].weekStart)}** · ` +
+                requirementPhrase(fortnight.before, fortnight.after, extension)
+        );
+        for (const week of fortnight.weeks) {
+            const moved = extension && week.daysBefore !== week.daysAfter;
+            const leave = moved
+                ? `was ${days(week.daysBefore)}, now ${days(week.daysAfter)}`
+                : week.daysAfter === 0
+                  ? "no leave"
+                  : `${days(week.daysAfter)} of leave`;
+            const state = !moved
+                ? week.exemptAfter
+                    ? "set aside"
+                    : "still counts"
+                : week.exemptAfter && !week.exemptBefore
+                  ? "would be set aside"
+                  : week.exemptAfter
+                    ? "stays set aside"
+                    : "would still count";
             lines.push(
-                before.kind === "waived"
-                    ? `${when} stays waived: nothing is required.`
-                    : options.kind === "extension"
-                      ? `${when} would be waived, instead of requiring ${before.requiredMinutes} minutes.`
-                      : `${when} is waived: nothing is required.`
+                `- ${week.exemptAfter ? WEEK_SET_ASIDE : WEEK_COUNTS} ` +
+                    `Week of ${options.label(week.weekStart)} · ${leave} · ${state}`
             );
-        } else if (after.requiredMinutes < before.requiredMinutes) {
-            lines.push(
-                `${when} ${would}now ${would ? "require" : "requires"} ${after.requiredMinutes} ` +
-                    `minutes, down from ${before.requiredMinutes}.`
-            );
-        } else {
-            lines.push(`${when} still requires ${after.requiredMinutes} minutes.`);
         }
-    }
+    });
 
+    if (fortnights.length > 0) {
+        lines.push(
+            "",
+            `-# A week needs ${days(options.minimumLeaveDays)} of leave to be set aside.`
+        );
+    }
     return lines;
+}
+
+/** What a fortnight asks for once the change applies, against what it asked before. */
+function requirementPhrase(before: Requirement, after: Requirement, extension: boolean): string {
+    if (after.kind === "waived") {
+        if (before.kind === "waived") return "nothing required, unchanged";
+        return extension
+            ? `would need nothing, instead of ${before.requiredMinutes} min`
+            : "nothing required";
+    }
+    const was = before.kind === "waived" ? 0 : before.requiredMinutes;
+    if (before.kind !== "waived" && after.requiredMinutes < was) {
+        return extension
+            ? `would need ${after.requiredMinutes} min, down from ${was}`
+            : `${after.requiredMinutes} min required, down from ${was}`;
+    }
+    return `${after.requiredMinutes} min required, unchanged`;
 }

@@ -447,7 +447,11 @@ waiver. There is no separate "seven days" rule and no proportional scaling. `for
 is gone. `minimumLeaveDays` is also the shortest leave anybody may book, refused on the modal with
 the figures before anything is staged, so a leave that meets the minimum can always exempt a week if
 it sits inside one. Split across a week boundary it may exempt neither, and the confirmation card
-says so before the member commits (`describeLeaveEffect`). `test/leaveDays.test.ts` holds the ten
+says so before the member commits (`describeLeaveEffect`). It prints one bold heading per fortnight
+with what it now asks for, and both of its weeks beneath as bullets — 📅 set aside, 💼 still
+counts, the state repeated in words — then the minimum as a footnote. It used to list every week and
+then every fortnight, which left the reader to pair them and read as a wall on a long leave. The
+lines carry their own markdown, so the cards print them at full size rather than as `-#` subtext. `test/leaveDays.test.ts` holds the ten
 confirmation-card scenarios the rules were agreed against.
 
 An assessment snapshots `weeklyTargetMinutes` and `minimumLeaveDays` on first write

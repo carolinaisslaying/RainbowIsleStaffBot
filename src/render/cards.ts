@@ -1146,7 +1146,9 @@ export function leaveRequestCard(options: {
 
     if (options.status === "pending" && options.effectLines && options.effectLines.length > 0) {
         container.addTextDisplayComponents(
-            text(`**If approved**\n${options.effectLines.map((line) => `-# ${line}`).join("\n")}`)
+            // Printed at full size: the lines are a list with headings, and
+            // subtext would flatten the bullets back into a paragraph.
+            text(`**If approved**\n${options.effectLines.join("\n")}`)
         );
     }
 
@@ -1164,9 +1166,11 @@ export function leaveRequestCard(options: {
             text(
                 `### ${emojiForColour(COLOUR.leave)} Extension requested\n` +
                     `To ${ts(extension.endDate, "f")}\n` +
-                    `> ${extension.reason}\n` +
-                    extension.effectLines.map((line) => `-# ${line}`).join("\n") +
-                    "\n-# The leave still ends on its current date until this is decided."
+                    `> ${extension.reason}\n\n` +
+                    (extension.effectLines.length > 0
+                        ? `${extension.effectLines.join("\n")}\n\n`
+                        : "") +
+                    "-# The leave still ends on its current date until this is decided."
             )
         );
         extensionBlock.addActionRowComponents(

@@ -174,7 +174,8 @@ export async function describeLeaveChange(
     });
     return describeLeaveEffect(effect, {
         kind: change.kind,
-        label: (date) => labelDate(date, config.accountingTimezone)
+        label: (date) => labelDate(date, config.accountingTimezone),
+        minimumLeaveDays: config.minimumLeaveDays
     });
 }
 
