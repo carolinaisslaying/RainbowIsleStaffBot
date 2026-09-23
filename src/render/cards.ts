@@ -1148,7 +1148,7 @@ export function leaveRequestCard(options: {
         container.addTextDisplayComponents(
             // Printed at full size: the lines are a list with headings, and
             // subtext would flatten the bullets back into a paragraph.
-            text(`**If approved**\n${options.effectLines.join("\n")}`)
+            text(`### If approved\n${options.effectLines.join("\n")}`)
         );
     }
 
@@ -1369,15 +1369,18 @@ export function leaveInterpretationCard(options: {
 }): RenderedMessage {
     const quoted = options.typed.map((value) => `**${value}**`).join(" and ");
     const lines = options.startDate
-        ? `**Leave starts**\n${ts(options.startDate, "F")}\n\n` +
-          `**Leave ends**\n${ts(options.endDate, "F")}\n-# ${ts(options.endDate, "R")}`
-        : `**New return**\n${ts(options.endDate, "F")}\n-# ${ts(options.endDate, "R")}`;
+        ? `### Leave starts\n${ts(options.startDate, "F")}\n\n` +
+          `### Leave ends\n${ts(options.endDate, "F")}\n-# ${ts(options.endDate, "R")}`
+        : `### New return\n${ts(options.endDate, "F")}\n-# ${ts(options.endDate, "R")}`;
 
     const container = new ContainerBuilder()
         .setAccentColor(COLOUR.leave)
         .addTextDisplayComponents(
             text(
-                "### Is this right?\n" +
+                // Three levels, each above the next: the question, its sections,
+                // then the bold fortnights and bulleted weeks inside "What it
+                // changes". Sections in bold sat level with the fortnights.
+                "## Is this right?\n" +
                     `You typed ${quoted}. Read in **${options.timeZone}**, your own ` +
                     `timezone, that is:\n\n${lines}`
             )
@@ -1386,8 +1389,8 @@ export function leaveInterpretationCard(options: {
         .addTextDisplayComponents(
             text(
                 (options.effectLines.length > 0
-                    ? `**What it changes**\n${options.effectLines.join("\n")}\n\n`
-                    : "") + `**${options.reasonLabel}**\n${options.reason}`
+                    ? `### What it changes\n${options.effectLines.join("\n")}\n\n`
+                    : "") + `### ${options.reasonLabel}\n${options.reason}`
             )
         )
         .addActionRowComponents(

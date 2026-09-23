@@ -234,3 +234,39 @@ describe("the confirmation is coloured by where the click leads", () => {
         expect(confirm(false).data.accent_color).not.toBe(COLOUR.pending);
     });
 });
+
+describe("the confirmation card's headings climb above the fortnights", () => {
+    // "What it changes" was bold, the same weight as the bold fortnight
+    // headings inside it, so the section read as one more fortnight.
+    it("puts the question above the sections, and the sections above the fortnights", async () => {
+        const { leaveInterpretationCard } = await import("../src/render/cards.js");
+        const json = JSON.stringify(
+            leaveInterpretationCard({
+                token: "t",
+                startDate: base.startDate,
+                endDate: base.endDate,
+                reason: "Exams.",
+                reasonLabel: "Reason",
+                timeZone: "Pacific/Auckland",
+                typed: ["monday", "the 21st"],
+                effectLines: ["**Fortnight of 7 Sep** · nothing required", "- 📅 Week of 7 Sep"]
+            }).components[0]
+        );
+        expect(json).toContain("## Is this right?");
+        expect(json).toContain("### What it changes\\n**Fortnight of 7 Sep**");
+        expect(json).toContain("### Leave starts");
+        expect(json).toContain("### Reason");
+        expect(json).not.toContain("**What it changes**");
+    });
+
+    it("heads the pending card's effect as a section under its title", () => {
+        const json = JSON.stringify(
+            leaveRequestCard({
+                ...base,
+                status: "pending",
+                effectLines: ["**Fortnight of 7 Sep** · nothing required"]
+            }).components[0]
+        );
+        expect(json).toContain("### If approved\\n**Fortnight of 7 Sep**");
+    });
+});
