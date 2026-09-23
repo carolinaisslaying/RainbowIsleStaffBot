@@ -114,7 +114,7 @@ export async function handleConductWarnModal(
                 "It does not expire.\n\n" +
                 (delivered
                     ? "They have the message."
-                    : "⚠️ **Their direct messages are closed, so they did not get it.** The " +
+                    : "❗ **Their direct messages are closed, so they did not get it.** The " +
                       "warning is still on their record, so tell them yourself.") +
                 (config.warningChannelId ? "" : "\n\n-# No warning channel is configured, so " +
                     "there is no card for this in the log."),
@@ -240,7 +240,7 @@ export async function handleConductWithdrawModal(
                 "-# Their record keeps both reasons, yours and the one it was issued for.\n\n" +
                 (told
                     ? "They have the message."
-                    : "⚠️ Their direct messages are closed, so they did not get the message."),
+                    : "❗ Their direct messages are closed, so they did not get the message."),
             { colour: COLOUR.settled, ephemeral: true }
         )
     );

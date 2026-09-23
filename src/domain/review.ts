@@ -167,7 +167,7 @@ export function deliveryLine(options: {
     if (options.messaged) return "They have been messaged.";
     if (options.attempted) {
         return (
-            "⚠️ **They could not be messaged.** Their direct messages are closed, so they " +
+            "❗ **They could not be messaged.** Their direct messages are closed, so they " +
             "have not seen this. It is still on the record."
         );
     }

@@ -171,7 +171,7 @@ describe("the confirmation card, scenario by scenario", () => {
         expect(request(span("2026-10-10T00:00:00Z", "2026-10-14T00:00:00Z"))).toEqual([
             "Week of 5 Oct: 2 days, not exempt",
             "Week of 12 Oct: 2 days, not exempt",
-            "⚠️ This leave doesn't exempt either week, because it's split across two.",
+            "❗ This leave doesn't exempt either week, because it's split across two.",
             "The fortnight of 5 Oct still requires 240 minutes."
         ]);
     });

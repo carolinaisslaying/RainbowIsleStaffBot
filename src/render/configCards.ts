@@ -497,7 +497,7 @@ export function devStatusCard(input: {
         const last =
             job.lastRunAt === null
                 ? "not yet run"
-                : `${job.lastOutcome === "failed" ? "⚠️ failed " : ""}${ts(job.lastRunAt, "R")}`;
+                : `${job.lastOutcome === "failed" ? "❗ failed " : ""}${ts(job.lastRunAt, "R")}`;
         const next = job.nextRunAt === null ? "not armed" : ts(job.nextRunAt, "R");
         const failures = job.failures > 0 ? ` · ${job.failures} failure${job.failures === 1 ? "" : "s"}` : "";
         return (
@@ -509,12 +509,12 @@ export function devStatusCard(input: {
     const configLines: string[] = [];
     if (input.missingRequired.length > 0) {
         configLines.push(
-            `⚠️ **${input.missingRequired.length} required ${
+            `❗ **${input.missingRequired.length} required ${
                 input.missingRequired.length === 1 ? "key is" : "keys are"
             } unset:** ${input.missingRequired.join(", ")}`
         );
     }
-    for (const warning of input.warnings) configLines.push(`⚠️ **${warning.key}** — ${warning.text}`);
+    for (const warning of input.warnings) configLines.push(`❗ **${warning.key}** — ${warning.text}`);
     if (configLines.length === 0) configLines.push("Everything required is set and nothing looks wrong.");
 
     const container = new ContainerBuilder()
@@ -529,7 +529,7 @@ export function devStatusCard(input: {
         container.addSeparatorComponents(separator());
         container.addTextDisplayComponents(
             text(
-                "### ⚠️ Deployment\n**DEV_DANGEROUS_COMMANDS is on.** `/dev purge` can delete " +
+                "### ❗ Deployment\n**DEV_DANGEROUS_COMMANDS is on.** `/dev purge` can delete " +
                     "real assessment history, not just rehearsals. Unset it and restart when " +
                     "you are done."
             )

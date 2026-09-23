@@ -362,6 +362,6 @@ describe("a setting that reaches backwards confirms in the configuration colour"
             body: "Moves every week."
         }).components[0] as unknown as { data: { accent_color?: number } };
         expect(card.data.accent_color).toBe(COLOUR.admin);
-        expect(JSON.stringify(card)).toContain("⚠️ This moves every week ever recorded");
+        expect(JSON.stringify(card)).toContain("❗ This moves every week ever recorded");
     });
 });

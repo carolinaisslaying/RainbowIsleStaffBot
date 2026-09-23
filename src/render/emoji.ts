@@ -49,8 +49,13 @@ export const EMOJI = {
     purge: "🗑️",
     /** Something recomputed rather than decided. */
     recompute: "🔄",
-    /** An outcome that needs a human to finish it by hand. */
-    warning: "⚠️"
+    /**
+     * Something needs attention: an undelivered DM, a setting worth a second
+     * look, a leave that exempts nothing. Not the warning sign, which is the Caution rung's
+     * mark alone, so a Caution card carrying one of these never reads as two
+     * warnings.
+     */
+    warning: "❗"
 } as const;
 
 /**

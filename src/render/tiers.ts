@@ -65,9 +65,8 @@ export const TIER_STYLE: Record<ConductTier, TierStyle> = {
 /**
  * How an activity warning presents itself. It has no rung, so it is not a
  * `TierStyle`, but it is drawn on the same surfaces and needs the same two
- * signals held in one place. 📉 rather than ⚠️, which is Caution's mark and the
- * bot's general "look at this": an activity warning and a Caution used to
- * open with the same symbol.
+ * signals held in one place. 📉 rather than ⚠️, which is Caution's mark: an
+ * activity warning and a Caution used to open with the same symbol.
  */
 export const ACTIVITY_STYLE = {
     label: "Activity warning",

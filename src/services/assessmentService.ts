@@ -557,7 +557,7 @@ export async function reviewRowFor(
             assessment.status === "below"
                 ? null
                 : assessment.reviewOutcome
-                  ? `⚠️ ${
+                  ? `❗ ${
                         assessment.leaveChangedAt
                             ? `Leave changed ${ts(assessment.leaveChangedAt, "R")} and`
                             : "A recompute has since"
@@ -583,7 +583,7 @@ function acknowledgementLine(warning: WarningDoc): string {
         case "acknowledged":
             return `Acknowledged ${ts(warning.acknowledgedAt as Date, "R")}`;
         case "failed":
-            return "⚠️ Never delivered — their direct messages are closed, so they have not seen this";
+            return "❗ Never delivered — their direct messages are closed, so they have not seen this";
         case "delivered":
             return "Delivered, not yet acknowledged";
         default:

@@ -114,7 +114,7 @@ describe("what each state draws", () => {
     });
 
     it("flags a decision the figures no longer support", () => {
-        expect(json({ contradiction: "⚠️ A recompute has since put them above." })).toContain(
+        expect(json({ contradiction: "❗ A recompute has since put them above." })).toContain(
             "recompute"
         );
     });

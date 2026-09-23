@@ -91,8 +91,7 @@ describe("the title a card leads with", () => {
 
 describe("an activity warning has a mark and a colour of its own", () => {
     it("shares its mark with nothing else in the bot", () => {
-        // It used to open with ⚠️, which is also Caution's mark and the bot's
-        // general "look at this", so an activity warning and a Caution led
+        // It used to open with ⚠️, which is Caution's mark, so an activity warning and a Caution led
         // with the same symbol in the same channel.
         expect(tierTitle(null)).toBe("### 📉 Activity warning");
         for (const tier of CONDUCT_TIERS) {
@@ -134,6 +133,24 @@ describe("an activity warning has a mark and a colour of its own", () => {
         }).components[0].toJSON() as { accent_color: number };
         expect(card.accent_color).toBe(COLOUR.activityWarning);
         expect(JSON.stringify(card)).toContain("📉 Activity warning");
+    });
+});
+
+describe("⚠️ means Caution and nothing else", () => {
+    it("appears in no source file but the one that defines the rung", async () => {
+        // Inline alerts ("never delivered", "leave changed") used ⚠️ too, and
+        // they sit on Caution cards, which then read as two warnings.
+        const { readdirSync, readFileSync } = await import("node:fs");
+        const { join } = await import("node:path");
+        const walk = (dir: string): string[] =>
+            readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
+                entry.isDirectory() ? walk(join(dir, entry.name)) : [join(dir, entry.name)]
+            );
+        const offenders = walk("src")
+            .filter((file) => file.endsWith(".ts") && !file.endsWith(join("render", "tiers.ts")))
+            .filter((file) => readFileSync(file, "utf8").includes("\u26a0"));
+        expect(offenders).toEqual([]);
+        expect(EMOJI.warning).not.toBe(TIER_STYLE.caution.emoji);
     });
 });
 

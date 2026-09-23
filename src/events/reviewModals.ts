@@ -479,7 +479,7 @@ async function applyDecision(
                     : told
                       ? "They have been told it was withdrawn."
                       : mayTell
-                        ? "⚠️ They could not be told it was withdrawn: their direct messages " +
+                        ? "❗ They could not be told it was withdrawn: their direct messages " +
                           "are closed. They may still believe the original decision stands."
                         : "They could not be told it was withdrawn."),
             colour: COLOUR.settled

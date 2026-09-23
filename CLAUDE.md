@@ -273,10 +273,16 @@ waiting, "are you sure?", "something went wrong" and "for your information" all 
 card read alike. A card now takes the colour of what it is about, and its title says what the click
 does: a leave confirmation is green 👋 for bringing somebody back and pink 📆 for cancelling;
 configuration notices and the `/config` confirmation for a key that reaches backwards are blurple
-(`admin`) led by ⚠️; a warning result is the rung's colour, or slate for activity. Red stays for
+(`admin`) led by ❗; a warning result is the rung's colour, or slate for activity. Red stays for
 the irreversible (purge, scrub) and the broken. Status lights (`/dev status`, setup status) keep
 amber as "partly there", which is a different kind of card. The member's own "below the
 requirement" DM stays amber because it is part of the review.
+
+**⚠️ is the Caution rung's mark and nothing else.** Every inline alert — an undelivered DM, leave
+that changed a warned fortnight, a setting worth a second look, a leave that exempts nothing — uses
+❗ (`EMOJI.warning`), because those lines sit on Caution cards and read there as a second warning.
+A test in `test/tierPresentation.test.ts` fails if ⚠️ appears in any source file but `render/tiers.ts`,
+comments included.
 
 **A card's claim and its own caveat live in one function.** `leaderboardVisibility` returns the whole
 footnote. It used to return "Nobody is hidden from the leaderboard" without checking, while

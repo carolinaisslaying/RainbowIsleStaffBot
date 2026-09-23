@@ -485,7 +485,7 @@ export async function applyChange(
             ? ""
             : "\n\n" +
               warnings
-                  .map((warning) => `⚠️ **${String(warning.key)}** — ${warning.text}`)
+                  .map((warning) => `❗ **${String(warning.key)}** — ${warning.text}`)
                   .join("\n\n");
 
     await respond(

@@ -264,8 +264,8 @@ export function describeLeaveEffect(
     if (options.kind === "request" && effect.exemptsNothing) {
         lines.push(
             effect.split
-                ? "⚠️ This leave doesn't exempt either week, because it's split across two."
-                : "⚠️ This leave doesn't exempt its week."
+                ? "❗ This leave doesn't exempt either week, because it's split across two."
+                : "❗ This leave doesn't exempt its week."
         );
     }
 

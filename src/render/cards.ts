@@ -443,7 +443,7 @@ export function reviewRowCard(row: ReviewRowInput): ContainerBuilder {
     ];
 
     if (row.departed) {
-        lines.push("-# ⚠️ No longer in the server. They cannot be warned, only cleared.");
+        lines.push("-# ❗ No longer in the server. They cannot be warned, only cleared.");
     }
 
     // Said before the click, not after it. The bot counts and surfaces; it
@@ -1667,7 +1667,7 @@ export function warningLogCard(input: {
           `${input.withdrawn.by}. It no longer counts against them.\n` +
           `> ${input.withdrawn.reason.split("\n").join("\n> ")}`
         : input.delivery === "failed"
-          ? "⚠️ **Never delivered.** Their direct messages are closed, so they have not seen " +
+          ? "❗ **Never delivered.** Their direct messages are closed, so they have not seen " +
             "this. It is still on their record."
           : input.acknowledgedAt
             ? `-# ✅ Acknowledged ${ts(input.acknowledgedAt, "R")}`
@@ -1697,7 +1697,7 @@ export function warningLogCard(input: {
         ...(input.coveredByLeaveAt && !input.withdrawn
             ? [
                   "",
-                  `⚠️ **Leave changed ${ts(input.coveredByLeaveAt, "R")}** and took the ` +
+                  `❗ **Leave changed ${ts(input.coveredByLeaveAt, "R")}** and took the ` +
                       "fortnight this warning was issued for off the review queue. It still " +
                       "stands until an Executive withdraws it."
               ]
