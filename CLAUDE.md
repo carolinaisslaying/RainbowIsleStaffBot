@@ -237,11 +237,14 @@ picks any of them, because the four had already drifted into looking identical: 
 the log said they could not see any difference between the rungs at all until they really looked,
 which for a disciplinary record is a defect and not a matter of taste.
 
-Four signals at once, deliberately. Colour climbs gold → amber → red, but colour alone would not be
-enough even if it were consistent: roughly one man in twelve cannot separate gold from red reliably,
-and a notification preview shows the mark and the text before any accent. So the heading also climbs
-`###` → `##` → `#`, the mark climbs ⚠️ → 🔶 → 🚨, and the consequence — the only thing that actually
-differs between the rungs — is stated in bold on every surface rather than left as a footnote.
+Four signals at once, deliberately. Colour climbs gold → red, but colour alone would not be enough
+even if it were consistent: roughly one man in twelve cannot separate gold from red reliably, and a
+notification preview shows the mark and the text before any accent. So the heading also climbs
+`###` → `##` and the mark climbs ⚠️ → 🚨. The consequence sentence is the odd one out now that neither
+rung expires: it reads identically at both rungs ("this never stops counting"), which is correct —
+it states a fact true of every conduct warning, not the thing that separates Caution from Misconduct.
+It is still stated in bold on every surface rather than left as a footnote, because a reader should
+not have to infer permanence from the absence of a day count.
 
 **Two exceptions, both load-bearing.** A **withdrawn** warning goes grey whatever its rung: grey
 means finished everywhere else in this bot, it counts against nobody, and one left blood red would
@@ -250,7 +253,7 @@ misrepresent the record to anybody scrolling. It also drops the consequence line
 itself. And an **activity** warning stays out of the ladder's colours: it is issued off a figure the
 bot computed, and dressing it in a rung would say something about it that nobody decided.
 
-In a list the top rung steps down to `###` and the others to no heading at all — five entries at `#`
+In a list the top rung steps down to `###` and the other to no heading at all — five entries at `#`
 is a wall, not an escalation.
 
 **Emoji come from the colour, not from the call site.** `render/emoji.ts` maps each `COLOUR` value
@@ -338,12 +341,18 @@ carries the `assessmentId` of the fortnight that issued it, and carries **no `ti
 rungs grade conduct somebody judged and this is a figure the bot computed — which is the same reason
 an activity warning stays out of the ladder's colours on every card.
 
-Three rungs (`ConductTier`), differing by the gravity of the conduct and never by how formal they
-are: everything issued through this bot is a formal written warning, and informal correction happens
-in a DM and never reaches the record. **Caution** 90 days, **Misconduct** 180, **Serious Misconduct**
-never — each its own config key, where **zero means never**. The bottom two are New Zealand
-employment terms. **Severity is not weight**: every warning counts as one whatever its rung, the rung
-decides only how long it counts for, and nothing sums them into an action.
+Two rungs (`ConductTier`), differing by the gravity of the conduct and never by how formal they are:
+everything issued through this bot is a formal written warning, and informal correction happens in a
+DM and never reaches the record. **Caution** and **Misconduct**, both New Zealand employment terms.
+There used to be a third, Serious Misconduct, and a rung decided how long a warning counted for —
+90/180/never days. Making the ladder permanent left Serious Misconduct implying a termination-level
+judgement no Executive actually made, so the rung is retired rather than carried forward permanent:
+gravity above Misconduct is a decision an Executive makes off the bot, not a category it offers.
+**No conduct warning expires, whatever its rung** — `lifetimeDaysFor` (`domain/review.ts`) always
+answers zero for `kind: "conduct"`, which every other rule already reads as permanent. Activity
+warnings are unaffected and still expire on `warningExpiryDays`. **Severity is not weight**: every
+warning counts as one whatever its rung, and nothing sums them into an action — the rung is now purely
+what it tells an Executive reading the record, never a clock.
 `lifetimeDaysFor`/`warningIsSpent`/`countsNow`/`warningTally` (`domain/review.ts`) are the whole rule.
 
 **Nothing in this bot deletes a warning.** Reopening a review row and the **Withdraw** button on a
@@ -501,7 +510,22 @@ is a card that looks a few pixels off-centre and no one can say why. Preview aga
 (0%, 8%, an all-zero heatmap), not busy data. Every failure in this area has been an empty or
 near-empty state.
 
-**Jobs** (`src/jobs/index.ts`): `shift-sweep` and `leave-transitions` every minute, `recaps` hourly,
+**Heatmaps average over what was heard.** `/coverage heatmap`, `gaps` and `activity` run from the
+first demand bucket (or the lookback, whichever is later) to the start of the current hour, and every
+cell is divided by how many times *that cell* was observed (`observe` in `domain/observation.ts`),
+never by the weeks asked for. Dividing by the lookback read eight weeks into a deployment that had
+two, so every figure came out at a quarter of its size. A missing demand bucket used to mean both
+"quiet" and "the bot was not listening"; `uptimeHours` separates them. The `uptime` job records each
+minute the gateway is **Ready** (not merely the process running) with `$addToSet`, so it is
+idempotent. An hour heard for 30+ minutes is scaled up to a full one; under 30 is no data, drawn
+dashed, and left out of both sides of the ratio. Hours before uptime was first measured are assumed
+heard, which is what keeps the counts collected before it usable. The card says how much data it
+rests on (`sampleLabel`, `reliabilityNote` in `render/heatmap.ts`) until two weeks, and the colour
+scale tops out at the 95th percentile so one event hour does not wash out a thin grid. Message
+counting itself is still one `$inc` per message: at a few hundred an hour, batching would buy
+nothing and lose the unflushed counts on every crash.
+
+**Jobs** (`src/jobs/index.ts`): `shift-sweep`, `uptime` and `leave-transitions` every minute, `recaps` hourly,
 `week-close` at 00:05 in the accounting timezone. All are date-driven and idempotent, so a missed
 run self-heals.
 
@@ -542,8 +566,8 @@ go to find out why.
 
 **Collections** (`src/db/client.ts`): `staff`, `activityDays`, `shifts`, `weeklyStats`,
 `fortnightAssessments`, `warnings`, `leave`, `demandBuckets`, `guildConfig`, `auditLog`,
-`deliveries`. Indexes are created in the same file. `demandBuckets` holds no user id and is never
-in scope for a deletion request.
+`deliveries`, `uptimeHours`. Indexes are created in the same file. `demandBuckets` and `uptimeHours`
+hold no user id and are never in scope for a deletion request.
 
 ## Tests
 

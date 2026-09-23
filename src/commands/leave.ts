@@ -119,7 +119,7 @@ export const leaveCommand: Command = {
                 interaction,
                 welcome ?? noticeCard(
                     "Welcome back",
-                    "Your leave is closed and your ranks have been restored.",
+                    "Your leave is closed and your staff roles have been restored.",
                     { ephemeral: true, colour: COLOUR.approved, emoji: EMOJI.welcome }
                 )
             );

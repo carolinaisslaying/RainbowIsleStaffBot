@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { heatmapSvg } from "../src/render/heatmap.js";
+import { heatmapSvg, scaleTop } from "../src/render/heatmap.js";
 import type { CoverageGrid } from "../src/services/coverageService.js";
 
 /**
@@ -13,12 +13,14 @@ function grid(ratio: number[][]): CoverageGrid {
         coverage: ratio.map((row) => row.map(() => 1)),
         demand: ratio,
         ratio,
+        observed: ratio.map((row) => row.map(() => 4)),
         timeZone: "Pacific/Auckland",
         weekStartDay: 1,
-        weeks: 4,
+        observedHours: 4 * 168,
         from: new Date("2026-08-01T00:00:00Z"),
         to: new Date("2026-08-29T00:00:00Z"),
-        maxRatio: Math.max(0, ...ratio.flat())
+        maxRatio: Math.max(0, ...ratio.flat()),
+        maxDemand: Math.max(0, ...ratio.flat())
     };
 }
 
@@ -104,5 +106,49 @@ describe("the panel under the grid", () => {
             expect(svg).toContain("url(#panelRim)");
             expect(svg).not.toContain("feGaussianBlur");
         }
+    });
+});
+
+describe("hours not heard yet", () => {
+    it("draws them dashed, apart from quiet hours, and says what dashed means", () => {
+        const input = banded();
+        input.observed = input.observed.map((row, weekday) =>
+            row.map((times) => (weekday === 6 ? 0 : times))
+        );
+        const svg = heatmapSvg(input);
+        expect([...svg.matchAll(/stroke-dasharray="3 3"/g)]).toHaveLength(24);
+        expect(svg).toContain("Dashed hours have not been heard yet.");
+    });
+
+    it("does not mention dashes when every hour has been heard", () => {
+        expect(heatmapSvg(banded())).not.toContain("Dashed");
+    });
+});
+
+describe("the activity reading", () => {
+    it("plots messages rather than the ratio, and labels itself so", () => {
+        const input = banded();
+        input.demand = input.demand.map((row) => row.map((value) => value * 100));
+        const svg = heatmapSvg(input, "activity");
+        expect(svg).toContain("Average messages per hour.");
+        expect(svg).toContain("quiet to busiest");
+        expect(svg).toContain(">1.0k<");
+    });
+
+    it("says no messages rather than no demand when empty", () => {
+        const svg = heatmapSvg(grid(zeros()), "activity");
+        expect(svg).toContain("No messages recorded");
+    });
+});
+
+describe("the colour scale", () => {
+    it("tops out at the 95th percentile so one spike does not wash the rest out", () => {
+        const values = [...Array.from({ length: 99 }, () => 10), 1000];
+        expect(scaleTop(values)).toBe(10);
+    });
+
+    it("is the largest reading when there are too few to trim", () => {
+        expect(scaleTop([1, 2, 3])).toBe(3);
+        expect(scaleTop([0, 0])).toBe(0);
     });
 });

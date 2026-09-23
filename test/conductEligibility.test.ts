@@ -93,10 +93,13 @@ describe("who may receive one", () => {
 });
 
 describe("the tier arriving from a modal", () => {
-    it("accepts the three rungs", () => {
+    it("accepts the two rungs", () => {
         expect(isConductTier("caution")).toBe(true);
         expect(isConductTier("misconduct")).toBe(true);
-        expect(isConductTier("seriousMisconduct")).toBe(true);
+    });
+
+    it("no longer recognises the retired Serious Misconduct rung", () => {
+        expect(isConductTier("seriousMisconduct")).toBe(false);
     });
 
     it("rejects anything else, including nothing at all", () => {

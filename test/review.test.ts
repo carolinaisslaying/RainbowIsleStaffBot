@@ -84,19 +84,15 @@ describe("who may decide what", () => {
     it("refuses a warning for somebody who has left", () => {
         const seen = decisionPermitted({ ...base, action: "warn", departed: true });
         expect(seen.ok).toBe(false);
-        if (!seen.ok) expect(seen.reason).toContain("nobody to serve");
+        if (!seen.ok) expect(seen.reason).toContain("cannot be warned");
     });
 });
 
 describe("what still counts against somebody", () => {
     const day = 86_400_000;
 
-    // Each rung has its own key now, so a warning's clock depends on what it is.
     const EXPIRY = {
-        warningExpiryDays: 180,
-        cautionExpiryDays: 90,
-        misconductExpiryDays: 180,
-        seriousMisconductExpiryDays: 0
+        warningExpiryDays: 180
     };
 
     const ago = (days: number) => new Date(now.getTime() - days * day);
@@ -161,7 +157,7 @@ describe("the header's sentence", () => {
     });
 
     it("uses singular grammar for one member", () => {
-        expect(queueHeadline(queueCounts(rows(0, 1)), 240)).toContain("1 member is below");
+        expect(queueHeadline(queueCounts(rows(0, 1)), 240)).toContain("1 member is under");
     });
 });
 

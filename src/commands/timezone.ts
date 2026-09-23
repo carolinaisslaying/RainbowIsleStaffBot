@@ -132,7 +132,7 @@ export const timezoneCommand: Command = {
                 `${target ? `<@${target.id}>` : "You"}: **${subject.timezone}**\n` +
                     `Current local time there is ${ts(new Date(), "F")}.\n\n` +
                     "-# Timezone changes what you see and nothing more. Totals, rings, " +
-                    "leaderboard position and compliance run on the same UTC weeks for everyone.",
+                    "leaderboard position and fortnight review run on the same weeks for everyone.",
                 { ephemeral: true, emoji: EMOJI.clock }
             )
         );

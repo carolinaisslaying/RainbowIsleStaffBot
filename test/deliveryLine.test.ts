@@ -29,7 +29,7 @@ describe("deliveryLine", () => {
         // An Executive reading this must not think the record is in doubt.
         expect(
             deliveryLine({ action: "warn", attempted: true, messaged: false, rehearsal: false })
-        ).toContain("stands on the record");
+        ).toContain("still on the record");
     });
 
     it("never claims a dismissal was raised with anybody", () => {

@@ -10,7 +10,7 @@ import { warningWeightLine } from "../src/domain/review.js";
 import { CONDUCT_TIERS, type ConductTier } from "../src/db/types.js";
 
 /**
- * The three rungs used to render identically. A colleague reading the log said
+ * The two rungs used to render identically. A colleague reading the log said
  * they could not see any difference at all until they really looked, which for a
  * disciplinary record is a defect. These hold the escalation in place.
  */
@@ -38,25 +38,20 @@ describe("every rung is visibly distinct", () => {
         expect(new Set(headings).size).toBe(headings.length);
     });
 
-    it("climbs from gold through amber to red", () => {
+    it("climbs from gold to red", () => {
         expect(TIER_STYLE.caution.colour).toBe(COLOUR.caution);
         expect(TIER_STYLE.misconduct.colour).toBe(COLOUR.misconduct);
-        expect(TIER_STYLE.seriousMisconduct.colour).toBe(COLOUR.seriousMisconduct);
     });
 
-    it("makes the heading larger as the rung gets worse", () => {
+    it("makes the heading larger for the worse rung", () => {
         // Fewer hashes is a bigger heading in Discord's markdown.
-        expect(TIER_STYLE.caution.heading.length).toBeGreaterThan(
-            TIER_STYLE.misconduct.heading.length
+        expect(TIER_STYLE.misconduct.heading.length).toBeLessThan(
+            TIER_STYLE.caution.heading.length
         );
-        expect(TIER_STYLE.misconduct.heading.length).toBeGreaterThan(
-            TIER_STYLE.seriousMisconduct.heading.length
-        );
-        expect(TIER_STYLE.seriousMisconduct.heading).toBe("#");
     });
 
     it("ranks them lowest first", () => {
-        expect(TIERS_BY_RANK).toEqual(["caution", "misconduct", "seriousMisconduct"]);
+        expect(TIERS_BY_RANK).toEqual(["caution", "misconduct"]);
     });
 
     it("never names a rung in a way that diminishes it", () => {
@@ -74,15 +69,13 @@ describe("every rung is visibly distinct", () => {
 describe("the title a card leads with", () => {
     it("carries the mark and the label at the rung's own weight", () => {
         expect(tierTitle("caution")).toBe("### ⚠️ Caution");
-        expect(tierTitle("misconduct")).toBe("## 🔶 Misconduct");
-        expect(tierTitle("seriousMisconduct")).toBe("# 🚨 Serious Misconduct");
+        expect(tierTitle("misconduct")).toBe("## 🚨 Misconduct");
     });
 
     it("steps down in a list, so a record is not a wall of headings", () => {
-        // Only the top rung still steps up; five entries at H1 would be unreadable.
+        // Only the top rung still steps up; a page of H1s would be unreadable.
         expect(tierTitle("caution", true)).toBe("⚠️ Caution");
-        expect(tierTitle("misconduct", true)).toBe("🔶 Misconduct");
-        expect(tierTitle("seriousMisconduct", true)).toBe("### 🚨 Serious Misconduct");
+        expect(tierTitle("misconduct", true)).toBe("### 🚨 Misconduct");
     });
 
     it("leaves an activity warning out of the conduct ladder", () => {
@@ -96,16 +89,16 @@ describe("the title a card leads with", () => {
 describe("what a rung does to the record", () => {
     it("states permanence in bold rather than as a footnote", () => {
         const line = tierConsequenceLine(0);
-        expect(line).toContain("**This never stops counting.**");
+        expect(line).toContain("**This warning does not expire.**");
     });
 
-    it("names the number of days for a rung that expires", () => {
+    it("names the number of days for an activity warning, which still expires", () => {
         expect(tierConsequenceLine(90)).toContain("**Counts for 90 days.**");
         expect(tierConsequenceLine(180)).toContain("**Counts for 180 days.**");
     });
 
-    it("says the record keeps it whichever rung it is", () => {
-        for (const days of [0, 90, 180]) {
+    it("says the record keeps an expiring warning once it stops counting", () => {
+        for (const days of [90, 180]) {
             expect(tierConsequenceLine(days)).toContain("The record keeps it");
         }
     });
@@ -129,7 +122,7 @@ describe("a withdrawn warning does not argue with itself", () => {
             displayName: "Ashley",
             mention: "<@123>",
             kind: "conduct" as const,
-            tier: "seriousMisconduct" as const,
+            tier: "misconduct" as const,
             issuedAt: new Date("2026-09-01T10:00:00Z"),
             issuedBy: "<@999>",
             reason: "Something happened.",
@@ -153,11 +146,11 @@ describe("a withdrawn warning does not argue with itself", () => {
             }).components[0].toJSON()
         );
 
-        expect(live).toContain("never stops counting");
-        // "never stops counting" above "counts against them nowhere" is a card
+        expect(live).toContain("does not expire");
+        // "does not expire" above "no longer counts against them" is a card
         // contradicting itself in consecutive lines.
-        expect(withdrawn).not.toContain("never stops counting");
-        expect(withdrawn).toContain("counts against them nowhere");
+        expect(withdrawn).not.toContain("does not expire");
+        expect(withdrawn).toContain("no longer counts against them");
     });
 
     it("goes grey whatever its rung, and offers no button", () => {
@@ -167,7 +160,7 @@ describe("a withdrawn warning does not argue with itself", () => {
                 displayName: "Ashley",
                 mention: "<@123>",
                 kind: "conduct",
-                tier: "seriousMisconduct",
+                tier: "misconduct",
                 issuedAt: new Date("2026-09-01T10:00:00Z"),
                 issuedBy: "<@999>",
                 reason: "Something happened.",
@@ -200,20 +193,19 @@ describe("the review row names the rungs", () => {
     ): Record<ConductTier, number> => ({
         caution: 0,
         misconduct: 0,
-        seriousMisconduct: 0,
         ...overrides
     });
 
     it("says which rungs, not just how many conduct warnings", () => {
-        // Two Cautions and one Serious Misconduct are different facts, and an
+        // Two Cautions and one Misconduct are different facts, and an
         // Executive deciding an attendance shortfall should see which.
         const line = warningWeightLine({
             total: 3,
             conduct: 2,
             activity: 1,
-            tiers: tiers({ caution: 1, seriousMisconduct: 1 })
+            tiers: tiers({ caution: 1, misconduct: 1 })
         });
-        expect(line).toContain("1 Serious Misconduct");
+        expect(line).toContain("1 Misconduct");
         expect(line).toContain("1 Caution");
         expect(line).toContain("1 activity");
         expect(line).toContain("their 4th");
@@ -224,9 +216,9 @@ describe("the review row names the rungs", () => {
             total: 2,
             conduct: 2,
             activity: 0,
-            tiers: tiers({ caution: 1, seriousMisconduct: 1 })
+            tiers: tiers({ caution: 1, misconduct: 1 })
         });
-        expect(line.indexOf("Serious Misconduct")).toBeLessThan(line.indexOf("Caution"));
+        expect(line.indexOf("Misconduct")).toBeLessThan(line.indexOf("Caution"));
     });
 
     it("omits a rung nobody holds", () => {
@@ -238,7 +230,6 @@ describe("the review row names the rungs", () => {
         });
         expect(line).toContain("1 Misconduct");
         expect(line).not.toContain("Caution");
-        expect(line).not.toContain("Serious");
     });
 
     it("still reads without a rung breakdown at all", () => {

@@ -5,7 +5,6 @@ import type { StaffBotConfig } from "../config/guildConfig.js";
 import { collections } from "../db/client.js";
 import { TIER_STYLE } from "../render/tiers.js";
 import { conductWarningPermitted, isConductTier } from "../domain/conduct.js";
-import { lifetimeDaysFor } from "../domain/review.js";
 import { withdrawWarning } from "../domain/assessments.js";
 import { ensureStaff, findStaffById } from "../domain/staff.js";
 import { fetchPublicMember, isExecutive, resolveTier } from "../domain/permissions.js";
@@ -96,7 +95,6 @@ export async function handleConductWarnModal(
     const delivered = await deliverConductWarning(client, config, warning, subject);
     await upsertWarningCard(client, config, warning._id);
 
-    const days = lifetimeDaysFor(warning, config);
     const name = await staffDisplayName(
         client,
         config,
@@ -110,14 +108,11 @@ export async function handleConductWarnModal(
             `${TIER_STYLE[rawTier].emoji} ${TIER_STYLE[rawTier].label} issued`,
             `**${name}** (<@${subjectDiscordId}>)\n\n` +
                 `**Why:** ${reason}\n\n` +
-                (days <= 0
-                    ? "It never stops counting against them."
-                    : `It counts against them for ${days} days.`) +
-                "\n\n" +
+                "It does not expire.\n\n" +
                 (delivered
                     ? "They have the message."
                     : "⚠️ **Their direct messages are closed, so they did not get it.** The " +
-                      "warning stands on their record, so tell them yourself.") +
+                      "warning is still on their record, so tell them yourself.") +
                 (config.warningChannelId ? "" : "\n\n-# No warning channel is configured, so " +
                     "there is no card for this in the log."),
             { colour: delivered ? COLOUR.pending : COLOUR.adverse, ephemeral: true }
@@ -217,8 +212,7 @@ export async function handleConductWithdrawModal(
                   "An Executive has withdrawn a warning against you",
                   "It no longer counts against you.\n\n" +
                       `**Why:** ${reason}\n\n` +
-                      "-# Your record still lists it, marked withdrawn, so it shows what " +
-                      "happened instead of a gap.",
+                      "-# Your record still lists it, marked as withdrawn.",
                   { colour: COLOUR.settled }
               )
           })

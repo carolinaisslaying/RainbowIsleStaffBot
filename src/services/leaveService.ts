@@ -87,7 +87,7 @@ export async function activateLeave(
     await tryDm(client, staff.discordId, {
         ...noticeCard(
             `Your leave has started`,
-            "Your ranks are set aside until you get back.\n" +
+            "Your staff roles are set aside until you get back.\n" +
                 (leave.endDate
                     ? `You are due back ${ts(leave.endDate, "D")}, ${ts(leave.endDate, "R")}.`
                     : "Your leave is open ended. Use " +
@@ -141,7 +141,7 @@ export async function leaveCardFor(
 
     let outcome: string | null = null;
     if (leave.status === "active") {
-        outcome = `-# Away since ${ts(leave.startDate, "R")}. Ranks are set aside.`;
+        outcome = `-# Away since ${ts(leave.startDate, "R")}. Staff roles are set aside.`;
     } else if (leave.status === "ended" && leave.rolesRestoredAt) {
         const early = leave.endedEarlyBy ? await findStaffById(leave.endedEarlyBy) : null;
         outcome =
@@ -152,7 +152,7 @@ export async function leaveCardFor(
                   ? ", on schedule."
                   : ", they closed it themselves.") +
             (leave.restoreErrors.length > 0
-                ? ` ${leave.restoreErrors.length} rank(s) could not be restored.`
+                ? ` ${leave.restoreErrors.length} staff role(s) could not be restored.`
                 : "");
     }
 
@@ -266,7 +266,7 @@ export async function endLeave(
     const summary = {
         leave,
         endedBy,
-        restored: restored.map((roleId) => roleNames.get(roleId) ?? "a rank that no longer exists"),
+        restored: restored.map((roleId) => roleNames.get(roleId) ?? "a staff role that no longer exists"),
         missing: errors.map((roleId) => roleNames.get(roleId) ?? roleId),
         inGuild: member !== null
     };
@@ -286,8 +286,8 @@ export async function endLeave(
         const channel = await staffChannel(client, config, config.leaveChannelId);
         await channel?.send({
             ...noticeCard(
-                "Some ranks could not be restored",
-                `<@${staff.discordId}> is back from leave. These ranks no longer exist, so ` +
+                "Some staff roles could not be restored",
+                `<@${staff.discordId}> is back from leave. These staff roles no longer exist, so ` +
                     "they did not come back:\n" +
                     errors.map((roleId) => `- **${roleNames.get(roleId) ?? roleId}**`).join("\n") +
                     "\n\nGrant the current equivalents by hand.",
@@ -345,15 +345,15 @@ function welcomeBackCard(options: {
 
     if (!options.inGuild) {
         lines.push(
-            "**Your ranks are not back.** You are not in the community server, so there was " +
+            "**Your staff roles are not back.** You are not in the community server, so there was " +
                 "nothing to restore them onto. Rejoin and ask an Executive to put them back."
         );
     } else if (options.restored.length > 0) {
         lines.push(
-            `**Ranks restored:** ${options.restored.map((name) => `**${name}**`).join(", ")}.`
+            `**Staff roles restored:** ${options.restored.map((name) => `**${name}**`).join(", ")}.`
         );
     } else {
-        lines.push("**No ranks needed restoring.** Nothing was set aside when you left.");
+        lines.push("**No staff roles needed restoring.** Nothing was set aside when you left.");
     }
 
     if (options.missing.length > 0) {

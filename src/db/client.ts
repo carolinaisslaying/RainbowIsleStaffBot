@@ -12,6 +12,7 @@ import type {
     LeaveDoc,
     ShiftDoc,
     StaffDoc,
+    UptimeHourDoc,
     WarningDoc,
     WeeklyStatsDoc
 } from "./types.js";
@@ -55,6 +56,7 @@ export const collections = {
     warnings: () => db().collection<WarningDoc>("warnings"),
     leave: () => db().collection<LeaveDoc>("leave"),
     demandBuckets: () => db().collection<DemandBucketDoc>("demandBuckets"),
+    uptimeHours: () => db().collection<UptimeHourDoc>("uptimeHours"),
     guildConfig: () => db().collection<GuildConfigDoc>("guildConfig"),
     auditLog: () => db().collection<AuditLogDoc>("auditLog"),
     deliveries: () => db().collection<DeliveryDoc>("deliveries"),

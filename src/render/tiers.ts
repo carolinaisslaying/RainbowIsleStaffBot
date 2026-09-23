@@ -19,7 +19,7 @@ import { COLOUR } from "./theme.js";
  * before it shows an accent.
  */
 export interface TierStyle {
-    /** What it is called. Never "minor": all three are formal written warnings. */
+    /** What it is called. Never "minor": both are formal written warnings. */
     label: string;
     /** The accent. On a warning card the rung owns this, not the state. */
     colour: number;
@@ -30,13 +30,13 @@ export interface TierStyle {
     emoji: string;
     /**
      * Discord's heading markup, climbing with the rung. `#` renders largest,
-     * and the top rung takes it. A warning that never expires should not sit
-     * on the page at the same size as one that lapses in ninety days.
+     * and the top rung takes it: gravity, not expiry, is what separates them
+     * now that neither lapses.
      */
     heading: string;
     /**
      * The same escalation in a list, where a page of `#` headings turns into a
-     * wall. The top rung still steps up and the other two stay inline.
+     * wall. The top rung still steps up and the other stays inline.
      */
     listHeading: string;
     /** Ordering, lowest first. Used to sort a record so the worst reads last. */
@@ -55,18 +55,10 @@ export const TIER_STYLE: Record<ConductTier, TierStyle> = {
     misconduct: {
         label: "Misconduct",
         colour: COLOUR.misconduct,
-        emoji: "🔶",
-        heading: "##",
-        listHeading: "",
-        rank: 2
-    },
-    seriousMisconduct: {
-        label: "Serious Misconduct",
-        colour: COLOUR.seriousMisconduct,
         emoji: "🚨",
-        heading: "#",
+        heading: "##",
         listHeading: "###",
-        rank: 3
+        rank: 2
     }
 };
 
@@ -78,14 +70,16 @@ export const TIERS_BY_RANK: readonly ConductTier[] = (
 /**
  * What the rung does to the record, as a sentence, bold on every surface.
  *
- * The lifetime is what separates one rung from another, so it reads at the
- * same weight as the name instead of sitting in a footnote. It never says what
- * happens next, because the bot does not escalate and should not hint that it
- * might.
+ * A conduct warning is always permanent, so this always reads the same for
+ * one; an activity warning still expires on `warningExpiryDays`, so the
+ * function keeps taking a day count rather than hard-coding permanence. It
+ * reads at the same weight as the name instead of sitting in a footnote, and
+ * never says what happens next, because the bot does not escalate and should
+ * not hint that it might.
  */
 export function tierConsequenceLine(days: number): string {
     return days <= 0
-        ? "**This never stops counting.** The record keeps it for good."
+        ? "**This warning does not expire.**"
         : `**Counts for ${days} days.** The record keeps it after that.`;
 }
 

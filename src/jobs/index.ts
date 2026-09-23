@@ -1,4 +1,4 @@
-import type { Client } from "discord.js";
+import { Status, type Client } from "discord.js";
 import { cachedConfig, loadConfig, type StaffBotConfig } from "../config/guildConfig.js";
 import { everyHour, everyMinute, schedule, startScheduler } from "./scheduler.js";
 import { sweepShifts } from "../services/shiftService.js";
@@ -7,6 +7,7 @@ import { deliverDueRecaps } from "../services/notifications.js";
 import { chaseUnworkedQueues } from "../services/assessmentService.js";
 import { pruneActivityCache, recomputeCounts } from "../domain/activity.js";
 import { closeWeek, catchUpMissedWeeks } from "./weeklyRollup.js";
+import { recordOnlineMinute } from "../domain/uptime.js";
 import { nextWeekStart, weekStartFor, wallClockIn, zonedToUtc } from "../time/calendar.js";
 import { log } from "../log.js";
 
@@ -55,6 +56,15 @@ export async function registerJobs(client: Client): Promise<void> {
     // Away detection, auto end and the hard shift ceiling.
     schedule("shift-sweep", everyMinute, async (at) => {
         await sweepShifts(client, await loadConfig(), at);
+    });
+
+    // Whether the bot could hear messages this minute, so the heatmaps can tell
+    // an hour nobody spoke in from an hour it missed. Connected to the gateway,
+    // not merely running: a process that has lost its session receives no
+    // messages, and that is the outage that would otherwise go unnoticed.
+    schedule("uptime", everyMinute, async (at) => {
+        if (!client.isReady() || client.ws.status !== Status.Ready) return;
+        await recordOnlineMinute(at);
     });
 
     // Leave activation and return.

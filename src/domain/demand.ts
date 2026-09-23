@@ -25,20 +25,48 @@ export async function recordDemand(channelId: string, at = new Date()): Promise<
     );
 }
 
-export async function demandBetween(from: Date, to: Date): Promise<DemandBucketDoc[]> {
+export async function demandBetween(
+    from: Date,
+    to: Date,
+    channelIds?: readonly string[]
+): Promise<DemandBucketDoc[]> {
     return collections
         .demandBuckets()
-        .find({ hourStart: { $gte: from, $lt: to } })
+        .find({
+            hourStart: { $gte: from, $lt: to },
+            ...(channelIds ? { channelId: { $in: [...channelIds] } } : {})
+        })
         .toArray();
 }
 
-/** Total messages per UTC hour bucket across all tracked channels. */
-export async function demandByHour(from: Date, to: Date): Promise<Map<number, number>> {
-    const buckets = await demandBetween(from, to);
+/** Total messages per UTC hour bucket across the given channels. */
+export async function demandByHour(
+    from: Date,
+    to: Date,
+    channelIds?: readonly string[]
+): Promise<Map<number, number>> {
+    const buckets = await demandBetween(from, to, channelIds);
     const totals = new Map<number, number>();
     for (const bucket of buckets) {
         const key = bucket.hourStart.getTime();
         totals.set(key, (totals.get(key) ?? 0) + bucket.messages);
     }
     return totals;
+}
+
+/**
+ * The first hour any of these channels recorded a message, which is as close as
+ * the store can get to when counting began. A quiet channel's first bucket can
+ * land a little after it was added; for the busy channels that decide the
+ * picture, it is the same hour.
+ */
+export async function firstDemandHour(channelIds: readonly string[]): Promise<Date | null> {
+    if (channelIds.length === 0) return null;
+    const first = await collections
+        .demandBuckets()
+        .find({ channelId: { $in: [...channelIds] } })
+        .sort({ hourStart: 1 })
+        .limit(1)
+        .next();
+    return first?.hourStart ?? null;
 }

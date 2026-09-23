@@ -219,11 +219,10 @@ export async function goAway(
             `Your shift is still open, but ${why}, so you have stopped showing as available ` +
                 "and your minutes have paused.\n\n" +
                 `Send a message in ${publicGuildName()}, or come back online, and you are ` +
-                "available again. You need do nothing else.\n\n" +
+                "available again. You do not need to do anything else.\n\n" +
                 `**If you stay away, your shift ends itself ${ts(autoEndAt, "R")}**, at ` +
                 `${ts(autoEndAt, "t")}. That is ${config.autoEndAfterAwayMinutes} minutes from ` +
-                "now, and it closes your shift for you: nothing is lost, and the minutes you " +
-                "already earned are already counted.",
+                "now. Nothing is lost: minutes you have earned stay counted.",
             { colour: COLOUR.away, emoji: EMOJI.away }
         )
     });

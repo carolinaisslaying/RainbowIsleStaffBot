@@ -438,7 +438,7 @@ export const configCommand: Command = {
 
         if (spec.kind === "timezone" || spec.kind === "weekday" || spec.kind === "isoDate") {
             log.warn(
-                `Calendar key ${rawKey} changed. Past assessments keep their snapshotted target.`
+                `Calendar key ${rawKey} changed. Past assessments keep the minimum they were assessed against.`
             );
         }
     }
@@ -491,7 +491,7 @@ export async function applyChange(
                 `Now ${renderValue(key, fresh, guildNames)}\n\n` +
                 `${nextStep}` +
                 warningBlock +
-                "\n\n-# Past assessments keep the target in force when an Executive made them. " +
+                "\n\n-# Past assessments keep the minimum in force when an Executive made them. " +
                 "Changing a threshold here leaves those outcomes alone.",
             { ephemeral: true }
         )

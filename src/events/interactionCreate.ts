@@ -145,9 +145,8 @@ export function registerInteractionHandler(client: Client): void {
                     interaction,
                     errorCard(
                         `**/${command.data.name}** is limited to the administrators named when ` +
-                            "this bot was deployed. Executive rank does not reach it, on " +
-                            "purpose: it changes how the bot itself behaves rather than what " +
-                            "it decides about anyone.\n\n" +
+                            "this bot was deployed. Being an Executive is not enough: " +
+                            "configuration decides who counts as an Executive.\n\n" +
                             "Ask whoever runs the deployment."
                     )
                 );
@@ -447,7 +446,7 @@ async function routeButton(client: Client, interaction: import("discord.js").But
                     "Timezone saved",
                     `**${zone}**. You can use every other command now.\n\n` +
                         "-# Display only: your totals, rings, leaderboard position and " +
-                        "compliance outcomes are the same UTC weeks as everyone else's.",
+                        "fortnight review run on the same weeks as everyone else's.",
                     { colour: COLOUR.approved, emoji: EMOJI.clock }
                 )
             ) as never

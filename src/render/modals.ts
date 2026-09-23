@@ -107,13 +107,13 @@ export function leaveRequestModal(timeZone: string, example: string): ModalBuild
             dateField(
                 FIELD_START,
                 "Leave starts",
-                "When your ranks are set aside and your assessment pauses.",
+                "When your staff roles are set aside and your assessment pauses.",
                 example
             ),
             dateField(
                 FIELD_END,
                 "Leave ends",
-                "Your leave closes itself at this moment and your ranks come back.",
+                "Your leave closes itself at this moment and your staff roles come back.",
                 example
             ),
             reasonField(
@@ -217,7 +217,7 @@ const DECISION_PROMPT: Record<string, { title: string; label: string; hint: stri
     reopen: {
         title: "Reopen this decision",
         label: "Why reopen it?",
-        hint: "Any warning it issued is deleted and the member is told it has been withdrawn."
+        hint: "Any warning it issued is withdrawn, and the member is told."
     }
 };
 
@@ -402,7 +402,7 @@ export function conductWarnModal(input: {
 }): ModalBuilder {
     return new ModalBuilder()
         .setCustomId(`${CONDUCT_WARN_MODAL}:${input.subjectDiscordId}`)
-        .setTitle("Issue a formal warning".slice(0, 45))
+        .setTitle("Issue a warning".slice(0, 45))
         .addTextDisplayComponents(
             new TextDisplayBuilder().setContent(
                 `-# **${input.displayName}** will be sent this, and it goes on their record.`
@@ -411,7 +411,7 @@ export function conductWarnModal(input: {
         .addLabelComponents(
             new LabelBuilder()
                 .setLabel("How serious?")
-                .setDescription("This sets how long the warning counts for.")
+                .setDescription("Both stay on their record. Pick the one that fits what happened.")
                 .setRadioGroupComponent(
                     new RadioGroupBuilder()
                         .setCustomId(FIELD_TIER)

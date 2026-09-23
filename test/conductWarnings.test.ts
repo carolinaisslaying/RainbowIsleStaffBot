@@ -14,12 +14,8 @@ const DAY = 86_400_000;
 const now = new Date("2026-09-02T12:00:00Z");
 const ago = (days: number) => new Date(now.getTime() - days * DAY);
 
-/** The shipped ladder: Caution 90, Misconduct 180, Serious Misconduct never. */
 const config = {
-    warningExpiryDays: 180,
-    cautionExpiryDays: 90,
-    misconductExpiryDays: 180,
-    seriousMisconductExpiryDays: 0
+    warningExpiryDays: 180
 };
 
 const conduct = (tier: WarningLike["tier"], days: number): WarningLike => ({
@@ -31,10 +27,9 @@ const conduct = (tier: WarningLike["tier"], days: number): WarningLike => ({
 const activity = (days: number): WarningLike => ({ kind: "activity", issuedAt: ago(days) });
 
 describe("how long a warning counts for", () => {
-    it("reads each conduct rung from its own key", () => {
-        expect(lifetimeDaysFor(conduct("caution", 0), config)).toBe(90);
-        expect(lifetimeDaysFor(conduct("misconduct", 0), config)).toBe(180);
-        expect(lifetimeDaysFor(conduct("seriousMisconduct", 0), config)).toBe(0);
+    it("never gives a conduct warning a lifetime, whatever its rung", () => {
+        expect(lifetimeDaysFor(conduct("caution", 0), config)).toBe(0);
+        expect(lifetimeDaysFor(conduct("misconduct", 0), config)).toBe(0);
     });
 
     it("leaves activity warnings on warningExpiryDays", () => {
@@ -46,30 +41,28 @@ describe("how long a warning counts for", () => {
         expect(lifetimeDaysFor({ issuedAt: ago(0) }, config)).toBe(180);
     });
 
-    it("reads a conduct warning with no tier as the middle rung", () => {
-        // Nothing writes this, but a hand-edited document could. Guessing
-        // upward would make a data error harsher than any decision anybody took.
-        expect(lifetimeDaysFor({ kind: "conduct", issuedAt: ago(0) }, config)).toBe(180);
+    it("reads a conduct warning with no tier as permanent too", () => {
+        // Nothing writes this, but a hand-edited document could. Every conduct
+        // warning is permanent regardless of tier, so there is no rung left to
+        // guess at.
+        expect(lifetimeDaysFor({ kind: "conduct", issuedAt: ago(0) }, config)).toBe(0);
     });
 });
 
-describe("the ladder in practice", () => {
-    it("spends a Caution after ninety days, not after a hundred and eighty", () => {
-        expect(warningIsSpent(conduct("caution", 89), now, config)).toBe(false);
-        expect(warningIsSpent(conduct("caution", 91), now, config)).toBe(true);
-        // The activity clock would still be running here. The point of the rung.
-        expect(warningIsSpent(activity(91), now, config)).toBe(false);
+describe("conduct never expires", () => {
+    it("never spends a Caution, however long ago", () => {
+        expect(warningIsSpent(conduct("caution", 10), now, config)).toBe(false);
+        expect(warningIsSpent(conduct("caution", 5000), now, config)).toBe(false);
     });
 
-    it("counts a Caution issued exactly on its boundary", () => {
-        expect(warningIsSpent(conduct("caution", 90), now, config)).toBe(false);
+    it("never spends a Misconduct, however long ago", () => {
+        expect(warningIsSpent(conduct("misconduct", 10), now, config)).toBe(false);
+        expect(warningIsSpent(conduct("misconduct", 5000), now, config)).toBe(false);
     });
 
-    it("never spends Serious Misconduct, however long ago", () => {
-        // The example that drove the ladder: this should not stop counting
-        // because enough months went by.
-        expect(warningIsSpent(conduct("seriousMisconduct", 10), now, config)).toBe(false);
-        expect(warningIsSpent(conduct("seriousMisconduct", 5000), now, config)).toBe(false);
+    it("still spends an activity warning once its clock runs out", () => {
+        expect(warningIsSpent(activity(179), now, config)).toBe(false);
+        expect(warningIsSpent(activity(181), now, config)).toBe(true);
     });
 
     it("treats any zero lifetime as permanent, not as instantly spent", () => {
@@ -84,30 +77,26 @@ describe("what counts right now", () => {
         expect(countsNow({ issuedAt: ago(1), rehearsal: true }, now, config)).toBe(false);
     });
 
-    it("excludes a withdrawn warning even when its clock is still running", () => {
+    it("excludes a withdrawn warning even though conduct never expires", () => {
         // Withdrawal beats every clock, including a permanent one.
         expect(
             countsNow({ ...conduct("misconduct", 1), withdrawnAt: ago(0) }, now, config)
         ).toBe(false);
         expect(
-            countsNow(
-                { ...conduct("seriousMisconduct", 1), withdrawnAt: ago(0) },
-                now,
-                config
-            )
+            countsNow({ ...conduct("caution", 1), withdrawnAt: ago(0) }, now, config)
         ).toBe(false);
     });
 
-    it("counts an ordinary unexpired warning", () => {
+    it("counts an ordinary conduct warning", () => {
         expect(countsNow(conduct("misconduct", 1), now, config)).toBe(true);
     });
 });
 
 describe("the total across a mixed record", () => {
     const record: WarningLike[] = [
-        conduct("seriousMisconduct", 900), // permanent, counts
+        conduct("misconduct", 900), // permanent, counts
         conduct("misconduct", 10), // counts
-        conduct("caution", 120), // spent at 90
+        conduct("caution", 120), // permanent, counts
         activity(10), // counts
         activity(200), // spent at 180
         { ...conduct("misconduct", 5), withdrawnAt: ago(1) }, // withdrawn
@@ -115,16 +104,16 @@ describe("the total across a mixed record", () => {
     ];
 
     it("counts one total across both kinds", () => {
-        expect(activeWarningCount(record, now, config)).toBe(3);
+        expect(activeWarningCount(record, now, config)).toBe(4);
     });
 
     it("splits that total by kind without changing it", () => {
         const tally = warningTally(record, now, config);
         expect(tally).toEqual({
-            total: 3,
-            conduct: 2,
+            total: 4,
+            conduct: 3,
             activity: 1,
-            tiers: { caution: 0, misconduct: 1, seriousMisconduct: 1 }
+            tiers: { caution: 1, misconduct: 2 }
         });
         expect(tally.conduct + tally.activity).toBe(tally.total);
     });
@@ -134,7 +123,7 @@ describe("the total across a mixed record", () => {
             total: 0,
             conduct: 0,
             activity: 0,
-            tiers: { caution: 0, misconduct: 0, seriousMisconduct: 0 }
+            tiers: { caution: 0, misconduct: 0 }
         });
     });
 
@@ -145,12 +134,6 @@ describe("the total across a mixed record", () => {
 });
 
 describe("the shipped defaults", () => {
-    it("match the ladder as designed", () => {
-        expect(DEFAULT_CONFIG.cautionExpiryDays).toBe(90);
-        expect(DEFAULT_CONFIG.misconductExpiryDays).toBe(180);
-        expect(DEFAULT_CONFIG.seriousMisconductExpiryDays).toBe(0);
-    });
-
     it("leaves the activity clock where it was", () => {
         expect(DEFAULT_CONFIG.warningExpiryDays).toBe(180);
     });

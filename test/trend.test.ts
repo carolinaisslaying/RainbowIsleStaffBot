@@ -30,7 +30,7 @@ describe("a member's recent fortnights", () => {
         const svg = trendSvg({ points, requiredMinutes: 240, title: "x" });
         const line = svg.match(/stroke-dasharray="5 4"[^>]*\/>/);
         expect(line).not.toBeNull();
-        expect(svg).toContain("240 min required");
+        expect(svg).toContain("240 min minimum");
     });
 
     it("keeps the line on the scale when one fortnight dwarfs it", () => {

@@ -80,9 +80,8 @@ export async function handleReviewButton(
         await respond(
             interaction,
             errorCard(
-                "That fortnight is before the anchor this cycle counts from, so it is not a " +
-                    "fortnight of it and there is nothing to decide. The card was posted in " +
-                    "error and can be ignored."
+                "That fortnight is before the cycle's start date, so there is nothing to " +
+                    "decide. The card was posted in error and can be ignored."
             )
         );
         return;
@@ -157,8 +156,8 @@ export async function handleReviewBulkButton(
         await respond(
             interaction,
             errorCard(
-                "Review decisions are Executive only. Leads can read the queue and the " +
-                    "warning history, and that is the whole of it."
+                "Review decisions are Executive only. Leads can view the queue and " +
+                    "warning history."
             )
         );
         return;
@@ -167,7 +166,7 @@ export async function handleReviewBulkButton(
     if (action === "cancel") {
         await answerInPlace(
             interaction,
-            noticeCard("Left as they were", "Nothing was changed. The queue is as it was.", {
+            noticeCard("Cancelled", "Nothing was changed. The queue is as it was.", {
                 colour: COLOUR.settled
             })
         );

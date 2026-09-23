@@ -104,10 +104,10 @@ export async function handleLeaveConfirmButton(
         await interaction.update(
             sendOptions(
                 noticeCard(
-                    "Thrown away",
+                    "Discarded",
                     "Nothing was recorded. Run " +
                         `${cmd(draft.kind === "extend" ? "leave extend" : "leave request", interaction.guildId)} ` +
-                        "again and word the dates however suits.",
+                        "again and word the dates however you like.",
                     { colour: COLOUR.settled }
                 )
             ) as never
@@ -198,7 +198,7 @@ async function commitRequest(
             noticeCard(
                 "Leave requested",
                 `From ${ts(draft.startDate as Date, "f")} until ${ts(draft.endDate, "f")}.\n\n` +
-                    "An Executive decides, and you hear back either way. Your ranks stay as " +
+                    "An Executive decides, and you hear back either way. Your staff roles stay as " +
                     "they are until the leave is approved and starts, and they come back on " +
                     "their own when it ends.\n\n" +
                     `-# Need longer once it has started? ${cmd("leave extend", interaction.guildId)}.`,
@@ -272,7 +272,7 @@ async function commitExtension(
             noticeCard(
                 "Leave extended",
                 `You are now due back ${ts(draft.endDate, "f")}, ${ts(draft.endDate, "R")}.\n\n` +
-                    "Your leave closes itself then and your ranks come back. The Executives " +
+                    "Your leave closes itself then and your staff roles come back. The Executives " +
                     "have been told.",
                 { colour: COLOUR.approved }
             )

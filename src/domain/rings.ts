@@ -26,11 +26,11 @@ export function ringStateFor(input: RingInput): RingState {
 }
 
 /** Plain language for the figures line. Never the only signal, but never absent. */
-/** Reads as the tail of a sentence: "0 of 120 activity minutes, behind target." */
+/** Reads as the tail of a sentence: "0 of 120 activity minutes, below the minimum." */
 export const RING_STATE_LABEL: Record<RingState, string> = {
-    green: "target met",
+    green: "minimum met",
     amber: "on track",
-    red: "behind target",
+    red: "below the minimum",
     leave: "on leave"
 };
 

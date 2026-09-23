@@ -51,7 +51,7 @@ export async function handleScrubButton(
     if (action === "cancel") {
         await interaction.update(
             sendOptions(
-                noticeCard("Left alone", "Nothing was deleted.", { colour: COLOUR.settled })
+                noticeCard("Cancelled", "Nothing was deleted.", { colour: COLOUR.settled })
             ) as never
         );
         return;

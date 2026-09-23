@@ -164,7 +164,7 @@ export async function handleReviewModal(
         const expected = Number(expectedRaw);
 
         if (!isAssessableFortnight(fortnightIndex)) {
-            await respond(interaction, errorCard("That fortnight is not one this cycle counts."));
+            await respond(interaction, errorCard("That fortnight is before the cycle's start date, so there is nothing to decide."));
             return;
         }
 
@@ -202,7 +202,7 @@ export async function handleReviewModal(
     // needed is here and there is no confirmation card to reconcile against.
     const fortnightIndex = Number(first);
     if (!isAssessableFortnight(fortnightIndex)) {
-        await respond(interaction, errorCard("That fortnight is not one this cycle counts."));
+        await respond(interaction, errorCard("That fortnight is before the cycle's start date, so there is nothing to decide."));
         return;
     }
 
@@ -471,7 +471,7 @@ async function applyDecision(
                     `Fortnight ${label}. The outcome recorded against you has been reopened` +
                         (removed > 0
                             ? " and the warning it carried has been withdrawn. It stays on " +
-                              "your record marked as withdrawn, and counts against you nowhere."
+                              "your record marked as withdrawn, and no longer counts against you."
                             : ".") +
                         `\n\n**Why:** ${reason}\n\n` +
                         "The fortnight is back with the Executives to decide again.",
@@ -490,8 +490,7 @@ async function applyDecision(
                     : "") +
                 ".\n\n" +
                 (assessment.reviewOutcome === "dismissed"
-                    ? "They were not told. They were never told about the dismissal either, " +
-                      "so there is nothing for them to have stopped believing."
+                    ? "They were not told, because they never heard about the dismissal."
                     : told
                       ? "They have been told it was withdrawn."
                       : mayTell
@@ -554,8 +553,9 @@ async function applyDecision(
                 : await tryDm(client, subject.discordId, {
                       ...noticeCard(
                           "Fortnight excused",
-                          `Fortnight ${label}. You were below the requirement and an Executive ` +
-                              `excused it, so you have no warning on record.\n\n**Why:** ${reason}`,
+                          `Fortnight ${label}. Your activity was under the fortnight minimum, and ` +
+                              `an Executive has excused it. Nothing goes on your record.\n\n` +
+                              `**Why:** ${reason}`,
                           { colour: COLOUR.approved }
                       )
                   });

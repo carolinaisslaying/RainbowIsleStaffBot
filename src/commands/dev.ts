@@ -14,6 +14,9 @@ import { env } from "../config/env.js";
 import { loadConfig } from "../config/guildConfig.js";
 import { configWarnings } from "../config/configGuards.js";
 import { db } from "../db/client.js";
+import { uptimeMeasuredSince, uptimeRows } from "../domain/uptime.js";
+import { listeningOver } from "../domain/observation.js";
+import { DAY_MS } from "../time/calendar.js";
 import { jobStatus, schedulerRunning } from "../jobs/scheduler.js";
 import { devStatusCard, setupStatus } from "../render/configCards.js";
 import { log } from "../log.js";
@@ -116,6 +119,20 @@ export const devCommand: Command = {
             }
 
             const fresh = await loadConfig();
+            const now = new Date();
+            const dayAgo = new Date(now.getTime() - DAY_MS);
+            let listening: { online: number; possible: number } | null = null;
+            if (databaseOk) {
+                try {
+                    const [rows, since] = await Promise.all([
+                        uptimeRows(dayAgo, now),
+                        uptimeMeasuredSince()
+                    ]);
+                    listening = listeningOver(rows, since, dayAgo, now);
+                } catch (error) {
+                    log.error("Reading uptime failed during /dev status", error);
+                }
+            }
             await respond(
                 interaction,
                 devStatusCard({
@@ -124,6 +141,7 @@ export const devCommand: Command = {
                     gatewayMs: client.ws.ping,
                     databaseOk,
                     schedulerRunning: schedulerRunning(),
+                    listening,
                     jobs: jobStatus(),
                     missingRequired: setupStatus(fresh).missingRequired,
                     warnings: configWarnings(fresh, new Date()).map((warning) => ({
@@ -146,8 +164,8 @@ export const devCommand: Command = {
                 await respond(
                     interaction,
                     errorCard(
-                        `Fortnight ${index} is before the anchor this cycle counts from, so it ` +
-                            "is not a fortnight of it. Nothing was assessed."
+                        `Fortnight ${index} is before the cycle's start date, so there is ` +
+                            "nothing to assess."
                     )
                 );
                 return;

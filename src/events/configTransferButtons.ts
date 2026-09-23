@@ -97,8 +97,8 @@ async function refuseUnlessExecutive(
         errorCard(
             executive
                 ? "Configuration is limited to the administrators named when this bot was " +
-                      "deployed. Executive rank does not reach it, on purpose: it changes how " +
-                      "the bot itself behaves rather than what it decides about anyone."
+                      "deployed. Being an Executive is not enough: configuration decides who " +
+                      "counts as an Executive."
                 : "Configuration is Executive only."
         )
     );
@@ -167,7 +167,7 @@ export async function handleConfigButton(
     if (action === "setCancel") {
         await interaction.update(
             sendOptions(
-                noticeCard("Left alone", "The boundaries are unchanged.", {
+                noticeCard("Cancelled", "The boundaries are unchanged.", {
                     colour: COLOUR.settled
                 })
             ) as never
@@ -258,7 +258,7 @@ export async function handleConfigButton(
     if (entry.executiveId !== interaction.user.id) {
         await respond(
             interaction,
-            errorCard("That import belongs to whoever pasted it. Start your own.")
+            errorCard("Only the person who pasted this import can apply it.")
         );
         return;
     }

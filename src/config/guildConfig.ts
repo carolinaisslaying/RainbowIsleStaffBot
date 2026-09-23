@@ -37,9 +37,6 @@ export interface StaffBotConfig {
     softRingsEnabled: boolean;
     assessmentDryRun: boolean;
     warningExpiryDays: number;
-    cautionExpiryDays: number;
-    misconductExpiryDays: number;
-    seriousMisconductExpiryDays: number;
     reviewReminderDays: number;
 
     awayAfterMinutes: number;
@@ -129,11 +126,11 @@ export const CONFIG_KEYS: Record<keyof StaffBotConfig, KeySpec> = {
     },
     staffRankRoles: {
         kind: "stringArray",
-        description: "Individual ranks, set aside during leave",
+        description: "Individual staff roles, set aside during leave",
         target: "role",
         importance: "recommended",
         group: "roles",
-        consequence: "Leave strips the department role only, not ranks"
+        consequence: "Leave strips the department role only, not staff roles"
     },
     trackedChannels: {
         kind: "stringArray",
@@ -177,7 +174,7 @@ export const CONFIG_KEYS: Record<keyof StaffBotConfig, KeySpec> = {
     },
     weeklyTargetMinutes: {
         kind: "number",
-        description: "Outer ring target",
+        description: "Weekly minimum (expected, not reviewed)",
         target: "plain",
         importance: "optional",
         group: "targets",
@@ -186,7 +183,7 @@ export const CONFIG_KEYS: Record<keyof StaffBotConfig, KeySpec> = {
     },
     fortnightRequiredMinutes: {
         kind: "number",
-        description: "Compliance threshold",
+        description: "Fortnight minimum (reviewed)",
         target: "plain",
         importance: "optional",
         group: "targets",
@@ -213,7 +210,7 @@ export const CONFIG_KEYS: Record<keyof StaffBotConfig, KeySpec> = {
     },
     amberThresholdPercent: {
         kind: "number",
-        description: "Amber floor, percent of target",
+        description: "Amber floor, percent of the weekly minimum",
         target: "plain",
         importance: "optional",
         group: "targets",
@@ -237,43 +234,16 @@ export const CONFIG_KEYS: Record<keyof StaffBotConfig, KeySpec> = {
     },
     warningExpiryDays: {
         kind: "number",
-        description: "Days before a warning stops counting towards the total",
+        description: "Days an activity warning counts toward the total. Conduct warnings do not expire",
         target: "plain",
         importance: "optional",
         group: "timings",
         min: 1,
         max: 3650
     },
-    cautionExpiryDays: {
-        kind: "number",
-        description: "Days a Caution counts for. 0 means it never stops counting",
-        target: "plain",
-        importance: "optional",
-        group: "timings",
-        min: 0,
-        max: 3650
-    },
-    misconductExpiryDays: {
-        kind: "number",
-        description: "Days a Misconduct warning counts for. 0 means never",
-        target: "plain",
-        importance: "optional",
-        group: "timings",
-        min: 0,
-        max: 3650
-    },
-    seriousMisconductExpiryDays: {
-        kind: "number",
-        description: "Days a Serious Misconduct warning counts for. 0 means never",
-        target: "plain",
-        importance: "optional",
-        group: "timings",
-        min: 0,
-        max: 3650
-    },
     reviewReminderDays: {
         kind: "number",
-        description: "Days before an unworked review queue is chased once",
+        description: "Days before one reminder about an unfinished review",
         target: "plain",
         importance: "optional",
         group: "timings",
@@ -400,14 +370,9 @@ export const DEFAULT_CONFIG: StaffBotConfig = {
     amberThresholdPercent: 75,
     softRingsEnabled: true,
     assessmentDryRun: false,
+    // Activity warnings only. Conduct warnings (Caution/Misconduct) never
+    // expire and have no config key of their own to ship a default for.
     warningExpiryDays: 180,
-    // The ladder. Every rung is a formal written warning; they differ by the
-    // gravity of the conduct, which is why they differ by how long they count.
-    // Zero is never, and the top rung ships that way on purpose: some conduct
-    // should not stop counting because enough months went by.
-    cautionExpiryDays: 90,
-    misconductExpiryDays: 180,
-    seriousMisconductExpiryDays: 0,
     reviewReminderDays: 3,
     awayAfterMinutes: 20,
     autoEndAfterAwayMinutes: 30,

@@ -65,8 +65,8 @@ export function decisionPermitted(options: {
         return {
             ok: false,
             reason:
-                "Review decisions are Executive only. Leads can read the queue and the " +
-                "warning history, and that is the whole of it."
+                "Review decisions are Executive only. Leads can view the queue and " +
+                "warning history."
         };
     }
 
@@ -85,8 +85,8 @@ export function decisionPermitted(options: {
         return {
             ok: false,
             reason:
-                "They are no longer in the server, so there is nobody to serve a warning on. " +
-                "Excuse or dismiss the row to close it out."
+                "They have left the team, so they cannot be warned. Excuse or dismiss the " +
+                "row to close it."
         };
     }
 
@@ -132,7 +132,7 @@ export function deliveryLine(options: {
     if (options.attempted) {
         return (
             "⚠️ **They could not be messaged.** Their direct messages are closed, so they " +
-            "have not seen this. The decision stands on the record either way."
+            "have not seen this. It is still on the record."
         );
     }
     if (options.rehearsal) {
@@ -181,44 +181,30 @@ export interface WarningLike {
 /**
  * How long this particular warning counts for, in days. Zero means never spent.
  *
- * There is no single expiry any more. An activity warning uses
- * `warningExpiryDays`; a conduct warning uses the key for its own rung, because
- * "rude in tickets" and a serious conduct matter should plainly not fall off the
- * record on the same day.
- *
- * A conduct warning with no tier — which nothing writes, but a hand-edited
- * document could — is read as the middle rung rather than as permanent. Guessing
- * upward would make a data error harsher than any decision anybody took.
+ * An activity warning uses `warningExpiryDays`. A conduct warning has no
+ * lifetime at all, whatever its rung — a tier is a severity judgement, not a
+ * countdown, so every conduct warning reads as permanent regardless of
+ * `tier`, including one with no tier at all (which nothing writes, but a
+ * hand-edited document could).
  */
 export function lifetimeDaysFor(warning: WarningLike, config: WarningExpiryConfig): number {
     if (warning.kind !== "conduct") return config.warningExpiryDays;
-    switch (warning.tier) {
-        case "caution":
-            return config.cautionExpiryDays;
-        case "seriousMisconduct":
-            return config.seriousMisconductExpiryDays;
-        default:
-            return config.misconductExpiryDays;
-    }
+    return 0;
 }
 
 /** The keys these rules read. Narrowed so the tests need no whole config. */
 export interface WarningExpiryConfig {
     warningExpiryDays: number;
-    cautionExpiryDays: number;
-    misconductExpiryDays: number;
-    seriousMisconductExpiryDays: number;
 }
 
 /**
  * A warning past its expiry is spent: still on the record, still readable, and
- * no longer counted. Nobody should carry one bad fortnight for ever, and a
- * total that only ever grows stops meaning anything.
+ * no longer counted. Nobody should carry one bad activity fortnight for ever,
+ * and a total that only ever grows stops meaning anything.
  *
- * A lifetime of **zero means never spent**, which is how the top conduct rung is
- * configured. That is the one case where the rule above does not apply, and it
- * is deliberate: some conduct should not quietly stop counting because enough
- * months went by.
+ * That only applies to activity warnings. A conduct warning's lifetime is
+ * always zero, which **means never spent** — some conduct should not quietly
+ * stop counting because enough months went by.
  */
 export function warningIsSpent(
     warning: WarningLike,
@@ -279,13 +265,13 @@ export function warningTally(
 
     const tiers: Record<ConductTier, number> = {
         caution: 0,
-        misconduct: 0,
-        seriousMisconduct: 0
+        misconduct: 0
     };
     for (const warning of conduct) {
-        // A conduct warning with no rung is read as the middle one everywhere
-        // else, so it is counted there too rather than dropped.
-        tiers[warning.tier ?? "misconduct"] += 1;
+        // A conduct warning with no rung reads as the lower one rather than
+        // dropped or guessed at the worse rung: a data error should not read
+        // harsher than any decision anybody took.
+        tiers[warning.tier ?? "caution"] += 1;
     }
 
     return {
@@ -316,7 +302,7 @@ export function warningWeightLine(tally: {
     // — those are different facts and the card should not flatten them.
     const parts: string[] = [];
     if (tally.tiers) {
-        for (const tier of ["seriousMisconduct", "misconduct", "caution"] as const) {
+        for (const tier of ["misconduct", "caution"] as const) {
             const count = tally.tiers[tier];
             if (count > 0) parts.push(`${count} ${TIER_NAME[tier]}`);
         }
@@ -341,8 +327,7 @@ export function warningWeightLine(tally: {
  */
 const TIER_NAME: Record<ConductTier, string> = {
     caution: "Caution",
-    misconduct: "Misconduct",
-    seriousMisconduct: "Serious Misconduct"
+    misconduct: "Misconduct"
 };
 
 function ordinal(value: number): string {
@@ -378,17 +363,17 @@ export function queueCounts(rows: { outcome: ReviewOutcome | null }[]): QueueCou
 /** The header's own sentence, which has to read correctly at every count. */
 export function queueHeadline(counts: QueueCounts, requiredMinutes: number): string {
     if (counts.below === 0) {
-        return `Every active member met the ${requiredMinutes} minute requirement. Nothing to review.`;
+        return `Every active member met the ${requiredMinutes} minute fortnight minimum. Nothing to review.`;
     }
     if (counts.remaining === 0) {
         return (
-            `${counts.below} ${counts.below === 1 ? "member was" : "members were"} below the ` +
-            `${requiredMinutes} minute requirement. All reviewed.`
+            `${counts.below} ${counts.below === 1 ? "member was" : "members were"} under the ` +
+            `${requiredMinutes} minute fortnight minimum. All reviewed.`
         );
     }
     return (
-        `${counts.below} ${counts.below === 1 ? "member is" : "members are"} below the ` +
-        `${requiredMinutes} minute requirement. ` +
+        `${counts.below} ${counts.below === 1 ? "member is" : "members are"} under the ` +
+        `${requiredMinutes} minute fortnight minimum. ` +
         `${counts.remaining} still to decide` +
         (counts.decided > 0 ? `, ${counts.decided} done.` : ".")
     );

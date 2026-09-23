@@ -85,7 +85,7 @@ function readInstant(
         return {
             ok: false,
             error:
-                `**${label}** reads as ${ts(at, "f")}, which has gone. Leave is arranged ` +
+                `**${label}** reads as ${ts(at, "f")}, which has already passed. Leave is arranged ` +
                 "ahead of time, so pick a moment still to come. If you are already away and " +
                 "need it recorded, ask an Executive."
         };

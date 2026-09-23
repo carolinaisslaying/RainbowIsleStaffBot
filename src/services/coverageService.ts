@@ -1,14 +1,18 @@
 import type { StaffBotConfig } from "../config/guildConfig.js";
 import { allShiftsOverlapping, availableIntervals } from "../domain/shifts.js";
-import { demandBetween } from "../domain/demand.js";
+import { demandByHour, firstDemandHour } from "../domain/demand.js";
+import { uptimeByHour, uptimeMeasuredSince } from "../domain/uptime.js";
 import {
-    DAY_MS,
-    HOUR_MS,
-    nextWeekStart,
-    wallClockIn,
-    weekStartFor
-} from "../time/calendar.js";
+    GRID_DAYS,
+    GRID_HOURS,
+    gridCellFor,
+    observe,
+    spreadByHour
+} from "../domain/observation.js";
+import { HOUR_MS, WEEK_MS, wallClockIn } from "../time/calendar.js";
 import { supportedTimezones } from "../time/timezones.js";
+
+export { GRID_DAYS, GRID_HOURS };
 
 /**
  * Coverage and demand, re-bucketed into any timezone.
@@ -16,23 +20,29 @@ import { supportedTimezones } from "../time/timezones.js";
  * The raw store is UTC shift records and UTC hour buckets, so re-bucketing is a
  * display transform with no loss: an hour of availability is the same hour of
  * availability whichever grid you drop it into.
+ *
+ * The window runs from whenever counting began, or the lookback, whichever is
+ * later, up to the start of the current hour. So a deployment shows something a
+ * couple of hours in and sharpens from there, and every average is over the
+ * hours actually heard (`domain/observation.ts`), never over weeks it has not
+ * had yet.
  */
-
-export const GRID_DAYS = 7;
-export const GRID_HOURS = 24;
 
 export interface CoverageGrid {
     /** [weekday][hour], weekday 0 = the configured week start day. */
     coverage: number[][];
     demand: number[][];
     ratio: number[][];
+    /** How many times each cell was heard. Zero is "not yet", not "quiet". */
+    observed: number[][];
     timeZone: string;
     /** Which weekday row 0 represents, so the renderer can label the axis. */
     weekStartDay: number;
-    weeks: number;
+    observedHours: number;
     from: Date;
     to: Date;
     maxRatio: number;
+    maxDemand: number;
 }
 
 export interface GapCell {
@@ -43,93 +53,57 @@ export interface GapCell {
     ratio: number;
 }
 
-function emptyGrid(): number[][] {
-    return Array.from({ length: GRID_DAYS }, () => new Array<number>(GRID_HOURS).fill(0));
-}
-
-/** Which grid cell an instant lands in, for a given display zone. */
-function cellFor(
-    instant: Date,
-    timeZone: string,
-    weekStartDay: number
-): { weekday: number; hour: number } {
-    const wall = wallClockIn(instant, timeZone);
-    return {
-        weekday: (wall.weekday - weekStartDay + 7) % 7,
-        hour: wall.hour
-    };
-}
-
-/**
- * Spread an interval's milliseconds across the hour cells it touches. Walking
- * hour by hour rather than assuming 24 equal hours per day is what keeps this
- * correct across a DST transition in the display zone.
- */
-function addInterval(
-    grid: number[][],
-    from: Date,
-    to: Date,
-    timeZone: string,
-    weekStartDay: number
-): void {
-    let cursor = from.getTime();
-    const end = to.getTime();
-
-    while (cursor < end) {
-        const nextHour = Math.floor(cursor / HOUR_MS) * HOUR_MS + HOUR_MS;
-        const sliceEnd = Math.min(nextHour, end);
-        const cell = cellFor(new Date(cursor), timeZone, weekStartDay);
-        grid[cell.weekday][cell.hour] += sliceEnd - cursor;
-        cursor = sliceEnd;
-    }
-}
-
-export async function buildCoverageGrid(
+async function buildGrid(
     config: StaffBotConfig,
     timeZone: string,
     lookbackWeeks: number,
-    now = new Date()
+    channelIds: readonly string[],
+    withCoverage: boolean,
+    now: Date
 ): Promise<CoverageGrid> {
-    // Whole completed weeks only, so the grid is not skewed by a part week.
-    const to = weekStartFor(now, config.accountingTimezone, config.weekStartDay);
-    let from = to;
-    for (let step = 0; step < lookbackWeeks; step += 1) {
-        from = weekStartFor(
-            new Date(from.getTime() - DAY_MS),
-            config.accountingTimezone,
-            config.weekStartDay
-        );
-    }
-    const weeks = Math.max(1, Math.round((to.getTime() - from.getTime()) / (7 * DAY_MS)));
+    // The hour in progress is left out: half an hour of counting reads as a
+    // quiet hour.
+    const to = new Date(Math.floor(now.getTime() / HOUR_MS) * HOUR_MS);
+    const lookbackFrom = to.getTime() - lookbackWeeks * WEEK_MS;
+    const first = await firstDemandHour(channelIds);
+    const from = new Date(first === null ? to.getTime() : Math.max(lookbackFrom, first.getTime()));
 
-    const coverageMs = emptyGrid();
-    const demandCounts = emptyGrid();
-
-    const shifts = await allShiftsOverlapping(from, to);
-    for (const shift of shifts) {
-        for (const interval of availableIntervals(shift, now)) {
-            const clampedFrom = new Date(Math.max(interval.from.getTime(), from.getTime()));
-            const clampedTo = new Date(Math.min(interval.to.getTime(), to.getTime()));
-            if (clampedTo > clampedFrom) {
-                addInterval(coverageMs, clampedFrom, clampedTo, timeZone, config.weekStartDay);
+    const coverageByHour = new Map<number, number>();
+    if (withCoverage && from < to) {
+        for (const shift of await allShiftsOverlapping(from, to)) {
+            for (const interval of availableIntervals(shift, now)) {
+                const clampedFrom = new Date(Math.max(interval.from.getTime(), from.getTime()));
+                const clampedTo = new Date(Math.min(interval.to.getTime(), to.getTime()));
+                if (clampedTo > clampedFrom) spreadByHour(coverageByHour, clampedFrom, clampedTo);
             }
         }
     }
 
-    for (const bucket of await demandBetween(from, to)) {
-        const cell = cellFor(bucket.hourStart, timeZone, config.weekStartDay);
-        demandCounts[cell.weekday][cell.hour] += bucket.messages;
-    }
+    const [messagesByHour, uptime, measuredSince] = await Promise.all([
+        demandByHour(from, to, channelIds),
+        uptimeByHour(from, to),
+        uptimeMeasuredSince()
+    ]);
 
-    // Mean staff Available during the hour, and mean messages in the hour.
-    const coverage = coverageMs.map((row) => row.map((ms) => ms / HOUR_MS / weeks));
-    const demand = demandCounts.map((row) => row.map((count) => count / weeks));
+    const observation = observe({
+        from,
+        to,
+        timeZone,
+        weekStartDay: config.weekStartDay,
+        messagesByHour,
+        coverageByHour,
+        uptime,
+        measuredSince
+    });
+    const { coverage, demand, observed } = observation;
 
     // Demand divided by coverage, not either alone. A quiet hour with one
     // moderator is fine. A peak hour with one moderator is the gap.
     let maxRatio = 0;
+    let maxDemand = 0;
     const ratio = demand.map((row, weekday) =>
         row.map((messages, hour) => {
+            if (messages > maxDemand) maxDemand = messages;
             const staff = coverage[weekday][hour];
             if (messages === 0) return 0;
             const value = staff <= 0 ? messages : messages / staff;
@@ -142,16 +116,39 @@ export async function buildCoverageGrid(
         coverage,
         demand,
         ratio,
+        observed,
         timeZone,
         weekStartDay: config.weekStartDay,
-        weeks,
+        observedHours: observation.observedHours,
         from,
         to,
-        maxRatio
+        maxRatio,
+        maxDemand
     };
 }
 
-export function worstCells(grid: CoverageGrid, count = 5): GapCell[] {
+/** Demand against moderators available, over every tracked channel. */
+export function buildCoverageGrid(
+    config: StaffBotConfig,
+    timeZone: string,
+    lookbackWeeks: number,
+    now = new Date()
+): Promise<CoverageGrid> {
+    return buildGrid(config, timeZone, lookbackWeeks, config.trackedChannels, true, now);
+}
+
+/** Messages alone, over every tracked channel or just the ones named. */
+export function buildActivityGrid(
+    config: StaffBotConfig,
+    timeZone: string,
+    lookbackWeeks: number,
+    channelIds: readonly string[] = config.trackedChannels,
+    now = new Date()
+): Promise<CoverageGrid> {
+    return buildGrid(config, timeZone, lookbackWeeks, channelIds, false, now);
+}
+
+function cellsOf(grid: CoverageGrid): GapCell[] {
     const cells: GapCell[] = [];
     for (let weekday = 0; weekday < GRID_DAYS; weekday += 1) {
         for (let hour = 0; hour < GRID_HOURS; hour += 1) {
@@ -165,7 +162,19 @@ export function worstCells(grid: CoverageGrid, count = 5): GapCell[] {
             });
         }
     }
-    return cells.sort((left, right) => right.ratio - left.ratio).slice(0, count);
+    return cells;
+}
+
+export function worstCells(grid: CoverageGrid, count = 5): GapCell[] {
+    return cellsOf(grid)
+        .sort((left, right) => right.ratio - left.ratio)
+        .slice(0, count);
+}
+
+export function busiestCells(grid: CoverageGrid, count = 5): GapCell[] {
+    return cellsOf(grid)
+        .sort((left, right) => right.demand - left.demand)
+        .slice(0, count);
 }
 
 /**
@@ -216,7 +225,7 @@ function representativeInstant(
     const start = gridFrom.getTime();
     for (let offset = 0; offset < 8 * 24; offset += 1) {
         const candidate = new Date(start + offset * HOUR_MS);
-        const cell = cellFor(candidate, displayZone, weekStartDay);
+        const cell = gridCellFor(candidate, displayZone, weekStartDay);
         if (cell.weekday === weekday && cell.hour === hour) return candidate;
     }
     return null;

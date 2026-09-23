@@ -68,14 +68,14 @@ export const FACES: RingFace[] = [
     {
         id: "nightshift",
         name: "Nightshift",
-        blurb: "Blue and violet. What the rings have always been.",
+        blurb: "Blue and violet. The original.",
         shift: "#0a84ff",
         days: "#bf5af2"
     },
     {
         id: "orchid",
         name: "Orchid",
-        blurb: "Violet into magenta. Warm without going anywhere near amber.",
+        blurb: "Violet into magenta. Warm and bright.",
         shift: "#a35bff",
         days: "#ff5fc8"
     },

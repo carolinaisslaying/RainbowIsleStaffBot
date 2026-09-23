@@ -185,7 +185,7 @@ export function trendSvg(input: {
             `stroke="${REQUIREMENT}" stroke-width="2" stroke-dasharray="5 4" />`,
         `<text x="${plotRight}" y="${round(line - 6)}" text-anchor="end" ` +
             `font-family="${FONT_STACK}" font-size="10" fill="${SURFACE.textMuted}">` +
-            `${input.requiredMinutes} min required</text>`
+            `${input.requiredMinutes} min minimum</text>`
     );
 
     return panel(parts.join("\n    "), WIDTH, HEIGHT);
@@ -267,7 +267,7 @@ export function spreadSvg(input: {
             `stroke="${REQUIREMENT}" stroke-width="2" stroke-dasharray="5 4" />`,
         `<text x="${plotRight}" y="${round(line - 6)}" text-anchor="end" ` +
             `font-family="${FONT_STACK}" font-size="10" fill="${SURFACE.textMuted}">` +
-            `${input.requiredMinutes} min required</text>`,
+            `${input.requiredMinutes} min minimum</text>`,
         `<text x="${plotLeft}" y="${SPREAD_CAPTION}" font-family="${FONT_STACK}" font-size="10" ` +
             `fill="${SURFACE.textMuted}">${sorted.length} assessed, ${belowCount} below ` +
             `the line</text>`

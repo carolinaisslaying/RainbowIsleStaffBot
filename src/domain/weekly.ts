@@ -116,12 +116,12 @@ export function leaveNoteFor(stats: WeekStats): string | undefined {
     if (stats.onLeave) return undefined;
     if (!stats.partialLeave) return undefined;
     if (stats.leaveEndedAt && stats.leaveStartedAt) {
-        return "You were on leave during part of this week. The target still applies to the " +
-            "rest of it.";
+        return "You were on leave during part of this week. The weekly minimum still " +
+            "applies to the rest of it.";
     }
     if (stats.leaveEndedAt) {
-        return "Your leave ended part way through this week, so this week counts. Only the " +
-            "days after it are yours to make up.";
+        return "Your leave ended part way through this week, so this week counts. The " +
+            "minimum only covers the days after it.";
     }
     if (stats.leaveStartedAt) {
         return "Your leave starts part way through this week, so the days before it still " +

@@ -107,8 +107,8 @@ export function configWarnings(config: StaffBotConfig, now: Date): ConfigWarning
             key: "fortnightRequiredMinutes",
             text:
                 `**${config.fortnightRequiredMinutes} minutes cannot be reached.** A fortnight ` +
-                `is two weeks and the weekly target is ${config.weeklyTargetMinutes}, so a ` +
-                `member who closes both weekly rings still finishes on ` +
+                `is two weeks and the weekly minimum is ${config.weeklyTargetMinutes}, so a ` +
+                `member who meets it both weeks still finishes on ` +
                 `${config.weeklyTargetMinutes * 2} and lands in the review queue.`
         });
     }

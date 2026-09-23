@@ -113,8 +113,8 @@ export async function handleLeaveButton(
                 noticeCard(
                     leave.status === "active" ? "They are back" : "Leave cancelled",
                     (leave.status === "active"
-                        ? "Their ranks are restored and they have been told they are back."
-                        : "The leave will not start. Their ranks were never set aside.") +
+                        ? "Their staff roles are restored and they have been told they are back."
+                        : "The leave will not start. Their staff roles were never set aside.") +
                         "\n\nThe request card in this channel now shows the outcome.",
                     { colour: COLOUR.approved }
                 )
@@ -164,7 +164,7 @@ export async function handleLeaveButton(
                 approved
                     ? `Your leave from ${ts(leave.startDate, "f")} to ` +
                           `${leave.endDate ? ts(leave.endDate, "f") : "an open ended return"} ` +
-                          "has been approved.\n\nYour ranks go aside when it starts and come " +
+                          "has been approved.\n\nYour staff roles are set aside when it starts and come " +
                           "back on their own when it ends. No fortnight assessment applies to " +
                           "you while away, and your streak freezes where it stands."
                     : "An Executive declined your leave request. Speak to them if you want to " +

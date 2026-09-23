@@ -40,10 +40,9 @@ export const mydataCommand: Command = {
         const payload = {
             exportedAt: new Date().toISOString(),
             note:
-                "Everything this bot holds about you. Activity minutes live as a bitmap of " +
-                "UTC minutes per day, and setMinutes lists the credited minute-of-day indices. " +
-                "The bot stores no message content and never asks Discord for the " +
-                "MessageContent intent.",
+                "Everything this bot holds about you. Activity is stored as which minutes of " +
+                "each day (UTC) counted; setMinutes lists them. The bot never reads or keeps " +
+                "what you write.",
             profile: {
                 staffId: staff._id.toHexString(),
                 discordId: staff.discordId,

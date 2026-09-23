@@ -154,11 +154,12 @@ export async function runFortnightAssessment(
                   "not apply to you."
                 : assessment.status === "met"
                   ? `Fortnight ${label}. You recorded ${formatMinutes(assessment.totalMinutes)} ` +
-                    `against a requirement of ${assessment.requiredMinutes}. Target met.`
-                  : `Fortnight ${label}. You recorded ${formatMinutes(assessment.totalMinutes)} ` +
-                    `against a requirement of ${assessment.requiredMinutes}, a shortfall of ` +
-                    `${assessment.requiredMinutes - assessment.totalMinutes}. An Executive ` +
-                    "will review it and decide what happens.";
+                    `against the ${assessment.requiredMinutes} minute fortnight minimum. ` +
+                    "Minimum met."
+                  : `Fortnight ${label}. You recorded **${formatMinutes(assessment.totalMinutes)}**, ` +
+                    `under the ${assessment.requiredMinutes} minute fortnight minimum. ` +
+                    "Fortnights under the minimum go to the Executives for review. If " +
+                    "something has been getting in the way, let one of them know.";
 
         const delivered = await sendFortnightOutcome(
             client,
@@ -422,7 +423,7 @@ export async function reviewRowFor(
         // flagged so a human can reopen it if they want to.
         contradiction:
             assessment.reviewOutcome && assessment.totalMinutes >= assessment.requiredMinutes
-                ? "⚠️ A recompute has since put them above the requirement. The decision " +
+                ? "⚠️ A recompute has since put them above the minimum. The decision " +
                   "above still stands; reopen it if it should not."
                 : null
     });
@@ -560,7 +561,7 @@ function describeTrend(points: TrendPoint[], required: number): string {
     const exempt = points.length - measured.length;
 
     return (
-        `Their last ${points.length} fortnights against a ${required} minute requirement: ` +
+        `Their last ${points.length} fortnights against a ${required} minute minimum: ` +
         `${met} met, ${measured.length - met} below` +
         (exempt > 0 ? `, ${exempt} on leave` : "") +
         `. Most recent first to last: ` +
@@ -580,7 +581,7 @@ function describeSpread(entries: SpreadEntry[], required: number): string {
         Math.floor(entries.length / 2)
     ];
     return (
-        `${entries.length} members assessed against a ${required} minute requirement. ` +
+        `${entries.length} members assessed against a ${required} minute minimum. ` +
         `${below} below the line. Median ${median?.minutes ?? 0} minutes, ` +
         `${Math.round(total / entries.length)} on average.`
     );

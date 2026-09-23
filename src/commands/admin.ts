@@ -7,7 +7,6 @@ import {
     resolveTier
 } from "../domain/permissions.js";
 import { conductWarningPermitted } from "../domain/conduct.js";
-import { lifetimeDaysFor } from "../domain/review.js";
 import { CONDUCT_TIERS, type ConductTier } from "../db/types.js";
 import type { StaffBotConfig } from "../config/guildConfig.js";
 import { conductWarnModal } from "../render/modals.js";
@@ -70,7 +69,7 @@ export const adminCommand: Command = {
         .addSubcommand((sub) =>
             sub
                 .setName("warn")
-                .setDescription("Issue a formal warning for conduct (Executive)")
+                .setDescription("Warn a member for conduct (Executive)")
                 .addUserOption((option) =>
                     option
                         .setName("user")
@@ -99,8 +98,8 @@ export const adminCommand: Command = {
                 await respond(
                     interaction,
                     errorCard(
-                        "Issuing a warning is Executive only. Leads can read the record and " +
-                            "the warning history, and that is the whole of it."
+                        "Issuing a warning is Executive only. Leads can view the record and " +
+                            "warning history."
                     )
                 );
                 return;
@@ -123,9 +122,9 @@ export const adminCommand: Command = {
                 return;
             }
 
-            // The rung descriptions say what each does to the record rather than
-            // trying to define the conduct: the Executive knows what happened,
-            // and what they are choosing is how long it should count for.
+            // The rung descriptions name what separates them rather than
+            // trying to define the conduct: the Executive knows what
+            // happened, and what they are choosing is how serious it was.
             await interaction.showModal(
                 conductWarnModal({
                     subjectDiscordId: target.id,
@@ -138,7 +137,7 @@ export const adminCommand: Command = {
                     tiers: CONDUCT_TIERS.map((value) => ({
                         value,
                         label: TIER_STYLE[value].label,
-                        description: describeTierLifetime(config, value)
+                        description: describeTier(value)
                     }))
                 })
             );
@@ -197,9 +196,8 @@ export const adminCommand: Command = {
                     "Recompute finished",
                     `Rebuilt ${rebuilt} weekly rollups across ${weeks} week(s) for ` +
                         `${members.length} staff, from raw activity and shift data.\n` +
-                        `Checked ${counts.scanned} day bitmaps and corrected ${counts.corrected} ` +
-                        "popcount caches.\n\n" +
-                        "-# Rollups rebuild from raw activity and shifts, which this leaves untouched.",
+                        `Checked ${counts.scanned} days of activity and fixed ${counts.corrected} ` +
+                        "stored totals.",
                     { ephemeral: true, emoji: EMOJI.recompute }
                 )
             );
@@ -231,8 +229,8 @@ export const adminCommand: Command = {
                     interaction,
                     errorCard(
                         !isAssessableFortnight(index)
-                            ? `Fortnight ${index} is before the anchor this cycle counts ` +
-                              "from, so it is not a fortnight of it. Nothing was assessed."
+                            ? `Fortnight ${index} is before the cycle's start date, so there ` +
+                              "is nothing to assess."
                             : `Fortnight ${index} has already been announced. The figures ` +
                               "have been refreshed and nobody was notified again."
                     )
@@ -305,7 +303,7 @@ export const adminCommand: Command = {
                         `${formatDuration(stats.shiftMs)} of availability on ${stats.activeDays} ` +
                         `day(s).\n\n${lines.join("\n")}\n\n` +
                         "-# Availability and activity minutes measure different things. Only " +
-                        "activity minutes count toward compliance."
+                        "activity minutes count toward the fortnight minimum."
                 )
             );
 
@@ -316,8 +314,9 @@ export const adminCommand: Command = {
 export { fortnightIndexForWeek };
 
 
-/** "Counts for 90 days" / "Never stops counting", from the configured ladder. */
-function describeTierLifetime(config: StaffBotConfig, tier: ConductTier): string {
-    const days = lifetimeDaysFor({ kind: "conduct", tier, issuedAt: new Date() }, config);
-    return days <= 0 ? "Never stops counting" : `Counts for ${days} days`;
+/** What separates the two rungs: gravity, judged case by case, not a clock. */
+function describeTier(tier: ConductTier): string {
+    return tier === "caution"
+        ? "The lower rung. Stays on the record permanently."
+        : "The higher rung. Stays on the record permanently.";
 }

@@ -111,10 +111,9 @@ export const staffCommand: Command = {
                     (hide
                         ? `Your row is gone from ${cmd("leaderboard", interaction.guildId)} for ` +
                           "other Moderators. You still see your own position there, and Leads " +
-                          "and Executives still see you, marked as hidden.\n\nYour own " +
-                          "leaderboard now arrives privately, where only you can read it, " +
-                          "because it has your hidden row on it. So does theirs, for as long " +
-                          "as anybody is hidden."
+                          "and Executives still see you, marked as hidden.\n\nWhile anyone " +
+                          "is hidden, your copy of the leaderboard and theirs arrive privately, " +
+                          "where only the reader can see them."
                         : `Your row is back on ${cmd("leaderboard", interaction.guildId)} for ` +
                           "everyone, and your leaderboard goes back to posting in the channel.") +
                         "\n\n-# This is a display preference and nothing more. Your minutes " +
@@ -175,8 +174,7 @@ export const staffCommand: Command = {
             noticeCard(
                 "Staff record relinked",
                 `<@${oldUser.id}> to <@${newUser.id}>\n\n` +
-                    `All history follows the record, because nothing outside the staff document ` +
-                    `keys on a Discord ID.\n` +
+                    "Their history moves with them.\n" +
                     (reapplied.length > 0
                         ? `Re-applied ${reapplied.length} role(s) to the new account.`
                         : "No roles needed re-applying.") +

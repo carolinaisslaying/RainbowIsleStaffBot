@@ -311,7 +311,7 @@ export function configHistoryConfirmCard(input: {
                     .setStyle(ButtonStyle.Danger),
                 new ButtonBuilder()
                     .setCustomId("config:setCancel:none")
-                    .setLabel("Leave it alone")
+                    .setLabel("Keep it")
                     .setStyle(ButtonStyle.Secondary)
             )
         );
@@ -434,6 +434,20 @@ export function configImportCard(
 }
 
 /**
+ * Minutes connected over the last day. Missed minutes are hours the heatmaps
+ * treat as no data, so this is where somebody finds out why a grid has holes.
+ */
+export function listeningLine(listening: { online: number; possible: number } | null): string {
+    if (listening === null) return "not measured, the database is unreachable";
+    if (listening.possible === 0) return "not measured yet";
+    const format = (value: number) => value.toLocaleString("en-NZ");
+    return (
+        `${format(listening.online)} of ${format(listening.possible)} minutes in the last day` +
+        (listening.possible < 1440 ? " (since measuring began)" : "")
+    );
+}
+
+/**
  * The operator's card: what the bot is doing, and what is stopping it.
  *
  * `/dev status` is seededOnly, which is what lets this name a deployment switch
@@ -447,6 +461,8 @@ export function devStatusCard(input: {
     gatewayMs: number | null;
     databaseOk: boolean;
     schedulerRunning: boolean;
+    /** Minutes connected to the gateway over the last day, or null if unread. */
+    listening: { online: number; possible: number } | null;
     jobs: {
         name: string;
         lastRunAt: Date | null;
@@ -473,7 +489,8 @@ export function devStatusCard(input: {
         `**Up** ${formatDuration(input.uptimeMs)}`,
         `**Gateway** ${input.gatewayMs === null || input.gatewayMs < 0 ? "not measured yet" : `${Math.round(input.gatewayMs)}ms`}`,
         `**Database** ${input.databaseOk ? "reachable" : "**unreachable**"}`,
-        `**Scheduler** ${input.schedulerRunning ? `${input.jobs.length} jobs armed` : "**not running**"}`
+        `**Scheduler** ${input.schedulerRunning ? `${input.jobs.length} jobs armed` : "**not running**"}`,
+        `**Listening** ${listeningLine(input.listening)}`
     ].join("\n");
 
     const jobLines = input.jobs.map((job) => {

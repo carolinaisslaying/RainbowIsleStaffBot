@@ -72,8 +72,8 @@ export async function handleWarningButton(
             interaction,
             noticeCard(
                 "Already withdrawn",
-                "This warning has been withdrawn. It counts against you nowhere and there is " +
-                    "nothing left to acknowledge.",
+                "This warning has been withdrawn. It no longer counts against you, and there " +
+                    "is nothing left to acknowledge.",
                 { colour: COLOUR.settled }
             )
         );
@@ -96,8 +96,8 @@ export async function handleWarningButton(
         sendOptions(
             noticeCard(
                 "Thank you",
-                "Your Executives can see that you have read it. If you disagree with it, " +
-                    "reply to them: acknowledging it is not agreeing with it.",
+                "The Executive team can see that you have read it. Acknowledging it does " +
+                    "not mean you agree. If you do not, contact an Executive.",
                 { colour: COLOUR.settled, emoji: EMOJI.welcome }
             )
         ) as never

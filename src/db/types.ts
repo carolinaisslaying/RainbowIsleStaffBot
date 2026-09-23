@@ -132,24 +132,23 @@ export interface FortnightReviewDoc {
 }
 
 /**
- * The three rungs a conduct warning can be issued at.
+ * The two rungs a conduct warning can be issued at.
  *
  * They differ by the gravity of the conduct, never by how formal they are:
  * everything issued through this bot is a formal written warning, and informal
- * correction happens in a DM and never reaches this record. The bottom two are
- * New Zealand employment terms, so they mean something outside this bot as well.
+ * correction happens in a DM and never reaches this record. Both are New
+ * Zealand employment terms, so they mean something outside this bot as well.
  *
- * A tier decides how long a warning counts for and nothing else. Every warning
- * weighs one, whatever its tier — the bot has never escalated on its own and
- * does not start by summing these into an action.
+ * Neither rung expires. A tier used to also decide how long a warning counted
+ * for, which made "Serious Misconduct" read as a termination-level judgement
+ * no Executive actually made — that rung is retired rather than made
+ * permanent alongside the other two. Every warning weighs one, whatever its
+ * tier — the bot has never escalated on its own and does not start by summing
+ * these into an action.
  */
-export type ConductTier = "caution" | "misconduct" | "seriousMisconduct";
+export type ConductTier = "caution" | "misconduct";
 
-export const CONDUCT_TIERS: readonly ConductTier[] = [
-    "caution",
-    "misconduct",
-    "seriousMisconduct"
-];
+export const CONDUCT_TIERS: readonly ConductTier[] = ["caution", "misconduct"];
 
 export interface WarningDoc {
     _id: ObjectId;
@@ -253,6 +252,19 @@ export interface DemandBucketDoc {
     channelId: string;
     hourStart: Date;
     messages: number;
+}
+
+/**
+ * Which minutes of an hour the bot was connected to the gateway and so able to
+ * hear messages. Keyed by the UTC hour start. No identity attached, ever.
+ *
+ * A set of minute numbers rather than a counter so that recording a minute is
+ * idempotent: a timer that fires twice in one minute cannot make an hour look
+ * longer than sixty.
+ */
+export interface UptimeHourDoc {
+    _id: Date;
+    minutes: number[];
 }
 
 export interface AuditLogDoc {

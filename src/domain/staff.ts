@@ -173,7 +173,7 @@ export async function relinkStaff(
     if (collision && !collision._id.equals(existing._id)) {
         return {
             ok: false,
-            error: "The new account already has its own staff record. Merge manually before relinking."
+            error: "The new account already has its own staff record. Ask whoever runs the bot to merge them."
         };
     }
 

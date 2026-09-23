@@ -216,6 +216,10 @@ information and it is never part of a deletion request. Do not delete from it as
 part of a purge: it is the only record of what the server's load looked like,
 and removing rows silently corrupts every historical coverage heatmap.
 
+`uptimeHours` is the same: a UTC hour and the minutes the bot was connected in
+it, with nothing about anybody. Deleting from it turns heard hours into missing
+ones, and the heatmaps then drop them from every average.
+
 ## Verification
 
 ```javascript

@@ -49,9 +49,8 @@ export function conductWarningPermitted(options: {
         return {
             ok: false,
             reason:
-                "You cannot warn an Executive here. One person deciding this alone would put " +
-                "it on a peer's permanent record with nobody signing off on it. Take it up " +
-                "outside the bot."
+                "You cannot warn an Executive with the bot. That needs more than one person's " +
+                "sign-off, so raise it with the other Executives directly."
         };
     }
 
@@ -67,8 +66,7 @@ export function conductWarningPermitted(options: {
         return {
             ok: false,
             reason:
-                "They have left the team, so nobody can serve a warning on them. Their record " +
-                "stays as it is."
+                "They have left the team, so they cannot be warned. Their record stays as it is."
         };
     }
 
@@ -82,5 +80,5 @@ export function conductWarningPermitted(options: {
  * check it instead of casting it.
  */
 export function isConductTier(value: string | null): value is ConductTier {
-    return value === "caution" || value === "misconduct" || value === "seriousMisconduct";
+    return value === "caution" || value === "misconduct";
 }

@@ -46,18 +46,17 @@ export const COLOUR = {
      * Everywhere else in this bot the accent says what a card is waiting on.
      * A warning card is the deliberate exception: the rung is the thing a
      * reader must not miss while scrolling, and state is something they can
-     * read. It earned the exception — three rungs drawn identically were
+     * read. It earned the exception — two rungs drawn identically were
      * indistinguishable until somebody looked closely, which is the opposite
      * of what a disciplinary record should do.
      *
-     * The values are the palette's existing gold, amber and red rather than new
-     * ones: they are already tuned against Discord's dark background, and a
-     * fourth red would be the only red in the bot that is not `adverse`. Named
-     * separately so the intent is explicit even though the values are shared.
+     * The values are the palette's existing gold and red rather than new ones:
+     * they are already tuned against Discord's dark background, and this red
+     * is the same one used for `adverse`. Named separately so the intent is
+     * explicit even though the value is shared.
      */
     caution: 0xf0b232,
-    misconduct: 0xff9f0a,
-    seriousMisconduct: 0xff453a
+    misconduct: 0xff453a
 } as const;
 
 /**

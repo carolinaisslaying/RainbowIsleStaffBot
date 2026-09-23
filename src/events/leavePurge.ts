@@ -103,7 +103,7 @@ export async function handleLeavePurgeButton(
         pending.delete(reference);
         await interaction.update(
             sendOptions(
-                noticeCard("Left alone", "Nothing was removed.", { colour: COLOUR.settled })
+                noticeCard("Cancelled", "Nothing was removed.", { colour: COLOUR.settled })
             ) as never
         );
         return;
@@ -135,8 +135,8 @@ async function askForConfirmation(
                 `That member is on leave right now, and this record holds the only list of ` +
                     `the **${leave.removedRoles.length}** role` +
                     `${leave.removedRoles.length === 1 ? "" : "s"} the bot set aside for them. ` +
-                    "Purging it would leave them stripped with nothing saying what to give " +
-                    `back.\n\nEnd the leave first with ${cmd("leave end", interaction.guildId)}, ` +
+                    "Purging it would lose track of which roles to give back.\n\n" +
+                    `End the leave first with ${cmd("leave end", interaction.guildId)}, ` +
                     `or wait for it to close on ${leave.endDate ? ts(leave.endDate, "D") : "its own"}. ` +
                     `Purge it after that.` +
                     (subject ? `\n\n-# Member: <@${subject.discordId}>` : "")
@@ -249,9 +249,8 @@ async function purge(
         await interaction.editReply(
             sendOptions(
                 errorCard(
-                    "The audit entry could not be written, so nothing was removed. A purge " +
-                        "that leaves no record of itself is not one this bot will make. The " +
-                        "error is in the logs."
+                    "The audit entry could not be written, so nothing was removed. The bot " +
+                        "will not purge without an audit record. The error is in the logs."
                 )
             ) as never
         );

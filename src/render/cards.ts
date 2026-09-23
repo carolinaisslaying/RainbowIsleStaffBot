@@ -163,8 +163,8 @@ export function ringFigures(input: RingCardInput): string {
     if (input.streak !== undefined && input.streak > 0) {
         lines.push(
             input.streak === 1
-                ? "First week running at target."
-                : `**${input.streak} weeks** running at target.`
+                ? "First week meeting the minimum."
+                : `**${input.streak} weeks** in a row meeting the minimum.`
         );
     }
     return lines.join("\n");
@@ -235,7 +235,7 @@ export function shiftSummaryCard(input: ShiftSummaryInput): RenderedMessage {
             (input.pausedMs > 0 ? `Paused for ${formatDuration(input.pausedMs)}.` : "Never paused."),
         "",
         "-# Shift time measures availability, activity minutes measure participation. " +
-            "Only the second counts toward compliance."
+            "Only activity minutes count, and only the fortnight minimum is reviewed."
     ].join("\n");
 
     const container = card.components[0] as ContainerBuilder;
@@ -426,7 +426,7 @@ export function reviewRowCard(row: ReviewRowInput): ContainerBuilder {
     const lines = [
         `**${row.displayName}**`,
         `**${row.totalMinutes} of ${row.requiredMinutes} minutes** (${reached}%), ` +
-            `short by **${shortfall}**`,
+            `**${shortfall}** under the minimum`,
         `-# Week one ${row.week1Minutes} min, week two ${row.week2Minutes} min`,
         `-# Earlier fortnights: ${row.priorOutcomes}`
     ];
@@ -532,8 +532,8 @@ export function reviewHeaderCard(input: ReviewHeaderInput): RenderedMessage {
                         ? "-# **Rehearsal.** Every decision below is recorded against a " +
                           "throwaway record and only Executives are messaged. Turn off the " +
                           "assessment dry run to make a review real."
-                        : "-# The bot issues no warnings. Every outcome below is an Executive " +
-                          "decision, and every one asks why.")
+                        : "-# The bot never warns anyone on its own. Executives decide each " +
+                          "row, and each decision needs a reason.")
             )
         );
 
@@ -631,7 +631,7 @@ export function reviewBulkConfirmCard(input: {
                     .setStyle(ButtonStyle.Secondary),
                 new ButtonBuilder()
                     .setCustomId(`reviewBulk:${input.fortnightIndex}:cancel`)
-                    .setLabel("Leave them")
+                    .setLabel("Cancel")
                     .setStyle(ButtonStyle.Secondary)
             )
         );
@@ -661,13 +661,13 @@ export function warningDmCard(input: {
         .setAccentColor(COLOUR.adverse)
         .addTextDisplayComponents(
             text(
-                `### ${emojiForColour(COLOUR.adverse)} You have been issued a warning\n` +
+                `### ${emojiForColour(COLOUR.adverse)} You have received an activity warning\n` +
                     `Fortnight ${input.windowLabel}. You recorded ` +
                     `**${input.totalMinutes} of ${input.requiredMinutes} activity minutes**, ` +
-                    `short by **${shortfall}**.\n\n` +
+                    `**${shortfall}** under the fortnight minimum.\n\n` +
                     `**Why**\n> ${input.reason}\n\n` +
-                    "If you think this is wrong, or something was going on we should " +
-                    "know about, reply to the Executive team.\n\n" +
+                    "If you think this is wrong, or something was going on that we should " +
+                    "know about, contact an Executive.\n\n" +
                     `-# You can see everything held about you with ${cmd("mydata export")}.`
             )
         )
@@ -775,8 +775,8 @@ export function warningsCard(input: {
                         : `**${input.tally.total}** of ${input.rows.length} ` +
                           `still count${input.tally.total === 1 ? "s" : ""} against ` +
                           `${input.isSelf ? "you" : "them"}.\n` +
-                          "-# Each warning below says how long it counts for. Nothing ever " +
-                          "leaves the record, whether it still counts or not."
+                          "-# Activity warnings stop counting after a set time. Conduct " +
+                          "warnings do not expire. Everything stays listed here either way."
                     )
             )
         );
@@ -855,14 +855,14 @@ export function scrubConfirmCard(input: {
                         : ", and no warnings") +
                     ".\n\n" +
                     (input.rehearsals === input.assessments
-                        ? "Every one of them was written by a rehearsal.\n\n"
+                        ? "All of them came from rehearsals.\n\n"
                         : input.rehearsals > 0
                           ? `**${input.rehearsals}** of them came from a rehearsal; the rest ` +
                             "are real records of real fortnights.\n\n"
                           : "**None of them came from a rehearsal.** These are real records " +
                             "of real fortnights.\n\n") +
-                    "Their cards in the review channel are deleted too, so a re-run is read " +
-                    "on its own rather than against what is left of the last one.\n\n" +
+                    "Their cards in the review channel go too, so a re-run does not sit next " +
+                    "to old ones.\n\n" +
                     (input.protectedRecords > 0
                         ? `-# **${input.protectedRecords}** further real ` +
                           `${input.protectedRecords === 1 ? "record was" : "records were"} ` +
@@ -885,7 +885,7 @@ export function scrubConfirmCard(input: {
                     .setStyle(ButtonStyle.Danger),
                 new ButtonBuilder()
                     .setCustomId(`scrub:${input.fortnight ?? "pre"}:cancel`)
-                    .setLabel("Leave them")
+                    .setLabel("Cancel")
                     .setStyle(ButtonStyle.Secondary)
             )
         );
@@ -924,8 +924,8 @@ export function teamRecapCard(input: {
             text(
                 `## ${emojiForColour(COLOUR.report)} The week in review\n` +
                     `${input.windowLabel}\n${input.headline}\n` +
-                    `-# ${input.totalMinutes} between everyone, against ` +
-                    `${input.teamTargetMinutes} owed by the team as a whole.`
+                    `-# ${input.totalMinutes} between everyone, against a combined ` +
+                    `weekly minimum of ${input.teamTargetMinutes}.`
             )
         );
 
@@ -1207,11 +1207,11 @@ export function leaveEndConfirmCard(options: {
                     (options.active
                         ? options.endDate
                             ? `is due back ${ts(options.endDate, "D")}, ` +
-                              `${ts(options.endDate, "R")}. Ending it now restores their ranks ` +
+                              `${ts(options.endDate, "R")}. Ending it now restores their staff roles ` +
                               "and tells them they are back."
-                            : "is on open ended leave. Ending it now restores their ranks and " +
+                            : "is on open ended leave. Ending it now restores their staff roles and " +
                               "tells them they are back."
-                        : "has not started this leave yet. Cancelling it means their ranks " +
+                        : "has not started this leave yet. Cancelling it means their staff roles " +
                           "are never set aside and they are told it is off.") +
                     "\n\nThe fortnights this leave excused stay excused. They can request " +
                     "leave again at any time."
@@ -1225,7 +1225,7 @@ export function leaveEndConfirmCard(options: {
                     .setStyle(ButtonStyle.Danger),
                 new ButtonBuilder()
                     .setCustomId(`leave:${options.leaveId}:endCancel`)
-                    .setLabel("Leave it running")
+                    .setLabel("Keep it running")
                     .setStyle(ButtonStyle.Secondary)
             )
         );
@@ -1370,8 +1370,8 @@ export function faceSetupCard(
             text(
                 "### Pick your rings\n" +
                     "Your activity, shift time and active days are drawn as three rings. " +
-                    "Choose the colours you want to look at. This is yours, and it changes " +
-                    "nothing anybody measures."
+                    "Choose the colours you want to look at. It only changes how your " +
+                    "rings look."
             )
         )
         .addMediaGalleryComponents(
@@ -1422,9 +1422,9 @@ export function timezoneSetupCard(guildId?: string | null): RenderedMessage {
                 "### Set your timezone first\n" +
                     "Set a timezone before you run anything else.\n\n" +
                     "Your timezone changes what you see and nothing more. It picks the clock " +
-                    "your reports render in, and it holds your Monday recap until 09:00 where " +
-                    "you are. Your totals, rings, leaderboard position and compliance run on the " +
-                    "same UTC weeks as the rest of the team.\n\n" +
+                    "your reports render in, and it holds your weekly recap until 09:00 where " +
+                    "you are. Your totals, rings, leaderboard position and fortnight review run " +
+                    "on the same weeks as the rest of the team.\n\n" +
                     `Run ${cmd("timezone set", guildId)} and type what you know: a code like ` +
                     "**NZST**, or a region like **Pacific**. Each suggestion shows its current " +
                     "local time, so pick the one whose clock matches yours."
@@ -1543,11 +1543,11 @@ export function warningLogCard(input: {
     // State moved out of the accent, so it has to be unmistakable in words.
     const stateLine = input.withdrawn
         ? `${EMOJI.purge} **Withdrawn** ${ts(input.withdrawn.at, "R")} by ` +
-          `${input.withdrawn.by}. It counts against them nowhere.\n` +
+          `${input.withdrawn.by}. It no longer counts against them.\n` +
           `> ${input.withdrawn.reason.split("\n").join("\n> ")}`
         : input.delivery === "failed"
           ? "⚠️ **Never delivered.** Their direct messages are closed, so they have not seen " +
-            "this. It stands on their record regardless."
+            "this. It is still on their record."
           : input.acknowledgedAt
             ? `-# ✅ Acknowledged ${ts(input.acknowledgedAt, "R")}`
             : input.delivery === "delivered"
@@ -1615,10 +1615,10 @@ export function conductWarnDmCard(input: {
         .addTextDisplayComponents(
             text(
                 `${tierTitle(input.tier)}\n` +
-                    `${input.issuedBy} has issued you a formal written warning.\n\n` +
+                    `${input.issuedBy} has given you a warning.\n\n` +
                     `${input.consequence}\n\n` +
                     `**What happened**\n> ${input.reason.split("\n").join("\n> ")}\n\n` +
-                    "Reply to the Executive team if you want to contest this.\n\n" +
+                    "If you disagree, contact an Executive.\n\n" +
                     `-# ${cmd("mydata export")} shows you everything this bot holds about you.`
             )
         )

@@ -14,9 +14,10 @@ import {
  * A 7 by 24 grid rendered as SVG and rasterised through the same pipeline as
  * the rings.
  *
- * Cell colour plots demand divided by coverage, never either alone. A static
- * image has no tooltip, so the legend plus the companion text block listing the
- * worst buckets is where the raw numbers live.
+ * Two readings of the same grid. `coverage` plots demand divided by coverage,
+ * never either alone; `activity` plots messages per hour. A static image has no
+ * tooltip, so the legend plus the companion text block listing the top cells is
+ * where the raw numbers live.
  *
  * Two things a heatmap has to get right and this one previously did not. An
  * hour with no demand is drawn as almost nothing rather than as an outlined
@@ -24,7 +25,13 @@ import {
  * chart. And a window with no demand at all is not drawn as a grid: an empty
  * grid says the renderer failed, so it says in words that there is nothing to
  * plot.
+ *
+ * A third state sits between the two. An hour the bot has not heard yet, on a
+ * deployment a few hours old or across an outage, is drawn dashed: it is not
+ * quiet, it is unknown, and the grid is read very differently depending on which.
  */
+
+export type HeatmapKind = "coverage" | "activity";
 
 const CELL = 30;
 /** The same margin on all four sides, as on the ring card. */
@@ -45,6 +52,7 @@ const HEIGHT = TOP_GUTTER + GRID_DAYS * CELL + LEGEND_HEIGHT;
  */
 const RAMP = ["#0a84ff", "#2bb1a8", "#c3c33a", "#ff9f0a", "#ff453a"];
 const EMPTY = "rgba(255,255,255,0.045)";
+const UNSEEN_STROKE = "rgba(255,255,255,0.16)";
 
 /**
  * Ink for the figure inside a cell.
@@ -57,16 +65,46 @@ const EMPTY = "rgba(255,255,255,0.045)";
  */
 const CELL_INK = "rgba(0,0,0,0.82)";
 
-function bandFor(ratio: number, maxRatio: number): number {
-    if (ratio <= 0 || maxRatio <= 0) return -1;
-    const normalised = Math.min(1, ratio / maxRatio);
+/**
+ * The value the top of the ramp stands for: the 95th percentile of the readings,
+ * not the largest. On a thin grid one event hour would otherwise take the top
+ * band alone and wash every other cell down into the bottom two. Anything above
+ * it is simply hot.
+ */
+export function scaleTop(values: readonly number[]): number {
+    const positive = values.filter((value) => value > 0).sort((a, b) => a - b);
+    if (positive.length === 0) return 0;
+    return positive[Math.max(0, Math.ceil(positive.length * 0.95) - 1)];
+}
+
+function bandFor(value: number, top: number): number {
+    if (value <= 0 || top <= 0) return -1;
+    const normalised = Math.min(1, value / top);
     return Math.min(RAMP.length - 1, Math.floor(normalised * RAMP.length));
 }
 
-function colourFor(ratio: number, maxRatio: number): string {
-    const band = bandFor(ratio, maxRatio);
+function colourFor(value: number, top: number): string {
+    const band = bandFor(value, top);
     return band < 0 ? EMPTY : RAMP[band];
 }
+
+function figure(value: number): string {
+    if (value >= 1000) return `${(value / 1000).toFixed(1)}k`;
+    return value >= 10 ? String(Math.round(value)) : value.toFixed(1);
+}
+
+const WORDING: Record<HeatmapKind, { empty: string; legend: string; ends: string }> = {
+    coverage: {
+        empty: "No demand recorded",
+        legend: "Messages per available moderator, per hour. Higher is a worse gap.",
+        ends: "quiet to worst gap"
+    },
+    activity: {
+        empty: "No messages recorded",
+        legend: "Average messages per hour.",
+        ends: "quiet to busiest"
+    }
+};
 
 function panel(body: string, height: number): string {
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${height}" viewBox="0 0 ${WIDTH} ${height}">
@@ -79,29 +117,32 @@ function panel(body: string, height: number): string {
 }
 
 /** Nothing was recorded. Say so, rather than drawing an empty grid. */
-function emptyGrid(grid: CoverageGrid): string {
+function emptyGrid(grid: CoverageGrid, kind: HeatmapKind): string {
     const height = 132;
     return panel(
         [
             `<text x="${WIDTH / 2}" y="${height / 2 - 8}" fill="${SURFACE.text}" ` +
                 `font-size="16" font-family="${FONT_STACK}" font-weight="bold" ` +
-                `letter-spacing="-0.2" text-anchor="middle">No demand recorded</text>`,
+                `letter-spacing="-0.2" text-anchor="middle">${WORDING[kind].empty}</text>`,
             `<text x="${WIDTH / 2}" y="${height / 2 + 16}" fill="${SURFACE.textMuted}" ` +
                 `font-size="13" font-family="${FONT_STACK}" text-anchor="middle">` +
-                `${escapeXml(grid.timeZone)}, ${grid.weeks} week mean. Nothing to plot yet.</text>`
+                `${escapeXml(grid.timeZone)}, ${sampleLabel(grid.observedHours)}. Nothing to plot yet.</text>`
         ].join("\n    "),
         height
     );
 }
 
-export function heatmapSvg(grid: CoverageGrid): string {
-    if (grid.maxRatio <= 0) return emptyGrid(grid);
+export function heatmapSvg(grid: CoverageGrid, kind: HeatmapKind = "coverage"): string {
+    const values = kind === "coverage" ? grid.ratio : grid.demand;
+    const top = scaleTop(values.flat());
+    if (top <= 0) return emptyGrid(grid, kind);
+    let unseen = 0;
 
     const days = weekdayLabels(grid.weekStartDay);
     const parts: string[] = [
         `<text x="${LEFT_GUTTER}" y="28" fill="${SURFACE.text}" font-size="14" ` +
             `font-family="${FONT_STACK}" font-weight="bold" letter-spacing="-0.2">` +
-            `${escapeXml(grid.timeZone)}, ${grid.weeks} week mean</text>`
+            `${escapeXml(grid.timeZone)}, ${sampleLabel(grid.observedHours)}</text>`
     ];
 
     for (let hour = 0; hour < GRID_HOURS; hour += 1) {
@@ -124,17 +165,26 @@ export function heatmapSvg(grid: CoverageGrid): string {
 
         for (let hour = 0; hour < GRID_HOURS; hour += 1) {
             const x = LEFT_GUTTER + hour * CELL;
-            const ratio = grid.ratio[weekday][hour];
+            const value = values[weekday][hour];
+            if (grid.observed[weekday][hour] === 0) {
+                unseen += 1;
+                parts.push(
+                    `<rect x="${round(x + 1.5)}" y="${round(y + 1.5)}" width="${CELL - 3}" ` +
+                        `height="${CELL - 3}" rx="7" fill="none" stroke="${UNSEEN_STROKE}" ` +
+                        `stroke-width="1" stroke-dasharray="3 3" />`
+                );
+                continue;
+            }
             parts.push(
                 `<rect x="${round(x + 1.5)}" y="${round(y + 1.5)}" width="${CELL - 3}" ` +
-                    `height="${CELL - 3}" rx="7" fill="${colourFor(ratio, grid.maxRatio)}" />`
+                    `height="${CELL - 3}" rx="7" fill="${colourFor(value, top)}" />`
             );
 
             // The number is in the cell as well as in the colour, because
             // colour never carries meaning alone. An empty hour has no number:
             // a grid of zeroes is noise, and its emptiness is already the point.
-            if (ratio > 0) {
-                const label = ratio >= 10 ? String(Math.round(ratio)) : ratio.toFixed(1);
+            if (value > 0) {
+                const label = figure(value);
                 parts.push(
                     `<text x="${round(x + CELL / 2)}" y="${round(y + CELL / 2 + 3.5)}" ` +
                         `fill="${CELL_INK}" font-size="9.5" font-family="${FONT_STACK}" ` +
@@ -147,8 +197,9 @@ export function heatmapSvg(grid: CoverageGrid): string {
     const legendY = TOP_GUTTER + GRID_DAYS * CELL + 22;
     parts.push(
         `<text x="${LEFT_GUTTER}" y="${round(legendY)}" fill="${SURFACE.textMuted}" ` +
-            `font-size="11" font-family="${FONT_STACK}">Messages per available moderator, ` +
-            `per hour. Higher is a worse gap.</text>`
+            `font-size="11" font-family="${FONT_STACK}">${WORDING[kind].legend}` +
+            (unseen > 0 ? " Dashed hours have not been heard yet." : "") +
+            `</text>`
     );
 
     // One continuous bar rather than separate chips: the scale is continuous,
@@ -172,14 +223,52 @@ export function heatmapSvg(grid: CoverageGrid): string {
         `<rect x="${barX}" y="${barY}" width="${barWidth}" height="9" rx="4.5" fill="none" ` +
             `stroke="url(#panelRim)" stroke-width="1" />`,
         `<text x="${barX + barWidth + 10}" y="${round(barY + 8)}" fill="${SURFACE.textMuted}" ` +
-            `font-size="10.5" font-family="${FONT_STACK}">quiet to worst gap</text>`
+            `font-size="10.5" font-family="${FONT_STACK}">${WORDING[kind].ends}</text>`
     );
 
     return panel(parts.join("\n    "), HEIGHT);
 }
 
-export function renderHeatmap(grid: CoverageGrid): Buffer {
-    const resvg = new Resvg(heatmapSvg(grid), {
+/** How much data a grid rests on, for its header. */
+export function sampleLabel(observedHours: number): string {
+    if (observedHours < 24) {
+        return `${observedHours} hour${observedHours === 1 ? "" : "s"} of data`;
+    }
+    if (observedHours < 14 * 24) {
+        const days = Math.floor(observedHours / 24);
+        return `${days} day${days === 1 ? "" : "s"} of data`;
+    }
+    return `${Math.round(observedHours / (7 * 24))} week mean`;
+}
+
+/**
+ * What the reader should discount, or null once there is nothing to say.
+ * Two weeks is where it stops: every cell has two readings, which is enough for
+ * the shape of a week even if one evening can still move a single cell.
+ */
+export function reliabilityNote(observedHours: number): string | null {
+    if (observedHours < 24) {
+        return (
+            `Based on ${observedHours} hour${observedHours === 1 ? "" : "s"}. Each filled cell ` +
+            "is a single hour, and the dashed ones have not come round yet."
+        );
+    }
+    if (observedHours < 7 * 24) {
+        const days = Math.floor(observedHours / 24);
+        return (
+            `Based on ${days} day${days === 1 ? "" : "s"}. Each cell is one reading, so a ` +
+            "single unusual day can move it."
+        );
+    }
+    if (observedHours < 14 * 24) {
+        const days = Math.floor(observedHours / 24);
+        return `Based on ${days} days. Cells will settle as the second week comes in.`;
+    }
+    return null;
+}
+
+export function renderHeatmap(grid: CoverageGrid, kind: HeatmapKind = "coverage"): Buffer {
+    const resvg = new Resvg(heatmapSvg(grid, kind), {
         fitTo: { mode: "width", value: WIDTH * 2 },
         background: "rgba(0,0,0,0)",
         font: FONT_OPTIONS
