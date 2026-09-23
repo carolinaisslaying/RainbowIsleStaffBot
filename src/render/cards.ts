@@ -678,8 +678,7 @@ export function warningDmCard(input: {
                     `**${shortfall}** under your fortnight requirement.\n\n` +
                     `**Why**\n> ${input.reason}\n\n` +
                     "If you think this is wrong, or something was going on that we should " +
-                    "know about, contact an Executive.\n\n" +
-                    `-# You can see everything held about you with ${cmd("settings export")}.`
+                    "know about, contact an Executive."
             )
         )
         .addActionRowComponents(
@@ -1754,8 +1753,7 @@ export function conductWarnDmCard(input: {
                     `${input.issuedBy} has given you a warning.\n\n` +
                     `${input.consequence}\n\n` +
                     `**What happened**\n> ${input.reason.split("\n").join("\n> ")}\n\n` +
-                    "If you disagree, contact an Executive.\n\n" +
-                    `-# ${cmd("settings export")} shows you everything this bot holds about you.`
+                    "If you disagree, contact an Executive."
             )
         )
         .addActionRowComponents(

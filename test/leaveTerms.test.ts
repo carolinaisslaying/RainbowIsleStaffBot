@@ -32,3 +32,21 @@ describe("what leave does, in words", () => {
         expect(text).toContain("weeks in a row meeting the target");
     });
 });
+
+describe("nobody is pointed at their data export unprompted", () => {
+    // Both warning DMs used to end by telling the member the export existed.
+    // The command is there for anybody who wants it; a card read at the
+    // moment somebody is being warned is not the place to advertise it.
+    it("is mentioned only by the command that provides it", async () => {
+        const { readdirSync, readFileSync } = await import("node:fs");
+        const { join } = await import("node:path");
+        const walk = (dir: string): string[] =>
+            readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
+                entry.isDirectory() ? walk(join(dir, entry.name)) : [join(dir, entry.name)]
+            );
+        const offenders = walk("src")
+            .filter((file) => file.endsWith(".ts"))
+            .filter((file) => readFileSync(file, "utf8").includes('cmd("settings export"'));
+        expect(offenders).toEqual([]);
+    });
+});
