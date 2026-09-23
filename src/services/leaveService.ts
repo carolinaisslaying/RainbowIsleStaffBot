@@ -24,6 +24,8 @@ import {
     leaveCancelledCard,
     leaveRequestCard,
     noticeCard,
+    type LeaveEnding,
+    type LeaveEvent,
     type RenderedMessage
 } from "../render/cards.js";
 import { leaveTermsText } from "../render/leaveTerms.js";
@@ -202,48 +204,74 @@ export async function leaveCardFor(
     client: Client,
     config: StaffBotConfig,
     leave: LeaveDoc,
-    extra: { purged?: string | null } = {}
+    extra: { purged?: { by: string; at: Date } | null } = {}
 ): Promise<RenderedMessage> {
     const subject = await findStaffById(leave.staffId);
     const name = subject
         ? await staffDisplayName(client, config, subject.discordId, "Departed member")
         : "an unknown member";
-    const decider = leave.decidedBy ? await findStaffById(leave.decidedBy) : null;
+    const mention = async (staffId: ObjectId | null | undefined): Promise<string> => {
+        if (!staffId) return "an Executive";
+        const staff = await findStaffById(staffId);
+        return staff ? `<@${staff.discordId}>` : "an Executive who has since left";
+    };
 
-    const decided =
-        leave.status === "pending" || !leave.decidedAt
-            ? null
-            : `**${leave.status === "declined" ? "Declined" : "Approved"}**` +
-              (decider ? ` by <@${decider.discordId}>` : "") +
-              ` ${ts(leave.decidedAt, "R")}`;
+    // Oldest first, one line per thing that happened. Every state is the
+    // same list at a different length.
+    const history: LeaveEvent[] = [{ mark: "📨", text: "Requested", at: leave.requestedAt }];
+    if (leave.decidedAt) {
+        const declined = leave.status === "declined";
+        history.push({
+            mark: declined ? "❌" : "✅",
+            text: `${declined ? "Declined" : "Approved"} by ${await mention(leave.decidedBy)}`,
+            at: leave.decidedAt
+        });
+    }
+    if (leave.status === "active" || leave.status === "ended") {
+        history.push({ mark: "🌙", text: "Started", at: leave.startDate });
+    }
 
-    let outcome: string | null = null;
-    if (leave.status === "active") {
-        outcome = `-# Away since ${ts(leave.startDate, "R")}. Staff roles are removed.`;
-    } else if (leave.status === "cancelled" && leave.cancelledAt) {
-        const by = leave.cancelledBy ? await findStaffById(leave.cancelledBy) : null;
+    let ending: LeaveEnding | null = null;
+    if (leave.status === "ended" && leave.rolesRestoredAt) {
+        ending = leave.endedEarlyBy ? "executive" : leave.plannedEndDate ? "member" : "schedule";
+        history.push({
+            mark: "👋",
+            text:
+                ending === "executive"
+                    ? `Ended early by ${await mention(leave.endedEarlyBy)}`
+                    : ending === "member"
+                      ? "Ended early by them"
+                      : "Ended on schedule",
+            at: leave.rolesRestoredAt,
+            note: ending === "executive" ? leave.endedEarlyReason ?? null : null
+        });
+        if (leave.restoreErrors.length > 0) {
+            history.push({
+                mark: "❗",
+                text:
+                    `${leave.restoreErrors.length} staff role` +
+                    `${leave.restoreErrors.length === 1 ? "" : "s"} could not be restored`,
+                at: leave.rolesRestoredAt
+            });
+        }
+    }
+
+    const withdrawn =
+        leave.status === "cancelled" &&
+        !leave.decidedAt &&
+        (leave.cancelledBy?.equals(leave.staffId) ?? false);
+    if (leave.status === "cancelled" && leave.cancelledAt) {
         const themselves = leave.cancelledBy?.equals(leave.staffId) ?? false;
-        outcome =
-            (themselves && !leave.decidedAt
-                ? `-# Withdrawn ${ts(leave.cancelledAt, "R")} by <@${by?.discordId}> before a decision.`
-                : `-# Cancelled ${ts(leave.cancelledAt, "R")}` +
-                  (by ? ` by <@${by.discordId}>${themselves ? " themselves" : ""}` : "") +
-                  ", before it started.") +
-            " Their staff roles were never removed." +
-            (leave.cancellationReason ? `\n**Why:** ${leave.cancellationReason}` : "");
-    } else if (leave.status === "ended" && leave.rolesRestoredAt) {
-        const early = leave.endedEarlyBy ? await findStaffById(leave.endedEarlyBy) : null;
-        outcome =
-            `-# Back ${ts(leave.rolesRestoredAt, "R")}` +
-            (early
-                ? `, ended early by <@${early.discordId}>.` +
-                  (leave.endedEarlyReason ? `\n**Why:** ${leave.endedEarlyReason}` : "")
-                : leave.plannedEndDate
-                  ? ", they ended it themselves."
-                  : ", on schedule.") +
-            (leave.restoreErrors.length > 0
-                ? ` ${leave.restoreErrors.length} staff role(s) could not be restored.`
-                : "");
+        history.push({
+            mark: "📁",
+            text: withdrawn
+                ? "Withdrawn by them before a decision"
+                : themselves
+                  ? "Cancelled by them"
+                  : `Cancelled by ${await mention(leave.cancelledBy)}`,
+            at: leave.cancelledAt,
+            note: leave.cancellationReason ?? null
+        });
     }
 
     const extension = leave.pendingExtension;
@@ -255,8 +283,9 @@ export async function leaveCardFor(
         plannedEndDate: leave.plannedEndDate,
         reason: leave.reason,
         status: leave.status,
-        decided,
-        outcome,
+        history,
+        ending,
+        withdrawn,
         purged: extra.purged ?? null,
         effectLines:
             leave.status === "pending"

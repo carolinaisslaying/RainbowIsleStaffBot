@@ -24,7 +24,7 @@ import {
     type RingsInput
 } from "./rings.js";
 import { describeFaces, renderFacePicker } from "./facePicker.js";
-import { formatDuration, formatMinutes, percent, ts } from "../time/format.js";
+import { formatDays, formatDuration, formatMinutes, percent, ts } from "../time/format.js";
 import type { ReviewAction } from "../domain/review.js";
 import { EMOJI, emojiForColour } from "./emoji.js";
 import { ACTIVITY_STYLE, TIER_STYLE, recordStyle, tierConsequenceLine, tierTitle } from "./tiers.js";
@@ -1066,22 +1066,13 @@ function progressBar(done: number, total: number): string {
 
 
 /**
- * The leave request as it appears in the log channel, in each of the three
- * states it passes through.
- *
- * Pending it offers a decision. Decided it records one, and offers the purge
- * that removes the record entirely. Purged it keeps everything it said and adds
- * who removed it, so the channel still reads as a record of what was decided
- * rather than going quiet about a request that once existed.
- */
-/**
  * How each state of a leave record is coloured.
  *
- * Colour never carries meaning alone, and every card below also says its state
- * in words. But the channel is read at a glance and scrolled past, so the
- * glance should be right. Amber is a decision waiting on a human, green a yes, red a
- * no, blue something running by itself, grey something finished with nothing
- * left to do.
+ * Colour never carries meaning alone: the title says the state in words. But
+ * the channel is read at a glance and scrolled past, so the glance should be
+ * right. Pink is a request waiting on an Executive, green a yes, red a no,
+ * blue leave running by itself, grey something finished with nothing left to
+ * do.
  */
 const LEAVE_STATUS_COLOUR: Record<LeaveStatus, number> = {
     pending: COLOUR.leave,
@@ -1092,15 +1083,57 @@ const LEAVE_STATUS_COLOUR: Record<LeaveStatus, number> = {
     cancelled: COLOUR.settled
 };
 
-const LEAVE_STATUS_LABEL: Record<LeaveStatus, string> = {
-    pending: "Waiting on an Executive",
-    approved: "Approved, not started yet",
-    declined: "Declined",
-    active: "On leave now",
-    ended: "Back",
-    cancelled: "Cancelled before it started"
-};
+/** One line of a leave card's history: what happened, who did it, and when. */
+export interface LeaveEvent {
+    mark: string;
+    text: string;
+    at: Date;
+    /** The reason given, quoted under the line it explains. */
+    note?: string | null;
+}
 
+/** How an ended leave ended, which is what its title says. */
+export type LeaveEnding = "schedule" | "member" | "executive";
+
+/** The card's title: the state, in words, at the size of a heading. */
+function leaveTitle(options: {
+    status: LeaveStatus;
+    ending?: LeaveEnding | null;
+    withdrawn?: boolean;
+    purged: boolean;
+}): string {
+    if (options.purged) return "Leave record purged";
+    switch (options.status) {
+        case "pending":
+            return "Leave requested";
+        case "approved":
+            return "Leave approved";
+        case "declined":
+            return "Leave declined";
+        case "active":
+            return "On leave";
+        case "ended":
+            return options.ending === "member" || options.ending === "executive"
+                ? "Leave ended early"
+                : "Back from leave";
+        case "cancelled":
+            return options.withdrawn ? "Request withdrawn" : "Leave cancelled";
+    }
+}
+
+/**
+ * The leave request as it appears in the leave channel, at every point of its
+ * life: one card, edited in place.
+ *
+ * Every state draws the same sections in the same order, so a card read at
+ * any point looks like the others and only gains lines as the leave moves on:
+ * the title says where it stands, **Dates** what was booked (and, once it ended
+ * early, what was taken), **Reason** why it was asked for, and **History** each
+ * thing that happened, who did it and when, with its reason quoted beneath.
+ * It used to put the state in subtext under the name, the decision and the
+ * outcome in two unconnected lines, and print an early end as a leave running
+ * from 09:00 to 09:00 the same day.
+ */
 export function leaveRequestCard(options: {
     leaveId: string;
     displayName: string;
@@ -1110,44 +1143,86 @@ export function leaveRequestCard(options: {
     plannedEndDate?: Date | null;
     reason: string;
     status: LeaveStatus;
-    decided: string | null;
-    /** What became of the leave itself: ended early, ran its course, came back. */
-    outcome?: string | null;
-    purged?: string | null;
+    /** What has happened to it so far, oldest first. */
+    history?: LeaveEvent[];
+    /** For an ended leave, who ended it: the title differs. */
+    ending?: LeaveEnding | null;
+    /** For a cancelled leave, whether it was withdrawn before any decision. */
+    withdrawn?: boolean;
+    purged?: { by: string; at: Date } | null;
     /** What approving this request would do to the member's requirements. */
     effectLines?: string[];
     /** A later return date waiting on an Executive, and what it would change. */
     pendingExtension?: { endDate: Date; reason: string; effectLines: string[] } | null;
 }): RenderedMessage {
-    // A purged record is grey whatever state it was decided in, so the mark
-    // follows the colour the card is actually drawn in rather than the status
-    // it still reports.
-    const colour = options.purged ? COLOUR.settled : LEAVE_STATUS_COLOUR[options.status];
-    const leaveMark = emojiForColour(colour);
+    const purged = options.purged ?? null;
+    // A purged record is grey whatever state it was decided in.
+    const colour = purged ? COLOUR.settled : LEAVE_STATUS_COLOUR[options.status];
+    const mark = purged
+        ? EMOJI.purge
+        : options.status === "ended"
+          ? EMOJI.welcome
+          : emojiForColour(colour);
 
-    const container = new ContainerBuilder()
-        .setAccentColor(colour)
-        .addTextDisplayComponents(
-            text(
-                `## ${leaveMark} Leave request\n` +
-                    `**${options.displayName}**\n` +
-                    `-# ${LEAVE_STATUS_LABEL[options.status]}\n` +
-                    `From ${ts(options.startDate, "f")} to ${ts(options.endDate, "f")}` +
-                    (options.status !== "ended" && options.status !== "cancelled"
-                        ? `, ending ${ts(options.endDate, "R")}`
-                        : "") +
-                    (options.plannedEndDate
-                        ? `\n-# Booked until ${ts(options.plannedEndDate, "f")}`
-                        : "") +
-                    `\n\n**Reason**\n${options.reason}`
-            )
-        );
+    const span = (from: Date, to: Date) =>
+        `${ts(from, "f")} → ${ts(to, "f")} (${formatDays(to.getTime() - from.getTime())})`;
+    let dates: string;
+    if (options.status === "ended" && options.plannedEndDate) {
+        dates =
+            `Booked · ${span(options.startDate, options.plannedEndDate)}\n` +
+            `Taken · ${span(options.startDate, options.endDate)}`;
+    } else if (options.status === "cancelled") {
+        dates = `Booked · ${span(options.startDate, options.endDate)}\n-# It never started.`;
+    } else {
+        dates = span(options.startDate, options.endDate);
+        // A countdown only while there is something still to count down to.
+        if (!purged && (options.status === "pending" || options.status === "approved")) {
+            dates += `\n-# Starts ${ts(options.startDate, "R")}`;
+        } else if (!purged && options.status === "active") {
+            dates += `\n-# Back ${ts(options.endDate, "R")}`;
+        }
+    }
 
-    if (options.status === "pending" && options.effectLines && options.effectLines.length > 0) {
+    const container = new ContainerBuilder().setAccentColor(colour).addTextDisplayComponents(
+        text(
+            `## ${mark} ${leaveTitle({ ...options, purged: purged !== null })}\n` +
+                `**${options.displayName}**\n\n` +
+                `### Dates\n${dates}\n\n` +
+                `### Reason\n${options.reason}`
+        )
+    );
+
+    if (!purged && options.status === "pending" && options.effectLines && options.effectLines.length > 0) {
         container.addTextDisplayComponents(
             // Printed at full size: the lines are a list with headings, and
             // subtext would flatten the bullets back into a paragraph.
             text(`### If approved\n${options.effectLines.join("\n")}`)
+        );
+    }
+
+    const history = [...(options.history ?? [])];
+    if (purged) {
+        history.push({
+            mark: EMOJI.purge,
+            text: `Purged by ${purged.by}`,
+            at: purged.at,
+            note: null
+        });
+    }
+    if (history.length > 0) {
+        container.addSeparatorComponents(separator());
+        container.addTextDisplayComponents(
+            text(
+                "### History\n" +
+                    history
+                        .map(
+                            (event) =>
+                                `- ${event.mark} ${event.text} · ${ts(event.at, "R")}` +
+                                (event.note ? `\n> ${event.note.split("\n").join("\n> ")}` : "")
+                        )
+                        .join("\n") +
+                    (purged ? "\n-# The record is gone. The audit log keeps what it held." : "")
+            )
         );
     }
 
@@ -1159,7 +1234,7 @@ export function leaveRequestCard(options: {
     // leave colour in its own block beneath the card. Inside the card it took
     // the green or blue of the leave it amends, and read as settled.
     let extensionBlock: ContainerBuilder | null = null;
-    if (extension && !options.purged) {
+    if (extension && !purged) {
         extensionBlock = new ContainerBuilder().setAccentColor(COLOUR.leave);
         extensionBlock.addTextDisplayComponents(
             text(
@@ -1186,25 +1261,7 @@ export function leaveRequestCard(options: {
         );
     }
 
-    if (options.decided) {
-        // The decision replaces the buttons in place, so the channel keeps one
-        // card per request rather than a stub above an outcome.
-        container.addSeparatorComponents(separator());
-        container.addTextDisplayComponents(text(options.decided));
-    }
-
-    if (options.outcome) {
-        container.addTextDisplayComponents(text(options.outcome));
-    }
-
-    if (options.purged) {
-        container.addSeparatorComponents(separator());
-        container.addTextDisplayComponents(
-            text(
-                `-# ${options.purged}\n-# The record is gone. The audit log retains what it ` +
-                    "held."
-            )
-        );
+    if (purged) {
         // No buttons: there is nothing left to act on, and a button that can
         // only ever answer "already gone" is worse than no button at all.
         return { components: [container], files: [], flags: V2_FLAGS };

@@ -92,25 +92,27 @@ describe("the leave card's mark", () => {
     it("matches the colour the card is drawn in, for every state", () => {
         // Waiting leave has its own colour and so its own mark: ⏳ belongs to
         // the fortnight review.
-        expect(heading("pending")).toContain("📆 Leave request");
+        expect(heading("pending")).toContain("📆 Leave requested");
         expect(heading("pending")).not.toContain("⏳");
-        expect(heading("approved")).toContain("✅ Leave request");
-        expect(heading("declined")).toContain("❌ Leave request");
-        expect(heading("active")).toContain("🌙 Leave request");
-        expect(heading("ended")).toContain("📁 Leave request");
-        expect(heading("cancelled")).toContain("📁 Leave request");
+        expect(heading("approved")).toContain("✅ Leave approved");
+        expect(heading("declined")).toContain("❌ Leave declined");
+        expect(heading("active")).toContain("🌙 On leave");
+        // Somebody came back, which is the wave and not the filing cabinet,
+        // though the card is grey like every finished one.
+        expect(heading("ended")).toContain("👋 Back from leave");
+        expect(heading("cancelled")).toContain("📁 Leave cancelled");
     });
 
     it("follows the grey of a purged record rather than the status it reports", () => {
         // A purged card is drawn grey whatever state it was decided in, so the
         // mark has to come from the colour and not from the status.
-        expect(heading("approved", { purged: "Purged by <@9> now." })).toContain(
-            `${emojiForColour(COLOUR.settled)} Leave request`
-        );
+        expect(
+            heading("approved", { purged: { by: "<@9>", at: new Date("2026-09-22T00:00:00Z") } })
+        ).toContain(`${EMOJI.purge} Leave record purged`);
     });
 
     it("keeps the state in words as well, so the mark never carries it alone", () => {
-        expect(heading("declined")).toContain("Declined");
+        expect(heading("declined")).toContain("Leave declined");
     });
 });
 

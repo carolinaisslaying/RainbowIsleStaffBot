@@ -504,7 +504,13 @@ because a reminder nobody is pinged for beats no reminder.
 its whole life, from pending through approved or declined, active, back and purged. It is never
 replaced, and never followed by a second message. `logChannelId`/`logMessageId` on the record are what make that possible, and
 `leaveCardFor` in `services/leaveService.ts` is the only thing that draws it, so colour, buttons and
-status cannot disagree. Colour is the state: pink (`COLOUR.leave`, 📆) waiting on a human, green
+status cannot disagree. **Every state draws the same sections in the same order**: a `##` title that
+says the state in words ("Leave requested", "On leave", "Leave ended early", "Request withdrawn"),
+then `### Dates` (booked and taken on separate lines once it ended early), `### Reason`, and
+`### History`, one line per event with who and when and its reason quoted beneath. `leaveCardFor`
+builds the history from the record; `leaveRequestCard` only draws it. It used to put the state in
+subtext, the decision and the outcome in two unconnected lines, print an early end as 09:00 to
+09:00, and count down to the end of a declined request. Colour is the state: pink (`COLOUR.leave`, 📆) waiting on a human, green
 approved, red declined, blue running, grey finished. Leave has its own waiting colour because amber
 and ⏳ belong to the fortnight review; the member's request and confirmation cards use it too. Buttons are the actions that state actually has, which is why a
 declined record offers no way to end anything. An Executive can end active leave (or cancel approved

@@ -323,7 +323,7 @@ async function editLogCard(
         await message.edit(
             sendOptions(
                 await leaveCardFor(client, config, leave, {
-                    purged: `Purged by <@${executiveId}> ${ts(new Date(), "R")}.`
+                    purged: { by: `<@${executiveId}>`, at: new Date() }
                 })
             ) as never
         );

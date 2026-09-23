@@ -52,7 +52,7 @@ describe("colour says the state before the words do", () => {
 
     it("is grey once there is nothing left to do", () => {
         expect(accent("ended")).toBe(COLOUR.settled);
-        expect(accent("ended", { purged: "Purged by <@9> now." })).toBe(COLOUR.settled);
+        expect(accent("ended", { purged: { by: "<@9>", at: new Date("2026-09-22T00:00:00Z") } })).toBe(COLOUR.settled);
         expect(accent("cancelled")).toBe(COLOUR.settled);
     });
 
@@ -108,8 +108,8 @@ describe("the buttons are the actions that state actually has", () => {
     it("leaves no buttons at all on a purged record", () => {
         // There is nothing left to act on, and a button that can only answer
         // "already gone" is worse than no button.
-        expect(buttons("ended", { purged: "Purged by <@9> now." })).toEqual([]);
-        expect(buttons("active", { purged: "Purged by <@9> now." })).toEqual([]);
+        expect(buttons("ended", { purged: { by: "<@9>", at: new Date("2026-09-22T00:00:00Z") } })).toEqual([]);
+        expect(buttons("active", { purged: { by: "<@9>", at: new Date("2026-09-22T00:00:00Z") } })).toEqual([]);
     });
 });
 
@@ -117,20 +117,25 @@ describe("the card says its state in words as well", () => {
     const words = (status: LeaveStatus) =>
         JSON.stringify(leaveRequestCard({ ...base, status }).components[0]);
 
-    it("labels each state, so colour never carries the meaning alone", () => {
-        expect(words("pending")).toContain("Waiting on an Executive");
-        expect(words("approved")).toContain("Approved, not started yet");
-        expect(words("declined")).toContain("Declined");
-        expect(words("active")).toContain("On leave now");
-        expect(words("ended")).toContain("Back");
-        expect(words("cancelled")).toContain("Cancelled before it started");
+    it("puts the state in the title, so colour never carries the meaning alone", () => {
+        // It used to be subtext under the name, with every card titled
+        // "Leave request" whatever had become of it.
+        expect(words("pending")).toContain("## 📆 Leave requested");
+        expect(words("approved")).toContain("## ✅ Leave approved");
+        expect(words("declined")).toContain("## ❌ Leave declined");
+        expect(words("active")).toContain("## 🌙 On leave");
+        expect(words("ended")).toContain("## 👋 Back from leave");
+        expect(words("cancelled")).toContain("## 📁 Leave cancelled");
     });
 
-    it("stops counting down to a return date once they are back", () => {
-        // "ending in 3 days" on a finished leave reads as a live booking.
-        expect(words("active")).toContain("ending");
-        expect(words("ended")).not.toContain("ending <t:");
-        expect(words("cancelled")).not.toContain("ending <t:");
+    it("counts down only while there is something to count down to", () => {
+        // A declined card used to say "ending in 2 months".
+        expect(words("pending")).toContain("Starts <t:");
+        expect(words("approved")).toContain("Starts <t:");
+        expect(words("active")).toContain("Back <t:");
+        for (const status of ["declined", "ended", "cancelled"] as LeaveStatus[]) {
+            expect(words(status)).not.toMatch(/(Starts|Back) <t:\d+:R>/);
+        }
     });
 });
 
@@ -203,7 +208,7 @@ describe("an extension waiting on an Executive", () => {
     });
 
     it("disappears once the leave is purged or no longer running", () => {
-        expect(card("active", { purged: "Purged by <@9> now." }).components).toHaveLength(1);
+        expect(card("active", { purged: { by: "<@9>", at: new Date("2026-09-22T00:00:00Z") } }).components).toHaveLength(1);
         expect(card("ended").components).toHaveLength(1);
     });
 });
@@ -310,5 +315,72 @@ describe("a member cancelling their own leave", () => {
         expect(json).toContain("Submitting cancels it. Close this to keep it.");
         expect(json).toContain('"required":false');
         expect(json).toContain("Optional.");
+    });
+});
+
+describe("every state draws the same sections, in the same order", () => {
+    const at = (iso: string) => new Date(iso);
+    const card = (extra: Record<string, unknown>) =>
+        JSON.stringify(leaveRequestCard({ ...base, status: "ended", ...extra }).components[0]);
+
+    it("titles an early end as one, and shows the dates booked and the dates taken", () => {
+        // An early end used to read as leave running from 09:00 to 09:00.
+        const json = card({
+            ending: "executive",
+            endDate: at("2026-09-08T09:00:00Z"),
+            plannedEndDate: base.endDate
+        });
+        expect(json).toContain("## 👋 Leave ended early");
+        expect(json).toContain("Booked · ");
+        expect(json).toContain("Taken · ");
+        expect(json).toContain("(14 days)");
+        expect(json).toContain("(1 day)");
+    });
+
+    it("heads Dates, Reason and History in that order", () => {
+        const json = card({
+            history: [{ mark: "📨", text: "Requested", at: at("2026-09-01T00:00:00Z") }]
+        });
+        const order = ["### Dates", "### Reason", "### History"].map((heading) =>
+            json.indexOf(heading)
+        );
+        expect(order.every((index) => index >= 0)).toBe(true);
+        expect([...order].sort((a, b) => a - b)).toEqual(order);
+    });
+
+    it("writes each event as one line with who and when, and its reason beneath", () => {
+        const json = card({
+            history: [
+                {
+                    mark: "👋",
+                    text: "Ended early by <@9>",
+                    at: at("2026-09-08T09:00:00Z"),
+                    note: "Back early from exams"
+                }
+            ]
+        });
+        expect(json).toContain("- 👋 Ended early by <@9> · <t:");
+        expect(json).toContain("\\n> Back early from exams");
+    });
+
+    it("says a withdrawn request was withdrawn, and a cancelled one never started", () => {
+        const withdrawn = JSON.stringify(
+            leaveRequestCard({ ...base, status: "cancelled", withdrawn: true }).components[0]
+        );
+        expect(withdrawn).toContain("Request withdrawn");
+        expect(withdrawn).toContain("It never started.");
+    });
+
+    it("adds the purge to the history and says where the record went", () => {
+        const json = JSON.stringify(
+            leaveRequestCard({
+                ...base,
+                status: "approved",
+                purged: { by: "<@9>", at: at("2026-09-22T00:00:00Z") }
+            }).components[0]
+        );
+        expect(json).toContain("Leave record purged");
+        expect(json).toContain("Purged by <@9>");
+        expect(json).toContain("The audit log keeps what it held.");
     });
 });
