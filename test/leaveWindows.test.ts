@@ -64,7 +64,13 @@ describe("which presence changes mean away", () => {
         expect(transitionFor("dnd", "idle")).toBe("none");
         expect(transitionFor("idle", "idle")).toBe("none");
         expect(transitionFor("idle", "dnd")).toBe("none");
-        expect(transitionFor("idle", "online")).toBe("none");
+    });
+
+    it("brings them back when Discord clears the idle it set", () => {
+        // online -> idle marks away, so the reverse has to undo it. It used to
+        // read as no change, and only offline-then-online or a message resumed.
+        expect(transitionFor("online", "idle")).toBe("away");
+        expect(transitionFor("idle", "online")).toBe("back");
     });
 
     it("marks away when they close Discord, from whatever they were", () => {

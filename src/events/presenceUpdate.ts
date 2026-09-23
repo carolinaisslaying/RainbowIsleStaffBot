@@ -19,10 +19,16 @@ import { log } from "../log.js";
  * So this handler reads the pair of statuses and nothing else:
  *
  *   online -> idle        away. Discord's own inactivity timer fired.
+ *   idle -> online        back. The reverse: Discord clears idle by itself the
+ *                         moment they touch their client again. Without it the
+ *                         one away this handler infers from idle could only be
+ *                         undone by going offline first or sending a message.
  *   anything -> offline   away. They closed Discord.
  *   offline -> anything   back. They opened it again.
  *
- * Every other pair, dnd to idle included, changes nothing at all. A member who
+ * Every other pair, dnd to idle included, changes nothing at all. A "back" only
+ * resumes a shift that is actually paused, so somebody who sits on idle and
+ * switches to online was never away and nothing happens. A member who
  * really does go quiet is still caught: the inactivity sweep in shiftService
  * marks them away after awayAfterMinutes of silence, which measures what they
  * did rather than what their client says.
@@ -40,6 +46,7 @@ export function transitionFor(
     if (before === null) return "none";
     if (before === "offline") return "back";
     if (before === "online" && after === "idle") return "away";
+    if (before === "idle" && after === "online") return "back";
     return "none";
 }
 
