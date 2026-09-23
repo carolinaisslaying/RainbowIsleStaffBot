@@ -27,7 +27,7 @@ import { describeFaces, renderFacePicker } from "./facePicker.js";
 import { formatDuration, formatMinutes, percent, ts } from "../time/format.js";
 import type { ReviewAction } from "../domain/review.js";
 import { EMOJI, emojiForColour } from "./emoji.js";
-import { TIER_STYLE, tierConsequenceLine, tierTitle } from "./tiers.js";
+import { ACTIVITY_STYLE, TIER_STYLE, recordStyle, tierConsequenceLine, tierTitle } from "./tiers.js";
 import { COLOUR } from "./theme.js";
 
 /**
@@ -394,7 +394,7 @@ export interface ReviewRowInput {
 }
 
 const REVIEW_OUTCOME_COLOUR: Record<ReviewOutcome, number> = {
-    warned: COLOUR.pending,
+    warned: COLOUR.activityWarning,
     excused: COLOUR.approved,
     dismissed: COLOUR.settled
 };
@@ -669,10 +669,10 @@ export function warningDmCard(input: {
 }): RenderedMessage {
     const shortfall = Math.max(0, input.requiredMinutes - input.totalMinutes);
     const container = new ContainerBuilder()
-        .setAccentColor(COLOUR.adverse)
+        .setAccentColor(ACTIVITY_STYLE.colour)
         .addTextDisplayComponents(
             text(
-                `### ${emojiForColour(COLOUR.adverse)} You have received an activity warning\n` +
+                `### ${ACTIVITY_STYLE.emoji} You have received an activity warning\n` +
                     `Fortnight ${input.windowLabel}. You recorded ` +
                     `**${input.totalMinutes} of ${input.requiredMinutes} activity minutes**, ` +
                     `**${shortfall}** under your fortnight requirement.\n\n` +
@@ -725,7 +725,7 @@ function warningRowLines(row: WarningRow): string {
     const heading =
         row.kind === "conduct" && row.tier
             ? `${tierTitle(row.tier, true)} · ${ts(row.issuedAt, "D")}`
-            : `⚠️ ${ts(row.issuedAt, "D")}`;
+            : `${ACTIVITY_STYLE.emoji} ${ts(row.issuedAt, "D")}`;
 
     const state = row.withdrawn
         ? " · _withdrawn_"
@@ -771,13 +771,21 @@ export function warningsCard(input: {
 }): RenderedMessage {
     const clean = input.rows.length === 0;
     const counting = input.tally.total > 0;
-    const colour = counting ? COLOUR.pending : COLOUR.approved;
+    // The worst warning that still counts sets the colour, so the record reads
+    // at the weight of what is on it rather than in the review queue's amber.
+    const worst = recordStyle(
+        input.rows
+            .filter((row) => !row.withdrawn && !row.spent)
+            .map((row) => ({ kind: row.kind, tier: row.tier }))
+    );
+    const colour = counting && worst ? worst.colour : COLOUR.approved;
+    const mark = counting && worst ? worst.emoji : emojiForColour(COLOUR.approved);
 
     const container = new ContainerBuilder()
         .setAccentColor(colour)
         .addTextDisplayComponents(
             text(
-                `## ${emojiForColour(colour)} ` +
+                `## ${mark} ` +
                     `${input.isSelf ? "Your warnings" : `Warnings: ${input.displayName}`}\n` +
                     (clean
                         ? input.isSelf
@@ -1263,11 +1271,16 @@ export function leaveEndConfirmCard(options: {
     endDate: Date;
     active: boolean;
 }): RenderedMessage {
+    // Drawn in the colour of where the click leads rather than the amber every
+    // confirmation used to share: green for the welcome back it sends, the
+    // leave colour for calling a booking off.
+    const colour = options.active ? COLOUR.approved : COLOUR.leave;
+    const mark = options.active ? EMOJI.welcome : emojiForColour(COLOUR.leave);
     const container = new ContainerBuilder()
-        .setAccentColor(COLOUR.pending)
+        .setAccentColor(colour)
         .addTextDisplayComponents(
             text(
-                `### ${options.active ? "Bring them back now?" : "Cancel this leave?"}\n` +
+                `### ${mark} ${options.active ? "Bring them back now?" : "Cancel this leave?"}\n` +
                     `${options.displayName} ` +
                     (options.active
                         ? `is due back ${ts(options.endDate, "D")}, ` +
@@ -1646,7 +1659,7 @@ export function warningLogCard(input: {
         ? COLOUR.settled
         : input.tier
           ? TIER_STYLE[input.tier].colour
-          : COLOUR.adverse;
+          : ACTIVITY_STYLE.colour;
 
     // State moved out of the accent, so it has to be unmistakable in words.
     const stateLine = input.withdrawn

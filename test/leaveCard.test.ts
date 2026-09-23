@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { leaveCancelledCard, leaveRequestCard } from "../src/render/cards.js";
+import { leaveCancelledCard, leaveEndConfirmCard, leaveRequestCard } from "../src/render/cards.js";
 import { COLOUR } from "../src/render/theme.js";
 import type { LeaveStatus } from "../src/db/types.js";
 
@@ -205,5 +205,32 @@ describe("an extension waiting on an Executive", () => {
     it("disappears once the leave is purged or no longer running", () => {
         expect(card("active", { purged: "Purged by <@9> now." }).components).toHaveLength(1);
         expect(card("ended").components).toHaveLength(1);
+    });
+});
+
+describe("the confirmation is coloured by where the click leads", () => {
+    // Every confirmation used to be the review queue's amber, so bringing
+    // somebody back and calling their leave off looked identical.
+    const confirm = (active: boolean) =>
+        leaveEndConfirmCard({
+            leaveId: base.leaveId,
+            displayName: "Robin",
+            endDate: base.endDate,
+            active
+        }).components[0] as unknown as { data: { accent_color?: number } };
+
+    it("is green with a wave for bringing somebody back", () => {
+        expect(confirm(true).data.accent_color).toBe(COLOUR.approved);
+        expect(JSON.stringify(confirm(true))).toContain("👋 Bring them back now?");
+    });
+
+    it("is the leave colour for cancelling a booking", () => {
+        expect(confirm(false).data.accent_color).toBe(COLOUR.leave);
+        expect(JSON.stringify(confirm(false))).toContain("📆 Cancel this leave?");
+    });
+
+    it("is never the review's amber", () => {
+        expect(confirm(true).data.accent_color).not.toBe(COLOUR.pending);
+        expect(confirm(false).data.accent_color).not.toBe(COLOUR.pending);
     });
 });

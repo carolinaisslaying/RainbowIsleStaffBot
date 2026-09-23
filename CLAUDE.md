@@ -251,7 +251,12 @@ means finished everywhere else in this bot, it counts against nobody, and one le
 misrepresent the record to anybody scrolling. It also drops the consequence line entirely, because
 "this never stops counting" sitting above "it counts against them nowhere" is a card arguing with
 itself. And an **activity** warning stays out of the ladder's colours: it is issued off a figure the
-bot computed, and dressing it in a rung would say something about it that nobody decided.
+bot computed, and dressing it in a rung would say something about it that nobody decided. It has
+its own style instead, `ACTIVITY_STYLE` beside `TIER_STYLE`: slate (`COLOUR.activityWarning`) and
+📉, on the DM, the log card, the record list, the review row and the "Warned" result. It used to be
+red with ⚠️ — Misconduct's colour and Caution's mark — so on the log an activity warning looked like
+one rung or the other. `test/tierPresentation.test.ts` fails if 📉 is used for anything else. A
+member's record takes the colour and mark of the worst warning still counting (`recordStyle`).
 
 In a list the top rung steps down to `###` and the other to no heading at all — five entries at `#`
 is a wall, not an escalation.
@@ -262,6 +267,16 @@ their state by accent get the matching emoji for free and the two cannot drift. 
 share a value (green is `approved` and `onShift`, amber `pending` and `away`); the commoner meaning
 wins the default and the shift cards pass `emoji:` themselves. One mark, leading the title, never in
 body copy: these cards are read by Moderators deciding something.
+
+**Amber means a fortnight review is waiting on somebody, and nothing else.** It used to mean
+waiting, "are you sure?", "something went wrong" and "for your information" all at once, so every
+card read alike. A card now takes the colour of what it is about, and its title says what the click
+does: a leave confirmation is green 👋 for bringing somebody back and pink 📆 for cancelling;
+configuration notices and the `/config` confirmation for a key that reaches backwards are blurple
+(`admin`) led by ⚠️; a warning result is the rung's colour, or slate for activity. Red stays for
+the irreversible (purge, scrub) and the broken. Status lights (`/dev status`, setup status) keep
+amber as "partly there", which is a different kind of card. The member's own "below the
+requirement" DM stays amber because it is part of the review.
 
 **A card's claim and its own caveat live in one function.** `leaderboardVisibility` returns the whole
 footnote. It used to return "Nobody is hidden from the leaderboard" without checking, while

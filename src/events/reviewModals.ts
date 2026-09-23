@@ -568,6 +568,6 @@ async function applyDecision(
             `<@${subject?.discordId ?? "unknown"}>, fortnight ${label}.\n\n` +
             `**Reason:** ${reason}\n\n` +
             deliveryLine({ action, attempted, messaged, rehearsal }),
-        colour: action === "warn" ? COLOUR.pending : COLOUR.approved
+        colour: action === "warn" ? COLOUR.activityWarning : COLOUR.approved
     };
 }

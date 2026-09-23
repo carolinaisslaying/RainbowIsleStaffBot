@@ -199,7 +199,7 @@ export const devCommand: Command = {
                         // it, in words.
                         `-# Clear it with ${cmd("dev purge", interaction.guildId)}, ` +
                         `fortnight **${index}**.`,
-                    { ephemeral: true, colour: COLOUR.pending }
+                    { ephemeral: true, colour: COLOUR.admin }
                 )
             );
             return;

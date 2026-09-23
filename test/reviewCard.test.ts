@@ -76,7 +76,9 @@ describe("what each state draws", () => {
         };
         expect(ids(decided)).toEqual([`review:${base.assessmentId}:reopen`]);
         expect(json(decided)).toContain("Third fortnight running.");
-        expect(accent(decided)).toBe(COLOUR.pending);
+        // The activity warning's slate, not the queue's amber: a warned row is
+        // decided, and amber would say it is still waiting.
+        expect(accent(decided)).toBe(COLOUR.activityWarning);
     });
 
     it("colours an excusal green and a dismissal grey", () => {

@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+    ACTIVITY_STYLE,
     TIERS_BY_RANK,
     TIER_STYLE,
+    recordStyle,
     tierConsequenceLine,
     tierTitle
 } from "../src/render/tiers.js";
+import { EMOJI, EMOJI_FOR_COLOUR } from "../src/render/emoji.js";
 import { COLOUR } from "../src/render/theme.js";
 import { warningWeightLine } from "../src/domain/review.js";
 import { CONDUCT_TIERS, type ConductTier } from "../src/db/types.js";
@@ -83,6 +86,76 @@ describe("the title a card leads with", () => {
         // ladder's colours would say something nobody decided.
         expect(tierTitle(null)).toContain("Activity warning");
         expect(tierTitle(null)).not.toContain("🚨");
+    });
+});
+
+describe("an activity warning has a mark and a colour of its own", () => {
+    it("shares its mark with nothing else in the bot", () => {
+        // It used to open with ⚠️, which is also Caution's mark and the bot's
+        // general "look at this", so an activity warning and a Caution led
+        // with the same symbol in the same channel.
+        expect(tierTitle(null)).toBe("### 📉 Activity warning");
+        for (const tier of CONDUCT_TIERS) {
+            expect(TIER_STYLE[tier].emoji).not.toBe(ACTIVITY_STYLE.emoji);
+        }
+        expect(Object.values(EMOJI)).not.toContain(ACTIVITY_STYLE.emoji);
+        const owners = Object.entries(EMOJI_FOR_COLOUR).filter(
+            ([, mark]) => mark === ACTIVITY_STYLE.emoji
+        );
+        expect(owners.map(([value]) => Number(value))).toEqual([COLOUR.activityWarning]);
+    });
+
+    it("is drawn in neither rung's colour, nor in the grey of a finished record", () => {
+        // On the log card it used to be red, the same red as Misconduct.
+        for (const tier of CONDUCT_TIERS) {
+            expect(ACTIVITY_STYLE.colour).not.toBe(TIER_STYLE[tier].colour);
+        }
+        expect(ACTIVITY_STYLE.colour).not.toBe(COLOUR.adverse);
+        expect(ACTIVITY_STYLE.colour).not.toBe(COLOUR.settled);
+        expect(ACTIVITY_STYLE.colour).not.toBe(COLOUR.pending);
+    });
+
+    it("is the colour of its card in the warning log", async () => {
+        const { warningLogCard } = await import("../src/render/cards.js");
+        const card = warningLogCard({
+            warningId: "x",
+            displayName: "Ashley",
+            mention: "<@123>",
+            kind: "activity",
+            tier: null,
+            issuedAt: new Date("2026-09-01T10:00:00Z"),
+            issuedBy: "<@999>",
+            reason: "Below for the fortnight.",
+            permanent: false,
+            lifetimeDays: 90,
+            acknowledgedAt: null,
+            delivery: "delivered",
+            withdrawn: null
+        }).components[0].toJSON() as { accent_color: number };
+        expect(card.accent_color).toBe(COLOUR.activityWarning);
+        expect(JSON.stringify(card)).toContain("📉 Activity warning");
+    });
+});
+
+describe("a record reads at the weight of the worst warning still counting", () => {
+    it("takes the highest rung, then activity, then nothing", () => {
+        expect(
+            recordStyle([
+                { kind: "activity", tier: null },
+                { kind: "conduct", tier: "caution" },
+                { kind: "conduct", tier: "misconduct" }
+            ])?.colour
+        ).toBe(COLOUR.misconduct);
+        expect(
+            recordStyle([
+                { kind: "activity", tier: null },
+                { kind: "conduct", tier: "caution" }
+            ])?.emoji
+        ).toBe("⚠️");
+        expect(recordStyle([{ kind: "activity", tier: null }])?.colour).toBe(
+            COLOUR.activityWarning
+        );
+        expect(recordStyle([])).toBeNull();
     });
 });
 

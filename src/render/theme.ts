@@ -64,7 +64,14 @@ export const COLOUR = {
      * explicit even though the value is shared.
      */
     caution: 0xf0b232,
-    misconduct: 0xff453a
+    misconduct: 0xff453a,
+    /**
+     * An activity warning. Outside the ladder on purpose: the bot computed the
+     * figure behind it and nobody judged its severity, so it takes neither
+     * rung's colour. Slate rather than red, which it used to share with
+     * Misconduct on the log card, and bluer than the grey that means finished.
+     */
+    activityWarning: 0x6f86a8
 } as const;
 
 /**

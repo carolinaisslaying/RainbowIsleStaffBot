@@ -62,6 +62,35 @@ export const TIER_STYLE: Record<ConductTier, TierStyle> = {
     }
 };
 
+/**
+ * How an activity warning presents itself. It has no rung, so it is not a
+ * `TierStyle`, but it is drawn on the same surfaces and needs the same two
+ * signals held in one place. 📉 rather than ⚠️, which is Caution's mark and the
+ * bot's general "look at this": an activity warning and a Caution used to
+ * open with the same symbol.
+ */
+export const ACTIVITY_STYLE = {
+    label: "Activity warning",
+    colour: COLOUR.activityWarning,
+    emoji: "📉"
+} as const;
+
+/**
+ * The colour and mark for a member's whole record: the worst warning that
+ * still counts, so a record holding a live Misconduct never reads as a
+ * Caution. Null when nothing counts.
+ */
+export function recordStyle(
+    counting: { kind: "activity" | "conduct"; tier: ConductTier | null }[]
+): { colour: number; emoji: string } | null {
+    const worst = counting
+        .filter((row) => row.kind === "conduct" && row.tier)
+        .map((row) => TIER_STYLE[row.tier as ConductTier])
+        .sort((a, b) => b.rank - a.rank)[0];
+    if (worst) return { colour: worst.colour, emoji: worst.emoji };
+    return counting.length > 0 ? { colour: ACTIVITY_STYLE.colour, emoji: ACTIVITY_STYLE.emoji } : null;
+}
+
 /** The rungs, lowest first. */
 export const TIERS_BY_RANK: readonly ConductTier[] = (
     Object.keys(TIER_STYLE) as ConductTier[]
@@ -91,7 +120,7 @@ export function tierConsequenceLine(days: number): string {
  * claim a severity no Executive chose.
  */
 export function tierTitle(tier: ConductTier | null, inList = false): string {
-    if (!tier) return "### ⚠️ Activity warning";
+    if (!tier) return `### ${ACTIVITY_STYLE.emoji} ${ACTIVITY_STYLE.label}`;
     const style = TIER_STYLE[tier];
     const heading = inList ? style.listHeading : style.heading;
     const prefix = heading ? `${heading} ` : "";

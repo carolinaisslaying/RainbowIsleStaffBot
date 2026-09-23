@@ -108,7 +108,7 @@ export async function handleConductWarnModal(
     await respond(
         interaction,
         noticeCard(
-            `${TIER_STYLE[rawTier].emoji} ${TIER_STYLE[rawTier].label} issued`,
+            `${TIER_STYLE[rawTier].label} issued`,
             `**${name}** (<@${subjectDiscordId}>)\n\n` +
                 `**Why:** ${reason}\n\n` +
                 "It does not expire.\n\n" +
@@ -118,7 +118,14 @@ export async function handleConductWarnModal(
                       "warning is still on their record, so tell them yourself.") +
                 (config.warningChannelId ? "" : "\n\n-# No warning channel is configured, so " +
                     "there is no card for this in the log."),
-            { colour: delivered ? COLOUR.pending : COLOUR.adverse, ephemeral: true }
+            // The rung's colour and mark, as on the log card and the DM. An
+            // undelivered warning says so in the body; the accent says what
+            // was issued.
+            {
+                colour: TIER_STYLE[rawTier].colour,
+                emoji: TIER_STYLE[rawTier].emoji,
+                ephemeral: true
+            }
         )
     );
 }

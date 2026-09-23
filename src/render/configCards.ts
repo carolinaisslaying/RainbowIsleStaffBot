@@ -29,7 +29,7 @@ import {
 } from "./cards.js";
 import { COLOUR } from "./theme.js";
 import { formatDuration, ts } from "../time/format.js";
-import { emojiForColour } from "./emoji.js";
+import { EMOJI, emojiForColour } from "./emoji.js";
 
 /**
  * The configuration viewer.
@@ -270,10 +270,10 @@ export function configViewCard(
 
     if (warnings.length > 0) {
         const problems = new ContainerBuilder()
-            .setAccentColor(COLOUR.pending)
+            .setAccentColor(COLOUR.admin)
             .addTextDisplayComponents(
                 text(
-                    `### ${emojiForColour(COLOUR.pending)} Worth knowing\n` +
+                    `### ${EMOJI.warning} Worth knowing\n` +
                         warnings
                             .map((warning) => `**${String(warning.key)}**\n${warning.text}`)
                             .join("\n\n")
@@ -299,9 +299,9 @@ export function configHistoryConfirmCard(input: {
     body: string;
 }): RenderedMessage {
     const container = new ContainerBuilder()
-        .setAccentColor(COLOUR.pending)
+        .setAccentColor(COLOUR.admin)
         .addTextDisplayComponents(
-            text(`### ${emojiForColour(COLOUR.pending)} This moves every week ever recorded\n${input.body}`)
+            text(`### ${EMOJI.warning} This moves every week ever recorded\n${input.body}`)
         )
         .addActionRowComponents(
             new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -391,7 +391,7 @@ export function configImportCard(
     const relocating = report.changes.filter((change) => change.relocating);
 
     const container = new ContainerBuilder()
-        .setAccentColor(relocating.length > 0 ? COLOUR.adverse : COLOUR.pending)
+        .setAccentColor(relocating.length > 0 ? COLOUR.adverse : COLOUR.admin)
         .addTextDisplayComponents(
             text(
                 `### Apply ${report.changes.length} change(s)?\n` +

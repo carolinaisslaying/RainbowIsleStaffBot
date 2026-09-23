@@ -351,3 +351,17 @@ describe("splitting the old review channel in two", () => {
         expect(status.missingRequired).not.toContain("leaveChannelId");
     });
 });
+
+describe("a setting that reaches backwards confirms in the configuration colour", () => {
+    it("is never the review queue's amber", async () => {
+        const { configHistoryConfirmCard } = await import("../src/render/configCards.js");
+        const { COLOUR } = await import("../src/render/theme.js");
+        const card = configHistoryConfirmCard({
+            key: "weekStartDay",
+            value: "1",
+            body: "Moves every week."
+        }).components[0] as unknown as { data: { accent_color?: number } };
+        expect(card.data.accent_color).toBe(COLOUR.admin);
+        expect(JSON.stringify(card)).toContain("⚠️ This moves every week ever recorded");
+    });
+});

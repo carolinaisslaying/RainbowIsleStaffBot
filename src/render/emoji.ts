@@ -27,6 +27,7 @@ export const EMOJI_FOR_COLOUR: Record<number, string> = {
     [COLOUR.settled]: "📁",
     [COLOUR.inProgress]: "🌙",
     [COLOUR.leave]: "📆",
+    [COLOUR.activityWarning]: "📉",
     [COLOUR.report]: "📋",
     [COLOUR.admin]: "⚙️",
     [COLOUR.milestone]: "🎉",
