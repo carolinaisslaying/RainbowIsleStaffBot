@@ -55,8 +55,22 @@ export function ephemeral(message: RenderedMessage): RenderedMessage & { flags: 
     return { ...message, flags: message.flags | MessageFlags.Ephemeral };
 }
 
+/**
+ * Every text block on every card goes through here.
+ *
+ * Discord already puts space above a heading, so a blank line before one
+ * stacks a second gap on the first and the card opens up into holes between
+ * its sections. Blank lines before a heading are dropped here, once, rather
+ * than trusted to every string that happens to end in "\n\n" and every one
+ * that happens to start with "###". Subtext (`-#`) is not a heading and keeps
+ * its spacing.
+ */
+export function tightenHeadings(value: string): string {
+    return value.replace(/\n{2,}(?=#{1,3} )/g, "\n");
+}
+
 export function text(value: string): TextDisplayBuilder {
-    return new TextDisplayBuilder().setContent(value);
+    return new TextDisplayBuilder().setContent(tightenHeadings(value));
 }
 
 export function separator(large = false): SeparatorBuilder {
@@ -1196,8 +1210,8 @@ export function leaveRequestCard(options: {
     const container = new ContainerBuilder().setAccentColor(colour).addTextDisplayComponents(
         text(
             `## ${mark} ${leaveTitle({ ...options, purged: purged !== null })}\n` +
-                `**${options.displayName}**\n\n` +
-                `### Dates\n${dates}\n\n` +
+                `**${options.displayName}**\n` +
+                `### Dates\n${dates}\n` +
                 `### Reason\n${options.reason}`
         )
     );
@@ -1437,7 +1451,7 @@ export function leaveInterpretationCard(options: {
 }): RenderedMessage {
     const quoted = options.typed.map((value) => `**${value}**`).join(" and ");
     const lines = options.startDate
-        ? `### Leave starts\n${ts(options.startDate, "F")}\n\n` +
+        ? `### Leave starts\n${ts(options.startDate, "F")}\n` +
           `### Leave ends\n${ts(options.endDate, "F")}\n-# ${ts(options.endDate, "R")}`
         : `### New return\n${ts(options.endDate, "F")}\n-# ${ts(options.endDate, "R")}`;
 
@@ -1450,14 +1464,14 @@ export function leaveInterpretationCard(options: {
                 // changes". Sections in bold sat level with the fortnights.
                 "## Is this right?\n" +
                     `You typed ${quoted}. Read in **${options.timeZone}**, your own ` +
-                    `timezone, that is:\n\n${lines}`
+                    `timezone, that is:\n${lines}`
             )
         )
         .addSeparatorComponents(separator())
         .addTextDisplayComponents(
             text(
                 (options.effectLines.length > 0
-                    ? `### What it changes\n${options.effectLines.join("\n")}\n\n`
+                    ? `### What it changes\n${options.effectLines.join("\n")}\n`
                     : "") + `### ${options.reasonLabel}\n${options.reason}`
             )
         )

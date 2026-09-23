@@ -384,3 +384,31 @@ describe("every state draws the same sections, in the same order", () => {
         expect(json).toContain("The audit log keeps what it held.");
     });
 });
+
+describe("no blank line above a heading", () => {
+    // Discord already spaces a heading from what is above it. A blank line as
+    // well doubled the gap, and the leave card opened into holes between Dates,
+    // Reason and History.
+    it("is dropped from any text block, and subtext keeps its spacing", async () => {
+        const { tightenHeadings } = await import("../src/render/cards.js");
+        expect(tightenHeadings("**Name**\n\n### Dates\nx\n\n\n## Big")).toBe(
+            "**Name**\n### Dates\nx\n## Big"
+        );
+        expect(tightenHeadings("line\n\n-# small print")).toBe("line\n\n-# small print");
+        expect(tightenHeadings("para one\n\npara two")).toBe("para one\n\npara two");
+    });
+
+    it("never appears on a leave card, in any state", () => {
+        for (const status of ["pending", "approved", "declined", "active", "ended", "cancelled"] as LeaveStatus[]) {
+            const json = JSON.stringify(
+                leaveRequestCard({
+                    ...base,
+                    status,
+                    effectLines: ["**Fortnight of 7 Sep** · nothing required"],
+                    history: [{ mark: "📨", text: "Requested", at: new Date("2026-09-01T00:00:00Z") }]
+                }).components
+            );
+            expect(json, status).not.toMatch(/\\n\\n#{1,3} /);
+        }
+    });
+});

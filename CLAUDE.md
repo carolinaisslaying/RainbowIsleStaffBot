@@ -261,6 +261,11 @@ member's record takes the colour and mark of the worst warning still counting (`
 In a list the top rung steps down to `###` and the other to no heading at all — five entries at `#`
 is a wall, not an escalation.
 
+**No blank line above a heading.** Discord already spaces a heading from what is above it, so
+`"\n\n### Dates"` doubles the gap and a card opens into holes between its sections. `text()`
+(`render/cards.ts`) drops blank lines before any `#`/`##`/`###` line through `tightenHeadings`, so
+every card gets it whatever its strings end in. Subtext (`-#`) and plain paragraphs keep theirs.
+
 **Emoji come from the colour, not from the call site.** `render/emoji.ts` maps each `COLOUR` value
 to one mark and `noticeCard` prefixes the title with it, so the forty-odd cards that already declare
 their state by accent get the matching emoji for free and the two cannot drift. Two pairs of roles
