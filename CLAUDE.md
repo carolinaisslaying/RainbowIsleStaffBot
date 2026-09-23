@@ -536,7 +536,13 @@ stores `pendingExtension`, the leave keeps running on its current end, and the c
 request, what it would change, and **Approve extension** / **Decline extension** — drawn as a second
 container in `COLOUR.leave` beneath the card, because a container has one accent and inside the card
 the request wore the green or blue of the leave it amends. The member is
-DMed either way. One extension waits at a time. A pending request's card shows what approving it
+DMed either way. One extension waits at a time. **Every extension is kept** in `LeaveDoc.extensions`
+once something becomes of it — approved, declined, or `lapsed` when the leave closed while it still
+waited — with its request, reason, both dates, decider and time; the member's own leave reason is
+never rewritten (approval used to append "Extended to 2026-11-29: …" to it, and a decline left no
+trace). `render/leaveHistory.ts` turns the record into the card's History, pure and tested: every
+action on a leave has a line there, and an action without one is an action nobody in the channel
+can see. A pending request's card shows what approving it
 would change, from the same `describeLeaveChange` the member's confirmation card uses.
 
 **Leave input is parsed, not read.** `src/time/naturalDate.ts` turns a phrase into constraints

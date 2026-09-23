@@ -267,6 +267,13 @@ export interface LeaveDoc {
      * leave keeps running on `endDate` until somebody decides.
      */
     pendingExtension: PendingExtension | null;
+    /**
+     * Every extension that has been decided or dropped, oldest first. The one
+     * still waiting is `pendingExtension`. An approval used to be recorded by
+     * appending "Extended to 2026-11-29: …" to the member's reason, and a
+     * decline or a request dropped by the leave ending left no trace at all.
+     */
+    extensions?: LeaveExtensionRecord[];
     reason: string;
     status: LeaveStatus;
     decidedBy: ObjectId | null;
@@ -310,6 +317,24 @@ export interface PendingExtension {
     endDate: Date;
     reason: string;
     requestedAt: Date;
+}
+
+/** One extension, once something has become of it. */
+export interface LeaveExtensionRecord {
+    requestedAt: Date;
+    /** The return date it asked to move. */
+    fromEndDate: Date;
+    /** The return date it asked for. */
+    toEndDate: Date;
+    reason: string;
+    /**
+     * `lapsed` when the leave ended or was cancelled while it still waited,
+     * so nobody ever decided it.
+     */
+    outcome: "approved" | "declined" | "lapsed";
+    decidedAt: Date;
+    /** The Executive who decided it. Null for a lapse. */
+    decidedBy: ObjectId | null;
 }
 
 /**

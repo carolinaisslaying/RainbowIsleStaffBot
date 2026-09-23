@@ -1,6 +1,6 @@
 import { ObjectId } from "mongodb";
 import { collections } from "../db/client.js";
-import type { LeaveDoc } from "../db/types.js";
+import type { LeaveDoc, LeaveExtensionRecord, PendingExtension } from "../db/types.js";
 import { weekLeave, type LeaveSpan, type WeekLeave } from "./leaveDays.js";
 
 /**
@@ -210,7 +210,8 @@ export async function markLeaveCancelled(
                 cancellationReason: reason,
                 // An extension on a leave that never started has nothing to extend.
                 pendingExtension: null
-            }
+            },
+            ...lapsePendingExtension(leave, at)
         },
         { returnDocument: "after" }
     );
@@ -254,7 +255,8 @@ export async function markLeaveEnded(
                 // An extension still waiting when the leave ends has nothing
                 // left to extend.
                 pendingExtension: null
-            }
+            },
+            ...lapsePendingExtension(leave, at)
         },
         { returnDocument: "after" }
     );
@@ -302,22 +304,19 @@ export async function requestExtension(
 }
 
 /**
- * Decide a pending extension. Approving moves the end date and appends the
- * member's reason to the record, so an Executive reading it later sees the
- * whole story and not only the most recent sentence. Declining leaves the
- * leave exactly as it was.
+ * Decide a pending extension. Approving moves the end date; declining leaves
+ * the leave exactly as it was. Either way the request, its reason and the
+ * decision are kept in `extensions`, so the card can show the whole story.
+ * The member's own reason for the leave is never rewritten.
  */
 export async function decideExtension(
     leave: LeaveDoc,
-    approved: boolean
+    approved: boolean,
+    decidedBy: ObjectId,
+    at = new Date()
 ): Promise<LeaveDoc | null> {
     const extension = leave.pendingExtension;
     if (!extension) return null;
-
-    const reason = approved
-        ? `${leave.reason}\n\nExtended to ${extension.endDate.toISOString().slice(0, 10)}: ` +
-          extension.reason
-        : leave.reason;
 
     return collections.leave().findOneAndUpdate(
         {
@@ -328,12 +327,44 @@ export async function decideExtension(
         {
             $set: {
                 ...(approved ? { endDate: extension.endDate } : {}),
-                reason: reason.slice(0, 4000),
                 pendingExtension: null
+            },
+            $push: {
+                extensions: extensionRecord(leave, approved ? "approved" : "declined", at, decidedBy)
             }
         },
         { returnDocument: "after" }
     );
+}
+
+/** The record a pending extension becomes, decided or dropped. */
+function extensionRecord(
+    leave: LeaveDoc,
+    outcome: LeaveExtensionRecord["outcome"],
+    at: Date,
+    decidedBy: ObjectId | null
+): LeaveExtensionRecord {
+    const extension = leave.pendingExtension as PendingExtension;
+    return {
+        requestedAt: extension.requestedAt,
+        fromEndDate: leave.endDate,
+        toEndDate: extension.endDate,
+        reason: extension.reason,
+        outcome,
+        decidedAt: at,
+        decidedBy
+    };
+}
+
+/**
+ * An extension still waiting when its leave closes is dropped, not forgotten:
+ * it goes into the record as lapsed, so the card says it was asked for and
+ * never decided rather than losing it.
+ */
+function lapsePendingExtension(leave: LeaveDoc, at: Date): Record<string, unknown> {
+    return leave.pendingExtension
+        ? { $push: { extensions: extensionRecord(leave, "lapsed", at, null) } }
+        : {};
 }
 
 /** Approved leave whose start date has arrived but which is not yet active. */

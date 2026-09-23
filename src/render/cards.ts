@@ -1149,6 +1149,10 @@ export function leaveRequestCard(options: {
     ending?: LeaveEnding | null;
     /** For a cancelled leave, whether it was withdrawn before any decision. */
     withdrawn?: boolean;
+    /** The return date first booked, when an extension has since moved it. */
+    originalEndDate?: Date | null;
+    /** How many extensions were approved. */
+    extensionCount?: number;
     purged?: { by: string; at: Date } | null;
     /** What approving this request would do to the member's requirements. */
     effectLines?: string[];
@@ -1181,6 +1185,12 @@ export function leaveRequestCard(options: {
         } else if (!purged && options.status === "active") {
             dates += `\n-# Back ${ts(options.endDate, "R")}`;
         }
+    }
+
+    if (options.originalEndDate && options.extensionCount) {
+        dates +=
+            `\n-# First booked to ${ts(options.originalEndDate, "f")}, extended ` +
+            `${options.extensionCount === 1 ? "once" : `${options.extensionCount} times`}.`;
     }
 
     const container = new ContainerBuilder().setAccentColor(colour).addTextDisplayComponents(
@@ -1239,8 +1249,10 @@ export function leaveRequestCard(options: {
         extensionBlock.addTextDisplayComponents(
             text(
                 `### ${emojiForColour(COLOUR.leave)} Extension requested\n` +
-                    `To ${ts(extension.endDate, "f")}\n` +
-                    `> ${extension.reason}\n\n` +
+                    `Back **${ts(extension.endDate, "f")}** instead of ` +
+                    `${ts(options.endDate, "f")}, ` +
+                    `${formatDays(extension.endDate.getTime() - options.endDate.getTime())} longer.\n` +
+                    `> ${extension.reason.split("\n").join("\n> ")}\n\n` +
                     (extension.effectLines.length > 0
                         ? `${extension.effectLines.join("\n")}\n\n`
                         : "") +

@@ -24,10 +24,9 @@ import {
     leaveCancelledCard,
     leaveRequestCard,
     noticeCard,
-    type LeaveEnding,
-    type LeaveEvent,
     type RenderedMessage
 } from "../render/cards.js";
+import { leaveHistory } from "../render/leaveHistory.js";
 import { leaveTermsText } from "../render/leaveTerms.js";
 import { log } from "../log.js";
 import { formatDays, labelDate, ts } from "../time/format.js";
@@ -210,69 +209,27 @@ export async function leaveCardFor(
     const name = subject
         ? await staffDisplayName(client, config, subject.discordId, "Departed member")
         : "an unknown member";
-    const mention = async (staffId: ObjectId | null | undefined): Promise<string> => {
-        if (!staffId) return "an Executive";
-        const staff = await findStaffById(staffId);
-        return staff ? `<@${staff.discordId}>` : "an Executive who has since left";
-    };
+    // Everybody the history names, looked up once, so the history itself is a
+    // pure function of the record and can be tested without a database.
+    const ids = [
+        leave.decidedBy,
+        leave.endedEarlyBy,
+        leave.cancelledBy,
+        ...(leave.extensions ?? []).map((record) => record.decidedBy)
+    ].filter((id): id is ObjectId => Boolean(id));
+    const names = new Map<string, string>();
+    for (const id of ids) {
+        const staff = await findStaffById(id);
+        names.set(id.toHexString(), staff ? `<@${staff.discordId}>` : "an Executive who has since left");
+    }
+    const { history, ending, withdrawn } = leaveHistory(
+        leave,
+        (id) => (id ? names.get(id.toHexString()) ?? "an Executive" : "an Executive")
+    );
 
-    // Oldest first, one line per thing that happened. Every state is the
-    // same list at a different length.
-    const history: LeaveEvent[] = [{ mark: "📨", text: "Requested", at: leave.requestedAt }];
-    if (leave.decidedAt) {
-        const declined = leave.status === "declined";
-        history.push({
-            mark: declined ? "❌" : "✅",
-            text: `${declined ? "Declined" : "Approved"} by ${await mention(leave.decidedBy)}`,
-            at: leave.decidedAt
-        });
-    }
-    if (leave.status === "active" || leave.status === "ended") {
-        history.push({ mark: "🌙", text: "Started", at: leave.startDate });
-    }
-
-    let ending: LeaveEnding | null = null;
-    if (leave.status === "ended" && leave.rolesRestoredAt) {
-        ending = leave.endedEarlyBy ? "executive" : leave.plannedEndDate ? "member" : "schedule";
-        history.push({
-            mark: "👋",
-            text:
-                ending === "executive"
-                    ? `Ended early by ${await mention(leave.endedEarlyBy)}`
-                    : ending === "member"
-                      ? "Ended early by them"
-                      : "Ended on schedule",
-            at: leave.rolesRestoredAt,
-            note: ending === "executive" ? leave.endedEarlyReason ?? null : null
-        });
-        if (leave.restoreErrors.length > 0) {
-            history.push({
-                mark: "❗",
-                text:
-                    `${leave.restoreErrors.length} staff role` +
-                    `${leave.restoreErrors.length === 1 ? "" : "s"} could not be restored`,
-                at: leave.rolesRestoredAt
-            });
-        }
-    }
-
-    const withdrawn =
-        leave.status === "cancelled" &&
-        !leave.decidedAt &&
-        (leave.cancelledBy?.equals(leave.staffId) ?? false);
-    if (leave.status === "cancelled" && leave.cancelledAt) {
-        const themselves = leave.cancelledBy?.equals(leave.staffId) ?? false;
-        history.push({
-            mark: "📁",
-            text: withdrawn
-                ? "Withdrawn by them before a decision"
-                : themselves
-                  ? "Cancelled by them"
-                  : `Cancelled by ${await mention(leave.cancelledBy)}`,
-            at: leave.cancelledAt,
-            note: leave.cancellationReason ?? null
-        });
-    }
+    const approvedExtensions = (leave.extensions ?? []).filter(
+        (record) => record.outcome === "approved"
+    );
 
     const extension = leave.pendingExtension;
     return leaveRequestCard({
@@ -286,6 +243,8 @@ export async function leaveCardFor(
         history,
         ending,
         withdrawn,
+        originalEndDate: approvedExtensions[0]?.fromEndDate ?? null,
+        extensionCount: approvedExtensions.length,
         purged: extra.purged ?? null,
         effectLines:
             leave.status === "pending"
@@ -408,7 +367,8 @@ export async function endLeave(
             endedBy: endedBy.kind,
             restoreErrors: errors,
             early: endedBy.kind === "executive" || cutShort(leave),
-            reason: earlyReason
+            reason: earlyReason,
+            droppedExtension: leave.pendingExtension ?? null
         }
     });
 
@@ -497,7 +457,9 @@ export async function cancelLeave(
             leaveId: leave._id.toHexString(),
             start: leave.startDate,
             end: leave.endDate,
-            reason
+            reason,
+            status: leave.status,
+            droppedExtension: leave.pendingExtension ?? null
         }
     });
 

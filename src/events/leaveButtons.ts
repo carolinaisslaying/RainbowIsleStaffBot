@@ -233,7 +233,8 @@ async function decideExtensionFromCard(
     }
 
     await interaction.deferUpdate();
-    const decided = await decideExtension(leave, approved);
+    const decider = await ensureStaff(interaction.user.id);
+    const decided = await decideExtension(leave, approved, decider._id);
     if (!decided) {
         await interaction.followUp({
             ...sendOptions(errorCard("Someone else decided that extension first.")),
@@ -248,7 +249,9 @@ async function decideExtensionFromCard(
         detail: {
             leaveId: leave._id.toHexString(),
             from: leave.endDate,
-            to: extension.endDate
+            to: extension.endDate,
+            requestedAt: extension.requestedAt,
+            reason: extension.reason
         }
     });
 
