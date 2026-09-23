@@ -189,18 +189,19 @@ export async function markLeaveActive(
 }
 
 /**
- * Call off approved leave before it starts. Conditional on the status so it
- * cannot race the sweep: a leave that activated first comes back null, and the
- * caller ends it instead, because by then there are roles to restore.
+ * Call off leave before it starts: a request still waiting on a decision, or
+ * approved leave. Conditional on the status so it cannot race the sweep or a
+ * decision: a leave that activated first comes back null, and the caller ends
+ * it instead, because by then there are roles to restore.
  */
 export async function markLeaveCancelled(
     leave: LeaveDoc,
     cancelledBy: ObjectId,
-    reason: string,
+    reason: string | null,
     at = new Date()
 ): Promise<LeaveDoc | null> {
     return collections.leave().findOneAndUpdate(
-        { _id: leave._id, status: "approved" },
+        { _id: leave._id, status: { $in: ["pending", "approved"] } },
         {
             $set: {
                 status: "cancelled",
@@ -234,7 +235,8 @@ export async function markLeaveEnded(
     leave: LeaveDoc,
     restoreErrors: string[],
     endedEarlyBy: ObjectId | null = null,
-    at = new Date()
+    at = new Date(),
+    endedEarlyReason: string | null = null
 ): Promise<LeaveDoc | null> {
     const end = actualEnd(leave, at);
     const early = end.getTime() < leave.endDate.getTime();
@@ -246,6 +248,7 @@ export async function markLeaveEnded(
                 rolesRestoredAt: at,
                 restoreErrors,
                 endedEarlyBy,
+                endedEarlyReason,
                 endDate: end,
                 plannedEndDate: early ? leave.endDate : leave.plannedEndDate ?? null,
                 // An extension still waiting when the leave ends has nothing

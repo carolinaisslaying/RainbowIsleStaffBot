@@ -512,9 +512,16 @@ leave) from that card; it confirms first, because ending leave restores ranks, r
 and tells somebody who is not in the room that they are back. **Cancelling approved leave that has
 not started is not ending it**: `cancelLeave` moves it to `cancelled` (its own status, never counting,
 booked dates kept), touches no roles and DMs a "Leave cancelled" card rather than a welcome back,
-carrying the reason the Executive gave in the `leaveCancel` modal (`cancellationReason`, also on the card
-and the audit row). Ending active leave asks for none; cancelling does, because it withdraws something
-the member was told they had. The welcome back it replaces used to quote an away period running backwards and restore a role never taken. It is
+carrying the reason the Executive gave (`cancellationReason`, also on the card and the audit row).
+**Both Executive actions ask why**, through one `leaveEnd` modal whose id carries `cancel` or
+`return`: cancelling withdraws something the member was told they had, and bringing somebody back
+early can move their requirement after the fact. The early-end reason is `endedEarlyReason`, on the
+welcome back, the card and the audit row. The mode in the id is what lets a cancellation whose leave
+started while the form was open end it instead and say so. **A member can cancel their own leave**
+with `/leave cancel`, while it waits on a decision or after approval but before it starts: the
+`leaveWithdraw` modal is the confirmation, the reason is optional and goes on the card, and nobody is
+DMed. Withdrawing a waiting request also clears its "new request" ping, and reassesses, because
+pending leave can be holding a review row. The welcome back it replaces used to quote an away period running backwards and restore a role never taken. It is
 conditional on `status: "approved"`, and `markLeaveActive` on the same, so the sweep and the button
 cannot both win: activation that loses puts the roles back, and a cancel that loses ends the leave. `endLeave` takes a `LeaveEndReason`
 and returns the card it sent, so `/leave end` shows the member exactly what it DMed them.

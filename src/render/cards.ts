@@ -1294,7 +1294,7 @@ export function leaveEndConfirmCard(options: {
                     (options.active
                         ? "\n\nExemptions follow the leave they actually took, so a week this " +
                           "cuts short can stop being exempt, and any closed fortnight it changes " +
-                          "is reassessed."
+                          "is reassessed. You are asked why next, and they are told."
                         : "\n\nA cancelled leave exempts nothing, and the record stays on the " +
                           "card marked as cancelled. You are asked why next, and they are told.") +
                     " They can request leave again at any time."

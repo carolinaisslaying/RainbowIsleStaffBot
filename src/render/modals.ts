@@ -22,7 +22,8 @@ import {
 
 export const LEAVE_REQUEST_MODAL = "leaveRequest";
 export const LEAVE_EXTEND_MODAL = "leaveExtend";
-export const LEAVE_CANCEL_MODAL = "leaveCancel";
+export const LEAVE_END_MODAL = "leaveEnd";
+export const LEAVE_WITHDRAW_MODAL = "leaveWithdraw";
 
 export const CONFIG_IMPORT_MODAL = "configImport";
 export const REVIEW_DECISION_MODAL = "reviewDecision";
@@ -469,23 +470,36 @@ export function conductWithdrawModal(warningId: string, displayName: string): Mo
 }
 
 /**
- * Why approved leave is being called off before it starts. The member is told
- * the reason, because being told a booked absence is off with no reason given
- * reads as a rebuke, and the card and the audit log keep it too.
+ * Why an Executive is ending somebody's leave: cancelling approved leave
+ * before it starts, or bringing somebody back before their booked date. The
+ * member is told the reason either way, because being told a booked absence is
+ * off, or cut short, with no reason given reads as a rebuke. The card and the
+ * audit log keep it too.
+ *
+ * Which of the two rides in the id, so the submission can tell when the leave
+ * started while the form was open.
  */
-export function leaveCancelModal(leaveId: string, displayName: string): ModalBuilder {
+export function leaveEndModal(
+    leaveId: string,
+    displayName: string,
+    mode: "cancel" | "return"
+): ModalBuilder {
+    const cancel = mode === "cancel";
     return new ModalBuilder()
-        .setCustomId(`${LEAVE_CANCEL_MODAL}:${leaveId}`)
-        .setTitle("Cancel this leave")
+        .setCustomId(`${LEAVE_END_MODAL}:${leaveId}:${mode}`)
+        .setTitle(cancel ? "Cancel this leave" : "Bring them back now")
         .addTextDisplayComponents(
             new TextDisplayBuilder().setContent(
-                `-# **${displayName}** is told it is off, with this reason. Their staff roles ` +
-                    "were never removed, so nothing else changes."
+                cancel
+                    ? `-# **${displayName}** is told it is off, with this reason. Their staff ` +
+                          "roles were never removed, so nothing else changes."
+                    : `-# **${displayName}** gets their staff roles back now and is told why ` +
+                          "their leave was ended early."
             )
         )
         .addLabelComponents(
             new LabelBuilder()
-                .setLabel("Why is it being cancelled?")
+                .setLabel(cancel ? "Why is it being cancelled?" : "Why is it being ended early?")
                 .setDescription("They read this. The leave card and the audit log keep it too.")
                 .setTextInputComponent(
                     new TextInputBuilder()
@@ -493,6 +507,35 @@ export function leaveCancelModal(leaveId: string, displayName: string): ModalBui
                         .setStyle(TextInputStyle.Paragraph)
                         .setRequired(true)
                         .setMinLength(4)
+                        .setMaxLength(1000)
+                )
+        );
+}
+
+/**
+ * A member calling off their own leave before it starts. The form is the
+ * confirmation: submitting cancels, closing it changes nothing. The reason is
+ * optional, because it is their own leave; when given, it goes on the card for
+ * the Executives.
+ */
+export function leaveWithdrawModal(leaveId: string, summary: string): ModalBuilder {
+    return new ModalBuilder()
+        .setCustomId(`${LEAVE_WITHDRAW_MODAL}:${leaveId}`)
+        .setTitle("Cancel your leave")
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(
+                `${summary}\n-# Submitting cancels it. Close this to keep it.`
+            )
+        )
+        .addLabelComponents(
+            new LabelBuilder()
+                .setLabel("Anything the Executives should know?")
+                .setDescription("Optional. It goes on your leave card in the leave channel.")
+                .setTextInputComponent(
+                    new TextInputBuilder()
+                        .setCustomId(FIELD_REASON)
+                        .setStyle(TextInputStyle.Paragraph)
+                        .setRequired(false)
                         .setMaxLength(1000)
                 )
         );

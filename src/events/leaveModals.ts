@@ -3,21 +3,23 @@ import { ObjectId } from "mongodb";
 import type { StaffBotConfig } from "../config/guildConfig.js";
 import type { StaffDoc } from "../db/types.js";
 import { findLeave, pendingOrApprovedLeaveFor } from "../domain/leave.js";
-import { errorCard, leaveInterpretationCard } from "../render/cards.js";
+import { errorCard, leaveInterpretationCard, noticeCard } from "../render/cards.js";
 import {
     FIELD_END,
     FIELD_REASON,
     FIELD_START,
     LEAVE_EXTEND_MODAL,
+    LEAVE_WITHDRAW_MODAL,
     LEAVE_REQUEST_MODAL
 } from "../render/modals.js";
-import { respond } from "../discord/respond.js";
+import { defer, respond } from "../discord/respond.js";
+import { COLOUR } from "../render/theme.js";
 import { parseInstant } from "../time/input.js";
 import { ts } from "../time/format.js";
 import { cmd } from "../discord/commandMentions.js";
 import { stage } from "./leaveConfirm.js";
 import { leaveLength } from "../domain/leaveDays.js";
-import { describeLeaveChange } from "../services/leaveService.js";
+import { cancelLeave, describeLeaveChange } from "../services/leaveService.js";
 
 /**
  * Leave form submissions.
@@ -282,5 +284,71 @@ export async function handleLeaveModal(
                     `${ts(leave.endDate, "f")}.`
             ]
         })
+    );
+}
+
+/**
+ * A member cancelling their own leave before it starts, from `/leave cancel`.
+ *
+ * Re-derived on submission: the form can sit open while an Executive decides
+ * the request or the sweep starts the leave. Only the member's own record, and
+ * only while it is still waiting or approved.
+ */
+export async function handleLeaveWithdrawModal(
+    client: Client,
+    config: StaffBotConfig,
+    interaction: ModalSubmitInteraction,
+    staff: StaffDoc
+): Promise<void> {
+    const id = interaction.customId.slice(`${LEAVE_WITHDRAW_MODAL}:`.length);
+    if (!ObjectId.isValid(id)) return;
+    const reason = interaction.fields.getTextInputValue(FIELD_REASON).trim() || null;
+
+    await defer(interaction, true);
+    const leave = await findLeave(new ObjectId(id));
+    if (!leave || !leave.staffId.equals(staff._id)) {
+        await respond(interaction, errorCard("That leave is not yours to cancel."));
+        return;
+    }
+
+    const wasPending = leave.status === "pending";
+    const cancelled =
+        (leave.status === "pending" || leave.status === "approved") &&
+        (await cancelLeave(
+            client,
+            config,
+            leave,
+            { discordId: interaction.user.id, staffId: staff._id },
+            reason
+        ));
+
+    if (!cancelled) {
+        const current = (await findLeave(leave._id)) ?? leave;
+        await respond(
+            interaction,
+            errorCard(
+                current.status === "active"
+                    ? "Your leave started while the form was open, so it can't be cancelled. " +
+                          `Use ${cmd("leave end", interaction.guildId)} to come back.`
+                    : `That leave is already **${current.status}**. Nothing was changed.`
+            )
+        );
+        return;
+    }
+
+    await respond(
+        interaction,
+        noticeCard(
+            "Leave cancelled",
+            (wasPending
+                ? `Your request for ${ts(leave.startDate, "f")} to ${ts(leave.endDate, "f")} ` +
+                  "is withdrawn. Nobody needs to decide it now."
+                : `Your leave from ${ts(leave.startDate, "f")} to ${ts(leave.endDate, "f")} ` +
+                  "won't start. Your staff roles were never removed, so nothing changes: " +
+                  "your activity keeps counting as usual.") +
+                (reason ? `\n\n**What you told the Executives:** ${reason}` : "") +
+                "\n\nYour leave card in the leave channel now says it was cancelled.",
+            { colour: COLOUR.settled, ephemeral: true }
+        )
     );
 }

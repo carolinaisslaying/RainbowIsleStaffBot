@@ -240,7 +240,9 @@ export interface WarningDoc {
 }
 
 /**
- * `cancelled` is approved leave an Executive called off before it started. It
+ * `cancelled` is leave called off before it started: withdrawn by the member
+ * while it waited on a decision, or cancelled after approval by them or by an
+ * Executive. It
  * is its own state rather than an `ended` leave with no length, because the two
  * read differently to everybody: nobody was away, no roles were removed, and
  * there is nobody to welcome back.
@@ -288,6 +290,8 @@ export interface LeaveDoc {
      * three cases can be told apart on the record and in the wording.
      */
     endedEarlyBy?: ObjectId | null;
+    /** What the Executive who ended it early gave as the reason. The member is told it. */
+    endedEarlyReason?: string | null;
     /**
      * Who called approved leave off before it started, and when. The booked
      * dates stay as they were: a cancelled leave covers nothing because its
@@ -295,7 +299,10 @@ export interface LeaveDoc {
      */
     cancelledBy?: ObjectId | null;
     cancelledAt?: Date | null;
-    /** What the Executive gave as the reason. The member is told it. */
+    /**
+     * Why. Required from an Executive, who tells the member; optional from the
+     * member themselves, whose reason goes on the card for the Executives.
+     */
     cancellationReason?: string | null;
 }
 

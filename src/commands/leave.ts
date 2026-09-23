@@ -11,7 +11,7 @@ import { isLeadOrAbove } from "../domain/permissions.js";
 import { endLeave } from "../services/leaveService.js";
 import { EMOJI } from "../render/emoji.js";
 import { containersMessage, errorCard, noticeCard, text } from "../render/cards.js";
-import { leaveExtendModal, leaveRequestModal } from "../render/modals.js";
+import { leaveExtendModal, leaveRequestModal, leaveWithdrawModal } from "../render/modals.js";
 import { defer, respond } from "../discord/respond.js";
 import { ts } from "../time/format.js";
 import { formatForInput, inputExample } from "../time/input.js";
@@ -19,7 +19,7 @@ import { cmd } from "../discord/commandMentions.js";
 import { COLOUR } from "../render/theme.js";
 
 /**
- * Leave, as four verbs.
+ * Leave, as five verbs.
  *
  * Requesting and extending both open a modal rather than taking slash command
  * options. Dates and times belong together in one form with room to explain the
@@ -31,12 +31,15 @@ export const leaveCommand: Command = {
     tier: "staff",
     data: new SlashCommandBuilder()
         .setName("leave")
-        .setDescription("Request, extend, end or list leave")
+        .setDescription("Request, extend, cancel, end or list leave")
         .addSubcommand((sub) =>
             sub.setName("request").setDescription("Request leave. Opens a form.")
         )
         .addSubcommand((sub) =>
             sub.setName("extend").setDescription("Ask for a later return date. An Executive approves it.")
+        )
+        .addSubcommand((sub) =>
+            sub.setName("cancel").setDescription("Cancel your leave before it starts")
         )
         .addSubcommand((sub) => sub.setName("end").setDescription("End your leave and come back"))
         .addSubcommand((sub) =>
@@ -59,7 +62,8 @@ export const leaveCommand: Command = {
                             `${ts(held.startDate, "D")} to ` +
                             `${ts(held.endDate, "D")}. Use ` +
                             `${cmd("leave extend", interaction.guildId)} to move the return ` +
-                            "date, or wait for a decision on it."
+                            `date, or ${cmd("leave cancel", interaction.guildId)} to call it off ` +
+                            "before it starts."
                     )
                 );
                 return;
@@ -103,6 +107,39 @@ export const leaveCommand: Command = {
                     zone,
                     formatForInput(extendable.endDate, zone),
                     inputExample(now, zone)
+                )
+            );
+            return;
+        }
+
+        if (sub === "cancel") {
+            // One leave at a time, so there is at most one to cancel. Leave
+            // that has started is ended, not cancelled: roles are involved by
+            // then, and /leave end is the command that gives them back.
+            const held = await pendingOrApprovedLeaveFor(staff._id);
+            const upcoming = held.find(
+                (record) => record.status === "pending" || record.status === "approved"
+            );
+            if (!upcoming) {
+                await respond(
+                    interaction,
+                    errorCard(
+                        held.some((record) => record.status === "active")
+                            ? "Your leave has already started, so it can't be cancelled. Use " +
+                                  `${cmd("leave end", interaction.guildId)} to come back.`
+                            : "You have no upcoming leave to cancel."
+                    )
+                );
+                return;
+            }
+            await interaction.showModal(
+                leaveWithdrawModal(
+                    upcoming._id.toHexString(),
+                    (upcoming.status === "pending"
+                        ? "Your request, still waiting on an Executive:"
+                        : "Your approved leave:") +
+                        ` **${formatForInput(upcoming.startDate, zone)}** to ` +
+                        `**${formatForInput(upcoming.endDate, zone)}** (${zone}).`
                 )
             );
             return;

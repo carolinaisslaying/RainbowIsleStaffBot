@@ -23,7 +23,7 @@ import {
 } from "../services/leaveService.js";
 import { errorCard, leaveEndConfirmCard, noticeCard } from "../render/cards.js";
 import { deferOntoOwnCard, respond, sendOptions } from "../discord/respond.js";
-import { FIELD_REASON, LEAVE_CANCEL_MODAL, leaveCancelModal } from "../render/modals.js";
+import { FIELD_REASON, leaveEndModal } from "../render/modals.js";
 import { audit } from "../domain/audit.js";
 import { ts } from "../time/format.js";
 import { COLOUR } from "../render/theme.js";
@@ -111,38 +111,18 @@ export async function handleLeaveButton(
             return;
         }
 
-        // Cancelling asks why, because the member is told the reason. A modal
-        // cannot follow a defer, so this is all the button does; the write
-        // happens when the reason comes back.
-        if (leave.status === "approved") {
-            const subject = await findStaffById(leave.staffId);
-            await interaction.showModal(
-                leaveCancelModal(
-                    leaveId.toHexString(),
-                    subject
-                        ? await staffDisplayName(client, config, subject.discordId, "This member")
-                        : "This member"
-                )
-            );
-            return;
-        }
-
-        await interaction.deferUpdate();
-        const executive = await ensureStaff(interaction.user.id);
-        await endLeave(client, config, leave, {
-            kind: "executive",
-            discordId: interaction.user.id,
-            staffId: executive._id
-        });
-        await interaction.editReply(
-            sendOptions(
-                noticeCard(
-                    "They are back",
-                    "Their staff roles are restored and they have been told they are back." +
-                        "\n\nThe request card in this channel now shows the outcome.",
-                    { colour: COLOUR.approved }
-                )
-            ) as never
+        // Both ask why, because the member is told the reason. A modal cannot
+        // follow a defer, so this is all the button does; the write happens
+        // when the reason comes back.
+        const subject = await findStaffById(leave.staffId);
+        await interaction.showModal(
+            leaveEndModal(
+                leaveId.toHexString(),
+                subject
+                    ? await staffDisplayName(client, config, subject.discordId, "This member")
+                    : "This member",
+                leave.status === "approved" ? "cancel" : "return"
+            )
         );
         return;
     }
@@ -302,14 +282,15 @@ async function decideExtensionFromCard(
 }
 
 /**
- * The reason for cancelling approved leave, and the cancellation itself.
+ * The reason an Executive gave for cancelling approved leave or bringing
+ * somebody back early, and the change itself.
  *
- * Everything is re-derived here rather than carried from the button: the modal
+ * Everything is re-derived here rather than carried from the button: the form
  * can sit open while the sweep activates the leave or another Executive acts
- * on it. Leave that started in the meantime is ended instead, because by then
- * there are roles to give back and somebody to welcome back.
+ * on it. Leave opened as a cancellation that started in the meantime is ended
+ * instead, because by then there are roles to give back, and the reply says so.
  */
-export async function handleLeaveCancelModal(
+export async function handleLeaveEndModal(
     client: Client,
     config: StaffBotConfig,
     interaction: ModalSubmitInteraction
@@ -320,7 +301,7 @@ export async function handleLeaveCancelModal(
         return;
     }
 
-    const id = interaction.customId.slice(`${LEAVE_CANCEL_MODAL}:`.length);
+    const [, id, mode] = interaction.customId.split(":");
     if (!ObjectId.isValid(id)) return;
     const reason = interaction.fields.getTextInputValue(FIELD_REASON).trim();
 
@@ -358,14 +339,17 @@ export async function handleLeaveCancelModal(
         );
         return;
     }
-    await endLeave(client, config, current, { kind: "executive", ...by });
+    await endLeave(client, config, current, { kind: "executive", ...by, reason });
     await respond(
         interaction,
         noticeCard(
-            "It had already started",
-            "The leave began while you were writing, so it has been ended rather than " +
-                "cancelled: their staff roles are restored and they have been told they are " +
-                "back.\n\nThe request card in this channel now shows the outcome.",
+            mode === "cancel" ? "It had already started" : "They are back",
+            (mode === "cancel"
+                ? "The leave began while you were writing, so it has been ended rather than " +
+                  "cancelled: their staff roles are restored and they have been told they are " +
+                  "back."
+                : "Their staff roles are restored and they have been told they are back.") +
+                `\n\n**Why:** ${reason}\n\nThe request card in this channel now shows the outcome.`,
             { colour: COLOUR.approved }
         )
     );

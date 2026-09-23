@@ -270,3 +270,45 @@ describe("the confirmation card's headings climb above the fortnights", () => {
         expect(json).toContain("### If approved\\n**Fortnight of 7 Sep**");
     });
 });
+
+describe("ending or cancelling somebody's leave asks why", () => {
+    it("carries which of the two it is, so a leave that started meanwhile is caught", async () => {
+        const { leaveEndModal } = await import("../src/render/modals.js");
+        const cancel = leaveEndModal(base.leaveId, "Robin", "cancel").toJSON();
+        const back = leaveEndModal(base.leaveId, "Robin", "return").toJSON();
+        expect(cancel.custom_id).toBe(`leaveEnd:${base.leaveId}:cancel`);
+        expect(back.custom_id).toBe(`leaveEnd:${base.leaveId}:return`);
+        expect(back.title).toBe("Bring them back now");
+        expect(JSON.stringify(back)).toContain("Why is it being ended early?");
+    });
+
+    it("requires the reason from an Executive", async () => {
+        const { leaveEndModal } = await import("../src/render/modals.js");
+        const json = JSON.stringify(leaveEndModal(base.leaveId, "Robin", "return").toJSON());
+        expect(json).toContain('"required":true');
+    });
+
+    it("says on the confirmation that a reason comes next", () => {
+        const json = JSON.stringify(
+            leaveEndConfirmCard({
+                leaveId: base.leaveId,
+                displayName: "Robin",
+                endDate: base.endDate,
+                active: true
+            }).components[0]
+        );
+        expect(json).toContain("You are asked why next");
+    });
+});
+
+describe("a member cancelling their own leave", () => {
+    it("is a form that is its own confirmation, with the reason optional", async () => {
+        const { leaveWithdrawModal } = await import("../src/render/modals.js");
+        const modal = leaveWithdrawModal(base.leaveId, "Your approved leave: **x** to **y**.").toJSON();
+        const json = JSON.stringify(modal);
+        expect(modal.custom_id).toBe(`leaveWithdraw:${base.leaveId}`);
+        expect(json).toContain("Submitting cancels it. Close this to keep it.");
+        expect(json).toContain('"required":false');
+        expect(json).toContain("Optional.");
+    });
+});

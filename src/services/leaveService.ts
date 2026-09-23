@@ -187,8 +187,8 @@ export type LeaveEndReason =
     | { kind: "schedule" }
     /** The member ran `/leave end` themselves. */
     | { kind: "member" }
-    /** An Executive ended it early from the leave channel. */
-    | { kind: "executive"; discordId: string; staffId: ObjectId };
+    /** An Executive ended it early from the leave channel, and said why. */
+    | { kind: "executive"; discordId: string; staffId: ObjectId; reason: string };
 
 /**
  * The one renderer for a leave record's card, wherever it is being drawn.
@@ -222,17 +222,22 @@ export async function leaveCardFor(
         outcome = `-# Away since ${ts(leave.startDate, "R")}. Staff roles are removed.`;
     } else if (leave.status === "cancelled" && leave.cancelledAt) {
         const by = leave.cancelledBy ? await findStaffById(leave.cancelledBy) : null;
+        const themselves = leave.cancelledBy?.equals(leave.staffId) ?? false;
         outcome =
-            `-# Cancelled ${ts(leave.cancelledAt, "R")}` +
-            (by ? ` by <@${by.discordId}>` : "") +
-            ", before it started. Their staff roles were never removed." +
+            (themselves && !leave.decidedAt
+                ? `-# Withdrawn ${ts(leave.cancelledAt, "R")} by <@${by?.discordId}> before a decision.`
+                : `-# Cancelled ${ts(leave.cancelledAt, "R")}` +
+                  (by ? ` by <@${by.discordId}>${themselves ? " themselves" : ""}` : "") +
+                  ", before it started.") +
+            " Their staff roles were never removed." +
             (leave.cancellationReason ? `\n**Why:** ${leave.cancellationReason}` : "");
     } else if (leave.status === "ended" && leave.rolesRestoredAt) {
         const early = leave.endedEarlyBy ? await findStaffById(leave.endedEarlyBy) : null;
         outcome =
             `-# Back ${ts(leave.rolesRestoredAt, "R")}` +
             (early
-                ? `, ended early by <@${early.discordId}>.`
+                ? `, ended early by <@${early.discordId}>.` +
+                  (leave.endedEarlyReason ? `\n**Why:** ${leave.endedEarlyReason}` : "")
                 : leave.plannedEndDate
                   ? ", they ended it themselves."
                   : ", on schedule.") +
@@ -357,12 +362,14 @@ export async function endLeave(
     }
 
     const earlyBy = endedBy.kind === "executive" ? endedBy.staffId : null;
-    const ended = (await markLeaveEnded(leave, errors, earlyBy)) ?? {
+    const earlyReason = endedBy.kind === "executive" ? endedBy.reason : null;
+    const ended = (await markLeaveEnded(leave, errors, earlyBy, new Date(), earlyReason)) ?? {
         ...leave,
         status: "ended" as const,
         rolesRestoredAt: new Date(),
         restoreErrors: errors,
-        endedEarlyBy: earlyBy
+        endedEarlyBy: earlyBy,
+        endedEarlyReason: earlyReason
     };
     await audit("leave.end", {
         actorId: endedBy.kind === "executive" ? endedBy.discordId : staff.discordId,
@@ -371,7 +378,8 @@ export async function endLeave(
             leaveId: leave._id.toHexString(),
             endedBy: endedBy.kind,
             restoreErrors: errors,
-            early: endedBy.kind === "executive" || cutShort(leave)
+            early: endedBy.kind === "executive" || cutShort(leave),
+            reason: earlyReason
         }
     });
 
@@ -432,19 +440,22 @@ export async function endLeave(
 }
 
 /**
- * Call off approved leave before it starts.
+ * Call off leave before it starts: approved leave, by an Executive or the
+ * member, or a request still waiting on a decision, by the member.
  *
  * Separate from `endLeave` because nothing has happened yet that needs
  * undoing: no roles were removed, nobody was away, and the member is told the
- * leave is off rather than welcomed back from it. Returns false when the sweep
- * activated the leave first, so the caller can end it instead.
+ * leave is off rather than welcomed back from it. The member is DMed only when
+ * somebody else cancelled it; they are looking at the reply otherwise. Returns
+ * false when the sweep activated the leave first, or a decision declined it,
+ * so the caller can say so or end it instead.
  */
 export async function cancelLeave(
     client: Client,
     config: StaffBotConfig,
     leave: LeaveDoc,
     by: { discordId: string; staffId: ObjectId },
-    reason: string
+    reason: string | null
 ): Promise<boolean> {
     const cancelled = await markLeaveCancelled(leave, by.staffId, reason);
     if (!cancelled) return false;
@@ -461,7 +472,8 @@ export async function cancelLeave(
         }
     });
 
-    if (staff) {
+    const themselves = by.staffId.equals(leave.staffId);
+    if (staff && !themselves && reason) {
         await tryDm(client, staff.discordId, {
             ...leaveCancelledCard({
                 startDate: leave.startDate,
@@ -473,6 +485,9 @@ export async function cancelLeave(
     }
 
     await updateLeaveCard(client, config, cancelled);
+    // A request withdrawn before a decision leaves nothing for anybody to
+    // decide, so the ping that asked for one goes too.
+    await resolvePing(client, pingKey.leave(leave._id));
     await resolvePing(client, pingKey.extension(leave._id));
 
     // Approved leave counts towards exemptions from the moment it is approved,
@@ -522,7 +537,8 @@ function welcomeBackCard(options: {
     const opening =
         endedBy.kind === "executive"
             ? `**Your leave has been ended early** by <@${endedBy.discordId}>. ` +
-              `You were booked back ${ts(leave.endDate, "D")}; you are back as of now.`
+              `You were booked back ${ts(leave.endDate, "D")}; you are back as of now.\n` +
+              `**Why:** ${endedBy.reason}`
             : endedBy.kind === "member"
               ? "**Your leave is closed** because you ended it."
               : `**Your leave is over.** It ran its full course and closed ` +
