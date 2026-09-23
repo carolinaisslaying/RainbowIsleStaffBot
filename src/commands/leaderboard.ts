@@ -3,7 +3,7 @@ import type { StaffDoc } from "../db/types.js";
 import { collections } from "../db/client.js";
 import { countHiddenStaff, listActiveStaff } from "../domain/staff.js";
 import { countMinutesBetween } from "../domain/activity.js";
-import { staffFullyOnLeaveDuring } from "../domain/leave.js";
+import { staffExemptDuring } from "../domain/leave.js";
 import { weekWindowFor } from "../domain/weekly.js";
 import { currentFortnightIndex, windowForIndex } from "../domain/assessments.js";
 import { ringStateFor } from "../domain/rings.js";
@@ -50,18 +50,29 @@ export async function buildLeaderboard(
         return { entries, label: "All time", target: config.weeklyTargetMinutes };
     }
 
+    const fortnight = windowForIndex(currentFortnightIndex(config, now), config);
     const window =
         scope === "week"
             ? weekWindowFor(now, config)
-            : (() => {
-                  const fortnight = windowForIndex(currentFortnightIndex(config, now), config);
-                  return { start: fortnight.week1Start, end: fortnight.end };
-              })();
+            : { start: fortnight.week1Start, end: fortnight.end };
 
-    // Only leave covering the whole window reads as "on leave" here. Someone
-    // whose leave ended mid-window worked the rest of it and is ranked on what
-    // they earned, rather than being hidden behind a grey row.
-    const onLeave = await staffFullyOnLeaveDuring(window.start, window.end);
+    // "On leave" here is the assessment's own test: a week holding enough leave
+    // to be exempt, or for the fortnight, both weeks exempt. Anyone short of
+    // that worked the rest of the window and is ranked on what they earned.
+    const onLeave =
+        scope === "week"
+            ? await staffExemptDuring(window.start, window.end, config.minimumLeaveDays)
+            : await (async () => {
+                  const [first, second] = await Promise.all([
+                      staffExemptDuring(
+                          fortnight.week1Start,
+                          fortnight.week2Start,
+                          config.minimumLeaveDays
+                      ),
+                      staffExemptDuring(fortnight.week2Start, fortnight.end, config.minimumLeaveDays)
+                  ]);
+                  return new Set([...first].filter((key) => second.has(key)));
+              })();
     const entries: LeaderboardEntry[] = [];
     for (const member of staff) {
         entries.push({
@@ -81,7 +92,7 @@ export async function buildLeaderboard(
         target:
             scope === "week"
                 ? config.weeklyTargetMinutes
-                : config.fortnightRequiredMinutes
+                : config.weeklyTargetMinutes * 2
     };
 }
 

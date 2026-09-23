@@ -69,7 +69,7 @@ async function staffSummary(discordId: string) {
             activeDays: week.activeDays,
             ringState: week.ringState,
             onLeave: week.onLeave,
-            partialLeave: week.partialLeave
+            leaveDays: week.leaveDays
         },
         streakWeeks: streak,
         recentShifts: shifts.map((shift) => ({

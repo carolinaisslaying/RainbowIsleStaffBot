@@ -8,6 +8,7 @@ import type {
     DemandBucketDoc,
     FortnightAssessmentDoc,
     FortnightReviewDoc,
+    PingDoc,
     GuildConfigDoc,
     LeaveDoc,
     ShiftDoc,
@@ -60,7 +61,8 @@ export const collections = {
     guildConfig: () => db().collection<GuildConfigDoc>("guildConfig"),
     auditLog: () => db().collection<AuditLogDoc>("auditLog"),
     deliveries: () => db().collection<DeliveryDoc>("deliveries"),
-    fortnightReviews: () => db().collection<FortnightReviewDoc>("fortnightReviews")
+    fortnightReviews: () => db().collection<FortnightReviewDoc>("fortnightReviews"),
+    pings: () => db().collection<PingDoc>("pings")
 };
 
 /**

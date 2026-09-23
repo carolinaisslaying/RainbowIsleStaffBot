@@ -88,9 +88,9 @@ before anything is removed.
 - Refuses while the leave is `active` and holds roles that have not been given
   back, because `removedRoles` is the only list of what the member held. End the
   leave first, then purge.
-- Names the fortnights that will lose their exemption before you confirm. Those
-  fortnights are reassessed on the figures alone at the next
-  `/admin recompute`, and may come out adverse.
+- Names every verdict the purge would move before you confirm, and reassesses
+  those fortnights straight after the delete. A fortnight that falls below its
+  requirement goes back on the review queue, and the Executives are pinged.
 - Writes the audit row **before** deleting, with the whole record embedded, and
   aborts the purge if that write fails. The audit log is the only way back from
   a mistaken purge.
@@ -219,6 +219,11 @@ and removing rows silently corrupts every historical coverage heatmap.
 `uptimeHours` is the same: a UTC hour and the minutes the bot was connected in
 it, with nothing about anybody. Deleting from it turns heard hours into missing
 ones, and the heatmaps then drop them from every average.
+
+`pings` is bookkeeping for the reply messages that ping the Executives: a key
+naming a leave, warning or assessment by its record id, and where the reply
+sits. No user ID. A ping left pointing at a deleted record is harmless; its
+reply stays in the channel until somebody deletes it by hand.
 
 ## Verification
 

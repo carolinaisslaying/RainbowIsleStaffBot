@@ -90,6 +90,12 @@ export interface TrendPoint {
     exempt: boolean;
     /** The fortnight being decided. Lifted, and the only bar with its value on it. */
     current: boolean;
+    /**
+     * This fortnight's own requirement, when leave made it lower than the
+     * chart's line. Drawn as a short dashed mark across the bar, so a reduced
+     * fortnight is read against what it actually asked for.
+     */
+    requiredMinutes?: number;
 }
 
 /**
@@ -158,6 +164,17 @@ export function trendSvg(input: {
                 `<rect x="${round(x)}" y="${round(top)}" width="${round(barWidth)}" ` +
                     `height="${round(height)}" rx="4" fill="${fill}" />`
             );
+            if (
+                point.requiredMinutes !== undefined &&
+                point.requiredMinutes !== input.requiredMinutes
+            ) {
+                const own = y(point.requiredMinutes);
+                parts.push(
+                    `<line class="own-requirement" x1="${round(x - 3)}" y1="${round(own)}" ` +
+                        `x2="${round(x + barWidth + 3)}" y2="${round(own)}" ` +
+                        `stroke="${REQUIREMENT}" stroke-width="2" stroke-dasharray="3 3" />`
+                );
+            }
         }
 
         parts.push(

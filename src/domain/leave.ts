@@ -1,16 +1,24 @@
 import { ObjectId } from "mongodb";
 import { collections } from "../db/client.js";
 import type { LeaveDoc } from "../db/types.js";
+import { weekLeave, type LeaveSpan, type WeekLeave } from "./leaveDays.js";
 
 /**
- * Leave suspends assessment, freezes streaks, greys the rings and hides the
- * member from public leaderboards. It never deletes or rewrites their history.
+ * Leave suspends assessment for the weeks it exempts, freezes streaks, greys
+ * the rings and hides the member from public leaderboards. It never deletes or
+ * rewrites their history.
+ *
+ * How much leave exempts what is `domain/leaveDays.ts`. This file is the
+ * records.
  */
+
+/** The statuses whose leave counts towards an exemption. */
+const COUNTING: LeaveDoc["status"][] = ["approved", "active", "ended"];
 
 export async function createLeaveRequest(
     staffId: ObjectId,
     startDate: Date,
-    endDate: Date | null,
+    endDate: Date,
     reason: string
 ): Promise<LeaveDoc> {
     const doc: LeaveDoc = {
@@ -19,6 +27,8 @@ export async function createLeaveRequest(
         requestedAt: new Date(),
         startDate,
         endDate,
+        plannedEndDate: null,
+        pendingExtension: null,
         reason,
         status: "pending",
         decidedBy: null,
@@ -43,7 +53,7 @@ export async function activeLeaveFor(
         staffId,
         status: "active",
         startDate: { $lte: at },
-        $or: [{ endDate: null }, { endDate: { $gte: at } }]
+        endDate: { $gte: at }
     });
 }
 
@@ -56,9 +66,9 @@ export async function pendingOrApprovedLeaveFor(staffId: ObjectId): Promise<Leav
 }
 
 /**
- * Leave records that overlap [from, to). Used to mark a week or a fortnight
- * exempt. Approved but not yet activated leave counts: the exemption follows
- * the decision, not the role change.
+ * Leave records that overlap [from, to) and count towards an exemption.
+ * Approved but not yet activated leave counts: the exemption follows the
+ * decision, not the role change.
  */
 export async function leaveOverlapping(
     staffId: ObjectId,
@@ -69,113 +79,80 @@ export async function leaveOverlapping(
         .leave()
         .find({
             staffId,
-            status: { $in: ["approved", "active", "ended"] },
+            status: { $in: COUNTING },
             startDate: { $lt: to },
-            $or: [{ endDate: null }, { endDate: { $gte: from } }]
+            endDate: { $gt: from }
         })
         .toArray();
 }
 
-export async function isOnLeaveDuring(
+/**
+ * Leave waiting on an Executive that overlaps [from, to), as the spans it would
+ * add if approved: a pending request's whole window, and the stretch a pending
+ * extension would add beyond the current end.
+ */
+export async function pendingSpansOverlapping(
     staffId: ObjectId,
     from: Date,
     to: Date
-): Promise<boolean> {
-    const overlaps = await leaveOverlapping(staffId, from, to);
-    return overlaps.length > 0;
+): Promise<LeaveSpan[]> {
+    const records = await collections
+        .leave()
+        .find({
+            staffId,
+            $or: [
+                { status: "pending", startDate: { $lt: to }, endDate: { $gt: from } },
+                {
+                    status: { $in: ["approved", "active"] },
+                    "pendingExtension.endDate": { $gt: from },
+                    endDate: { $lt: to }
+                }
+            ]
+        })
+        .toArray();
+
+    return records.map((record) =>
+        record.status === "pending"
+            ? { startDate: record.startDate, endDate: record.endDate }
+            : {
+                  startDate: record.endDate,
+                  endDate: (record.pendingExtension as { endDate: Date }).endDate
+              }
+    );
 }
 
-export interface LeaveCoverage {
-    /** Leave covers every moment of the window. The week is genuinely absent. */
-    full: boolean;
-    /** Leave touches the window without covering it. Part of the week was worked. */
-    partial: boolean;
-    /** When the leave ended, if it ended inside the window. */
-    endedAt: Date | null;
-    /** When the leave began, if it began inside the window. */
-    startedAt: Date | null;
-}
-
-/**
- * How much of a window leave actually covers.
- *
- * The distinction matters because "on leave" greys a member's rings, exempts
- * them from assessment and hides their figures. Applying that to a week in
- * which leave ended on the Tuesday told everyone the member was away all week
- * when they had in fact worked five days of it, and hid the minutes they
- * earned. So full coverage and partial coverage are different answers now, and
- * only full coverage suspends anything.
- *
- * Overlapping and adjacent leave records are merged before measuring, so two
- * back-to-back records covering a week between them count as covering it.
- */
-export async function leaveCoverageFor(
+/** A member's leave in one week, and whether it exempts the week. */
+export async function weekLeaveFor(
     staffId: ObjectId,
     from: Date,
-    to: Date
-): Promise<LeaveCoverage> {
-    return coverageOf(await leaveOverlapping(staffId, from, to), from, to);
+    to: Date,
+    minimumLeaveDays: number
+): Promise<WeekLeave> {
+    return weekLeave(await leaveOverlapping(staffId, from, to), from, to, minimumLeaveDays);
 }
 
-/**
- * The measuring itself, as a pure function over records already fetched.
- *
- * Overlapping and adjacent records are merged before measuring, so two
- * back-to-back leaves covering a week between them count as covering it.
- */
-export function coverageOf(
-    records: Pick<LeaveDoc, "startDate" | "endDate">[],
+/** Staff ids whose leave exempts the window, resolved in one query. */
+export async function staffExemptDuring(
     from: Date,
-    to: Date
-): LeaveCoverage {
-    const none: LeaveCoverage = { full: false, partial: false, endedAt: null, startedAt: null };
-    if (records.length === 0) return none;
+    to: Date,
+    minimumLeaveDays: number
+): Promise<Set<string>> {
+    const docs = await collections
+        .leave()
+        .find({ status: { $in: COUNTING }, startDate: { $lt: to }, endDate: { $gt: from } })
+        .toArray();
 
-    const windowFrom = from.getTime();
-    const windowTo = to.getTime();
-
-    const clipped = records
-        .map((record) => ({
-            from: Math.max(windowFrom, record.startDate.getTime()),
-            // Open ended leave runs past any window we could be asked about.
-            to: Math.min(windowTo, record.endDate ? record.endDate.getTime() : windowTo),
-            rawStart: record.startDate.getTime(),
-            rawEnd: record.endDate ? record.endDate.getTime() : null
-        }))
-        .filter((span) => span.to > span.from)
-        .sort((left, right) => left.from - right.from);
-
-    if (clipped.length === 0) return none;
-
-    // Merge, then ask whether the merged run reaches both edges of the window.
-    const runStart = clipped[0].from;
-    let reach = clipped[0].to;
-    let covered = true;
-    for (const span of clipped.slice(1)) {
-        if (span.from > reach) {
-            covered = false;
-            break;
-        }
-        reach = Math.max(reach, span.to);
+    const byStaff = new Map<string, LeaveDoc[]>();
+    for (const doc of docs) {
+        const key = doc.staffId.toHexString();
+        byStaff.set(key, [...(byStaff.get(key) ?? []), doc]);
     }
-    const full = covered && runStart <= windowFrom && reach >= windowTo;
 
-    const endedAt = clipped
-        .map((span) => span.rawEnd)
-        .filter((end): end is number => end !== null && end > windowFrom && end < windowTo)
-        .sort((left, right) => right - left)[0];
-
-    const startedAt = clipped
-        .map((span) => span.rawStart)
-        .filter((start) => start > windowFrom && start < windowTo)
-        .sort((left, right) => left - right)[0];
-
-    return {
-        full,
-        partial: !full,
-        endedAt: endedAt === undefined ? null : new Date(endedAt),
-        startedAt: startedAt === undefined ? null : new Date(startedAt)
-    };
+    const exempt = new Set<string>();
+    for (const [key, records] of byStaff) {
+        if (weekLeave(records, from, to, minimumLeaveDays).exempt) exempt.add(key);
+    }
+    return exempt;
 }
 
 export async function decideLeave(
@@ -205,16 +182,45 @@ export async function markLeaveActive(
         .updateOne({ _id: leaveId }, { $set: { status: "active", removedRoles } });
 }
 
+/**
+ * Where a leave ending at `at` actually ends: the booked date if it ran its
+ * course, the moment it stopped if that came sooner, and never before it
+ * started, so a leave cancelled before it began covers nothing.
+ */
+export function actualEnd(leave: Pick<LeaveDoc, "startDate" | "endDate">, at: Date): Date {
+    const end = Math.min(leave.endDate.getTime(), at.getTime());
+    return new Date(Math.max(leave.startDate.getTime(), end));
+}
+
+/**
+ * Close a leave record. An early end moves `endDate` to the moment it ended
+ * and keeps the booked date in `plannedEndDate`, so a fortnight is exempted by
+ * the leave somebody took rather than the leave they booked.
+ */
 export async function markLeaveEnded(
-    leaveId: ObjectId,
+    leave: LeaveDoc,
     restoreErrors: string[],
-    endedEarlyBy: ObjectId | null = null
-): Promise<void> {
-    await collections.leave().updateOne(
-        { _id: leaveId },
+    endedEarlyBy: ObjectId | null = null,
+    at = new Date()
+): Promise<LeaveDoc | null> {
+    const end = actualEnd(leave, at);
+    const early = end.getTime() < leave.endDate.getTime();
+    return collections.leave().findOneAndUpdate(
+        { _id: leave._id },
         {
-            $set: { status: "ended", rolesRestoredAt: new Date(), restoreErrors, endedEarlyBy }
-        }
+            $set: {
+                status: "ended",
+                rolesRestoredAt: at,
+                restoreErrors,
+                endedEarlyBy,
+                endDate: end,
+                plannedEndDate: early ? leave.endDate : leave.plannedEndDate ?? null,
+                // An extension still waiting when the leave ends has nothing
+                // left to extend.
+                pendingExtension: null
+            }
+        },
+        { returnDocument: "after" }
     );
 }
 
@@ -237,27 +243,59 @@ export async function recordLeaveCard(
 }
 
 /**
- * Push out a return date. The extension reason is appended rather than
- * replacing the original, so an Executive reading the record later sees the
- * whole story and not just the most recent sentence.
+ * Ask for a later return date. The leave keeps running on its current end
+ * until an Executive decides, so nothing about the member's roles or their
+ * requirement moves yet.
  */
-export async function extendLeave(
+export async function requestExtension(
     leaveId: ObjectId,
-    endDate: Date | null,
-    reasonNote?: string
+    endDate: Date,
+    reason: string,
+    at = new Date()
 ): Promise<LeaveDoc | null> {
-    const existing = await collections.leave().findOne({ _id: leaveId });
-    if (!existing) return null;
+    return collections.leave().findOneAndUpdate(
+        {
+            _id: leaveId,
+            status: { $in: ["approved", "active"] },
+            endDate: { $lt: endDate },
+            pendingExtension: null
+        },
+        { $set: { pendingExtension: { endDate, reason, requestedAt: at } } },
+        { returnDocument: "after" }
+    );
+}
 
-    const reason = reasonNote
-        ? `${existing.reason}\n\nExtension requested ${new Date()
-              .toISOString()
-              .slice(0, 10)}: ${reasonNote}`.slice(0, 4000)
-        : existing.reason;
+/**
+ * Decide a pending extension. Approving moves the end date and appends the
+ * member's reason to the record, so an Executive reading it later sees the
+ * whole story and not only the most recent sentence. Declining leaves the
+ * leave exactly as it was.
+ */
+export async function decideExtension(
+    leave: LeaveDoc,
+    approved: boolean
+): Promise<LeaveDoc | null> {
+    const extension = leave.pendingExtension;
+    if (!extension) return null;
+
+    const reason = approved
+        ? `${leave.reason}\n\nExtended to ${extension.endDate.toISOString().slice(0, 10)}: ` +
+          extension.reason
+        : leave.reason;
 
     return collections.leave().findOneAndUpdate(
-        { _id: leaveId, status: { $in: ["approved", "active"] } },
-        { $set: { endDate, reason } },
+        {
+            _id: leave._id,
+            status: { $in: ["approved", "active"] },
+            "pendingExtension.requestedAt": extension.requestedAt
+        },
+        {
+            $set: {
+                ...(approved ? { endDate: extension.endDate } : {}),
+                reason: reason.slice(0, 4000),
+                pendingExtension: null
+            }
+        },
         { returnDocument: "after" }
     );
 }
@@ -270,11 +308,11 @@ export async function leaveDueToActivate(at = new Date()): Promise<LeaveDoc[]> {
         .toArray();
 }
 
-/** Active leave whose end date has passed. Open-ended leave never appears here. */
+/** Active leave whose end date has passed. */
 export async function leaveDueToEnd(at = new Date()): Promise<LeaveDoc[]> {
     return collections
         .leave()
-        .find({ status: "active", endDate: { $ne: null, $lte: at } })
+        .find({ status: "active", endDate: { $lte: at } })
         .toArray();
 }
 
@@ -283,7 +321,7 @@ export async function currentAndUpcomingLeave(at = new Date()): Promise<LeaveDoc
         .leave()
         .find({
             status: { $in: ["pending", "approved", "active"] },
-            $or: [{ endDate: null }, { endDate: { $gte: at } }]
+            endDate: { $gte: at }
         })
         .sort({ startDate: 1 })
         .toArray();
@@ -305,34 +343,17 @@ export async function leaveHistory(staffId: ObjectId): Promise<LeaveDoc[]> {
     return collections.leave().find({ staffId }).sort({ startDate: -1 }).toArray();
 }
 
-/** Staff IDs with leave overlapping the window at all, resolved in one query. */
-export async function staffOnLeaveDuring(from: Date, to: Date): Promise<Set<string>> {
-    const docs = await collections
+/** A member's other leave, for comparing their requirement with and without one record. */
+export async function otherCountingLeave(
+    staffId: ObjectId,
+    excludeId: ObjectId | null
+): Promise<LeaveDoc[]> {
+    return collections
         .leave()
         .find({
-            status: { $in: ["approved", "active", "ended"] },
-            startDate: { $lt: to },
-            $or: [{ endDate: null }, { endDate: { $gte: from } }]
+            staffId,
+            status: { $in: COUNTING },
+            ...(excludeId ? { _id: { $ne: excludeId } } : {})
         })
-        .project<{ staffId: ObjectId }>({ staffId: 1 })
         .toArray();
-    return new Set(docs.map((doc) => doc.staffId.toHexString()));
-}
-
-/**
- * Staff IDs whose leave covers the whole window, which is the only kind that
- * should show as "on leave" rather than as a low score. Someone whose leave
- * ended on the Tuesday worked most of that week and their figures say so.
- */
-export async function staffFullyOnLeaveDuring(
-    from: Date,
-    to: Date
-): Promise<Set<string>> {
-    const candidates = await staffOnLeaveDuring(from, to);
-    const full = new Set<string>();
-    for (const key of candidates) {
-        const coverage = await leaveCoverageFor(new ObjectId(key), from, to);
-        if (coverage.full) full.add(key);
-    }
-    return full;
 }

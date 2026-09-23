@@ -15,6 +15,7 @@ import {
 import { tierConsequenceLine } from "../render/tiers.js";
 import { sendOptions } from "../discord/respond.js";
 import { tryDm } from "../discord/roles.js";
+import { pingExecutives, pingKey } from "./pings.js";
 import { staffDisplayName } from "../discord/displayName.js";
 import { log } from "../log.js";
 
@@ -129,8 +130,32 @@ export async function warningCardFor(
                       : "an Executive who has since left",
                   reason: warning.withdrawalReason ?? ""
               }
-            : null
+            : null,
+        coveredByLeaveAt: warning.coveredByLeaveAt ?? null
     });
+}
+
+/**
+ * A warning that could not be delivered, pinged on its log card. Somebody has
+ * to tell the member another way, and the card only says so to whoever
+ * happens to scroll past it.
+ */
+export async function pingUndelivered(
+    client: Client,
+    config: StaffBotConfig,
+    warningId: ObjectId
+): Promise<void> {
+    const warning = await collections.warnings().findOne({ _id: warningId });
+    if (!warning?.logChannelId || !warning.logMessageId || warning.rehearsal) return;
+    const subject = await findStaffById(warning.staffId);
+    await pingExecutives(
+        client,
+        config,
+        pingKey.warning(warning._id),
+        { channelId: warning.logChannelId, messageId: warning.logMessageId },
+        `This warning could not reach ${subject ? `<@${subject.discordId}>` : "the member"}: ` +
+            "their direct messages are closed. Tell them another way."
+    );
 }
 
 /**

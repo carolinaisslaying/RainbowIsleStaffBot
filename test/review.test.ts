@@ -40,6 +40,24 @@ describe("which buttons a row draws", () => {
             "dismiss"
         ]);
     });
+
+    it("drops the warning button while a leave request could take them off the queue", () => {
+        expect(
+            rowButtons({ outcome: null, departed: false, rehearsal: false, held: true })
+        ).toEqual(["excuse", "dismiss"]);
+    });
+
+    it("draws nothing on an undecided row leave has taken off the queue", () => {
+        expect(
+            rowButtons({ outcome: null, departed: false, rehearsal: false, below: false })
+        ).toEqual([]);
+    });
+
+    it("keeps reopen on a decided row leave has since taken off the queue", () => {
+        expect(
+            rowButtons({ outcome: "warned", departed: false, rehearsal: false, below: false })
+        ).toEqual(["reopen"]);
+    });
 });
 
 describe("who may decide what", () => {
@@ -79,6 +97,20 @@ describe("who may decide what", () => {
         expect(
             decisionPermitted({ ...base, action: "dismiss", subjectStaffId: ana }).ok
         ).toBe(true);
+    });
+
+    it("refuses a warning while their leave request is undecided", () => {
+        const seen = decisionPermitted({ ...base, action: "warn", held: true });
+        expect(seen.ok).toBe(false);
+        if (!seen.ok) expect(seen.reason).toContain("Decide the leave first");
+        expect(decisionPermitted({ ...base, action: "excuse", held: true }).ok).toBe(true);
+    });
+
+    it("refuses every decision on a row leave has taken off the queue, except reopen", () => {
+        for (const action of ["warn", "excuse", "dismiss"] as const) {
+            expect(decisionPermitted({ ...base, action, below: false }).ok).toBe(false);
+        }
+        expect(decisionPermitted({ ...base, action: "reopen", below: false }).ok).toBe(true);
     });
 
     it("refuses a warning for somebody who has left", () => {
@@ -140,24 +172,40 @@ describe("the header's sentence", () => {
         expect(queueCounts(rows(1, 3))).toEqual({
             below: 3,
             decided: 1,
-            remaining: 2
+            remaining: 2,
+            held: 0
         });
     });
 
+    it("keeps rows waiting on leave out of what is left to decide", () => {
+        const counts = queueCounts([
+            { outcome: null, held: true },
+            { outcome: null },
+            { outcome: "excused" }
+        ]);
+        expect(counts).toEqual({ below: 3, decided: 1, remaining: 1, held: 1 });
+        expect(queueHeadline(counts)).toContain("1 waits on a leave decision first");
+    });
+
+    it("is not all reviewed while a held row is undecided", () => {
+        const counts = queueCounts([{ outcome: null, held: true }, { outcome: "warned" }]);
+        expect(queueHeadline(counts)).not.toContain("All reviewed");
+    });
+
     it("reads correctly with nobody below", () => {
-        expect(queueHeadline(queueCounts([]), 240)).toContain("Nothing to review");
+        expect(queueHeadline(queueCounts([]))).toContain("Nothing to review");
     });
 
     it("reads correctly with one member left", () => {
-        expect(queueHeadline(queueCounts(rows(2, 3)), 240)).toContain("1 still to decide");
+        expect(queueHeadline(queueCounts(rows(2, 3)))).toContain("1 still to decide");
     });
 
     it("reads in the past tense once the queue is worked", () => {
-        expect(queueHeadline(queueCounts(rows(3, 3)), 240)).toContain("All reviewed");
+        expect(queueHeadline(queueCounts(rows(3, 3)))).toContain("All reviewed");
     });
 
     it("uses singular grammar for one member", () => {
-        expect(queueHeadline(queueCounts(rows(0, 1)), 240)).toContain("1 member is under");
+        expect(queueHeadline(queueCounts(rows(0, 1)))).toContain("1 member is under");
     });
 });
 

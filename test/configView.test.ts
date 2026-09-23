@@ -117,6 +117,7 @@ describe("setup status", () => {
                 staffGuildId: "2",
                 moderationDepartmentRole: "3",
                 executiveRoles: ["4"],
+                staffExecutivePingRole: "9",
                 availabilityRole: "5",
                 trackedChannels: ["6"],
                 leaveChannelId: "7",
@@ -135,6 +136,7 @@ describe("setup status", () => {
                 staffGuildId: "2",
                 moderationDepartmentRole: "3",
                 executiveRoles: ["4"],
+                staffExecutivePingRole: "9",
                 availabilityRole: "5",
                 trackedChannels: ["6"],
                 leaveChannelId: "7",
@@ -215,7 +217,7 @@ describe("shipped defaults", () => {
     // does, so it should be a deliberate edit and not a drift.
     it("matches the agreed Targets, Timings and Calendar table", () => {
         expect(DEFAULT_CONFIG.weeklyTargetMinutes).toBe(120);
-        expect(DEFAULT_CONFIG.fortnightRequiredMinutes).toBe(240);
+        expect(DEFAULT_CONFIG.minimumLeaveDays).toBe(3);
         expect(DEFAULT_CONFIG.weeklyShiftTargetHours).toBe(4);
         expect(DEFAULT_CONFIG.weeklyActiveDaysTarget).toBe(3);
         expect(DEFAULT_CONFIG.amberThresholdPercent).toBe(75);

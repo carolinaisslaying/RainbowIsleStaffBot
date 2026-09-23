@@ -26,7 +26,9 @@ const base = {
     acknowledgedLine: null,
     departed: false,
     rehearsal: false,
-    contradiction: null
+    contradiction: null,
+    below: true,
+    leaveLines: []
 };
 
 const json = (extra: Record<string, unknown> = {}) =>

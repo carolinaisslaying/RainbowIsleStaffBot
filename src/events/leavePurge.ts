@@ -4,14 +4,17 @@ import type { ButtonInteraction, Client } from "discord.js";
 import type { StaffBotConfig } from "../config/guildConfig.js";
 import { collections } from "../db/client.js";
 import { findLeave, purgeLeaveRecord } from "../domain/leave.js";
-import { exemptionsLostByPurging, holdsUnrestoredRoles } from "../domain/leavePurge.js";
+import { holdsUnrestoredRoles, verdictsChangedByPurging } from "../domain/leavePurge.js";
+import type { AssessmentStatus } from "../db/types.js";
 import { findStaffById } from "../domain/staff.js";
 import { fetchPublicMember, isExecutive, resolveTier } from "../domain/permissions.js";
 import { EMOJI } from "../render/emoji.js";
 import { errorCard, noticeCard, purgeConfirmCard } from "../render/cards.js";
 import { leaveCardFor } from "../services/leaveService.js";
+import { reassessAfterLeaveChange } from "../services/leaveReassess.js";
+import { pingKey, resolvePing } from "../services/pings.js";
 import { respond, sendOptions } from "../discord/respond.js";
-import { ts } from "../time/format.js";
+import { labelDate, ts } from "../time/format.js";
 import { cmd } from "../discord/commandMentions.js";
 import { COLOUR } from "../render/theme.js";
 import { log } from "../log.js";
@@ -26,8 +29,9 @@ import { log } from "../log.js";
  *    the first;
  *  - refused outright while the member is away and holding roles the record is
  *    the only description of;
- *  - the fortnights that lose their exemption are named before the click, not
- *    discovered weeks later in a recompute;
+ *  - every verdict the purge would move is named before the click, and those
+ *    fortnights are reassessed straight after it rather than discovered weeks
+ *    later in a recompute;
  *  - the audit row is written before the delete and its failure aborts the
  *    purge, so there is no path that removes a record without a trace of who
  *    removed it and what it said.
@@ -137,7 +141,7 @@ async function askForConfirmation(
                     `${leave.removedRoles.length === 1 ? "" : "s"} the bot set aside for them. ` +
                     "Purging it would lose track of which roles to give back.\n\n" +
                     `End the leave first with ${cmd("leave end", interaction.guildId)}, ` +
-                    `or wait for it to close on ${leave.endDate ? ts(leave.endDate, "D") : "its own"}. ` +
+                    `or wait for it to close on ${ts(leave.endDate, "D")}. ` +
                     `Purge it after that.` +
                     (subject ? `\n\n-# Member: <@${subject.discordId}>` : "")
             )
@@ -145,9 +149,9 @@ async function askForConfirmation(
         return;
     }
 
-    const [subject, exemptions] = await Promise.all([
+    const [subject, changes] = await Promise.all([
         findStaffById(leave.staffId),
-        exemptionsLostByPurging(leave, config)
+        verdictsChangedByPurging(leave, config)
     ]);
 
     sweep();
@@ -168,10 +172,10 @@ async function askForConfirmation(
             startDate: leave.startDate,
             endDate: leave.endDate,
             status: leave.status,
-            exemptions: exemptions.map(
-                (lost) =>
-                    `Fortnight ${lost.index}, ${ts(lost.windowStart, "D")} to ` +
-                    `${ts(lost.windowEnd, "D")}`
+            verdictChanges: changes.map(
+                (change) =>
+                    `The fortnight of ${labelDate(change.windowStart, config.accountingTimezone)}: ` +
+                    `${describeVerdict(change.before)}, becomes ${describeVerdict(change.after)}`
             )
         })
     );
@@ -233,6 +237,8 @@ async function purge(
                     requestedAt: leave.requestedAt,
                     startDate: leave.startDate,
                     endDate: leave.endDate,
+                    plannedEndDate: leave.plannedEndDate,
+                    pendingExtension: leave.pendingExtension,
                     reason: leave.reason,
                     status: leave.status,
                     decidedBy: leave.decidedBy?.toHexString() ?? null,
@@ -264,20 +270,36 @@ async function purge(
     }
 
     await editLogCard(client, config, entry, leave, interaction.user.id);
+    for (const key of [
+        pingKey.leave(leave._id),
+        pingKey.extension(leave._id),
+        pingKey.restore(leave._id)
+    ]) {
+        await resolvePing(client, key);
+    }
 
-    const exemptionNote =
-        leave.status === "ended" || leave.status === "active"
-            ? `\n\nIf that leave was exempting an assessment, run ` +
-              `${cmd("admin recompute", interaction.guildId)} so the affected fortnights are ` +
-              "reassessed now rather than at the next sweep."
-            : "";
+    // The same reassessment every other leave change runs, so a verdict the
+    // record was holding up moves now rather than at the next recompute.
+    await reassessAfterLeaveChange(
+        client,
+        config,
+        leave.staffId,
+        [
+            { startDate: leave.startDate, endDate: leave.endDate },
+            ...(leave.pendingExtension
+                ? [{ startDate: leave.endDate, endDate: leave.pendingExtension.endDate }]
+                : [])
+        ],
+        "leave purged"
+    );
 
     await interaction.editReply(
         sendOptions(
             noticeCard(
                 "Purged",
-                `The leave record is gone from the database.\n\nThe audit log holds what it ` +
-                    `said, including the reason given, and is the only way back.${exemptionNote}`,
+                "The leave record is gone from the database, and any closed fortnight it " +
+                    "touched has been reassessed without it.\n\nThe audit log holds what it " +
+                    "said, including the reason given, and is the only way back.",
                 { colour: COLOUR.settled, emoji: EMOJI.purge }
             )
         ) as never
@@ -310,4 +332,10 @@ async function editLogCard(
         // turn a completed purge into an error the executive has to interpret.
         log.warn("Purged a leave record but could not edit its log card", error);
     }
+}
+
+/** "below, needs 120 minutes", "met", "waived". */
+function describeVerdict(verdict: { status: AssessmentStatus; requiredMinutes: number }): string {
+    if (verdict.status === "exempt") return "waived";
+    return `${verdict.status} (requires ${verdict.requiredMinutes} minutes)`;
 }

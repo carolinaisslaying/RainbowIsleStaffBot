@@ -59,18 +59,6 @@ export function anchorStatus(
 }
 
 /**
- * A requirement nobody can reach by meeting their weekly target twice.
- *
- * A fortnight is two weeks. If `fortnightRequiredMinutes` exceeds
- * `weeklyTargetMinutes` doubled, a member who closes both weekly rings still
- * lands below the requirement and arrives in the review queue — so the rings
- * say one thing and the assessment says another, and neither is wrong.
- */
-export function requirementIsReachable(config: StaffBotConfig): boolean {
-    return config.fortnightRequiredMinutes <= config.weeklyTargetMinutes * 2;
-}
-
-/**
  * A shift that ends before the member is even marked Away.
  *
  * `autoEndAfterAwayMinutes` counts from the moment a shift goes Away, so it is
@@ -99,17 +87,6 @@ export function configWarnings(config: StaffBotConfig, now: Date): ConfigWarning
                 "warning can be issued**. The first fortnight this cycle counts closes " +
                 `<t:${Math.floor(anchor.firstAssessableCloses.getTime() / 1000)}:D>. ` +
                 "Move the anchor back if assessment should already be running."
-        });
-    }
-
-    if (!requirementIsReachable(config)) {
-        warnings.push({
-            key: "fortnightRequiredMinutes",
-            text:
-                `**${config.fortnightRequiredMinutes} minutes cannot be reached.** A fortnight ` +
-                `is two weeks and the weekly minimum is ${config.weeklyTargetMinutes}, so a ` +
-                `member who meets it both weeks still finishes on ` +
-                `${config.weeklyTargetMinutes * 2} and lands in the review queue.`
         });
     }
 

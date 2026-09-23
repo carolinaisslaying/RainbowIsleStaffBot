@@ -84,7 +84,10 @@ describe("the leave card's mark", () => {
         );
 
     it("matches the colour the card is drawn in, for every state", () => {
-        expect(heading("pending")).toContain("⏳ Leave request");
+        // Waiting leave has its own mark: ⏳ belongs to the fortnight review,
+        // which is amber for the same reason.
+        expect(heading("pending")).toContain("📆 Leave request");
+        expect(heading("pending")).not.toContain("⏳");
         expect(heading("approved")).toContain("✅ Leave request");
         expect(heading("declined")).toContain("❌ Leave request");
         expect(heading("active")).toContain("🌙 Leave request");

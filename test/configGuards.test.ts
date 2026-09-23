@@ -4,7 +4,6 @@ import {
     autoEndIsGenerous,
     configWarnings,
     historyChangeWarning,
-    requirementIsReachable,
     rewritesHistory
 } from "../src/config/configGuards.js";
 import { DEFAULT_CONFIG, type StaffBotConfig } from "../src/config/guildConfig.js";
@@ -75,52 +74,6 @@ describe("the fortnight anchor", () => {
     });
 });
 
-describe("a requirement nobody can reach", () => {
-    it("accepts a fortnight requirement of exactly two weekly targets", () => {
-        expect(
-            requirementIsReachable(
-                config({ weeklyTargetMinutes: 120, fortnightRequiredMinutes: 240 })
-            )
-        ).toBe(true);
-    });
-
-    it("rejects one minute more than that", () => {
-        expect(
-            requirementIsReachable(
-                config({ weeklyTargetMinutes: 120, fortnightRequiredMinutes: 241 })
-            )
-        ).toBe(false);
-    });
-
-    it("accepts a requirement below the doubled target", () => {
-        expect(
-            requirementIsReachable(
-                config({ weeklyTargetMinutes: 120, fortnightRequiredMinutes: 100 })
-            )
-        ).toBe(true);
-    });
-
-    it("explains the arithmetic rather than just refusing", () => {
-        const warnings = configWarnings(
-            config({
-                weeklyTargetMinutes: 120,
-                fortnightRequiredMinutes: 500,
-                fortnightAnchor: "2026-01-05T00:00:00Z"
-            }),
-            new Date("2026-09-02T00:00:00Z")
-        );
-        const text = warnings.find(
-            (warning) => warning.key === "fortnightRequiredMinutes"
-        )?.text;
-        expect(text).toContain("500");
-        expect(text).toContain("240"); // what closing both rings actually earns
-    });
-
-    it("ships a default that is reachable", () => {
-        expect(requirementIsReachable(DEFAULT_CONFIG)).toBe(true);
-    });
-});
-
 describe("a shift that ends before the member is marked Away", () => {
     it("accepts an auto-end equal to the away threshold", () => {
         expect(
@@ -148,7 +101,7 @@ describe("keys that rewrite history", () => {
     it("leaves every other key applying immediately", () => {
         for (const key of [
             "weeklyTargetMinutes",
-            "fortnightRequiredMinutes",
+            "minimumLeaveDays",
             "fortnightAnchor",
             "trackedChannels",
             "executiveRoles"
@@ -209,8 +162,6 @@ describe("the warnings as a set", () => {
         const warnings = configWarnings(
             config({
                 fortnightAnchor: "2099-01-01T00:00:00Z",
-                weeklyTargetMinutes: 60,
-                fortnightRequiredMinutes: 500,
                 awayAfterMinutes: 20,
                 autoEndAfterAwayMinutes: 1
             }),
@@ -218,7 +169,6 @@ describe("the warnings as a set", () => {
         );
         expect(warnings.map((warning) => warning.key)).toEqual([
             "fortnightAnchor",
-            "fortnightRequiredMinutes",
             "autoEndAfterAwayMinutes"
         ]);
     });

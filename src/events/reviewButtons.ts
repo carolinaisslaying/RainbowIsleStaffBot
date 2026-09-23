@@ -118,7 +118,9 @@ export async function handleReviewButton(
         isExecutive: executive,
         actorStaffId: actor._id,
         subjectStaffId: assessment.staffId,
-        departed: subject ? subject.active === false : true
+        departed: subject ? subject.active === false : true,
+        below: assessment.status === "below",
+        held: assessment.heldForLeave
     });
     if (!permitted.ok) {
         await respond(interaction, errorCard(permitted.reason));
@@ -174,8 +176,10 @@ export async function handleReviewBulkButton(
     }
 
     const actor = await ensureStaff(interaction.user.id);
+    // Held rows wait for their leave to be decided, so no bulk path reaches
+    // them. They are counted apart in the header for the same reason.
     const remaining = (await belowThresholdFor(fortnightIndex)).filter(
-        (row) => !row.reviewOutcome
+        (row) => !row.reviewOutcome && !row.heldForLeave
     );
 
     if (remaining.length === 0) {

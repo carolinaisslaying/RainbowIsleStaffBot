@@ -8,6 +8,7 @@ import {
     assessmentHistory,
     assessmentsForFortnight,
     belowThresholdFor,
+    findAssessment,
     isAssessableFortnight,
     setReviewCard,
     warningsFor,
@@ -33,8 +34,8 @@ import {
 } from "../domain/reviewQueue.js";
 import { findStaffById } from "../domain/staff.js";
 import { staffChannel } from "./leaveService.js";
+import { pingExecutives, pingKey, resolvePing } from "./pings.js";
 import {
-    noticeCard,
     reviewHeaderCard,
     reviewRowMessage,
     type RenderedMessage
@@ -148,17 +149,21 @@ export async function runFortnightAssessment(
         const staff = await findStaffById(assessment.staffId);
         if (!staff) continue;
 
+        const reduced =
+            assessment.week1Exempt || assessment.week2Exempt
+                ? " Your leave set one week aside, so it asked for one weekly target."
+                : "";
         const body =
             assessment.status === "exempt"
-                ? `Fortnight ${label}. You were on approved leave, so this assessment does ` +
-                  "not apply to you."
+                ? `Fortnight ${label}. Your leave set both weeks aside, so nothing was ` +
+                  "required of you."
                 : assessment.status === "met"
                   ? `Fortnight ${label}. You recorded ${formatMinutes(assessment.totalMinutes)} ` +
-                    `against the ${assessment.requiredMinutes} minute fortnight minimum. ` +
-                    "Minimum met."
+                    `against a requirement of ${assessment.requiredMinutes} minutes. ` +
+                    `Requirement met.${reduced}`
                   : `Fortnight ${label}. You recorded **${formatMinutes(assessment.totalMinutes)}**, ` +
-                    `under the ${assessment.requiredMinutes} minute fortnight minimum. ` +
-                    "Fortnights under the minimum go to the Executives for review. If " +
+                    `under your requirement of ${assessment.requiredMinutes} minutes.${reduced} ` +
+                    "Fortnights under the requirement go to the Executives for review. If " +
                     "something has been getting in the way, let one of them know.";
 
         const delivered = await sendFortnightOutcome(
@@ -185,6 +190,31 @@ export async function runFortnightAssessment(
     }
 
     await postReviewQueue(client, config, index, { rehearsal: plan === "rehearse" });
+
+    // Pings are for the real thing. A rehearsal is read by the person running
+    // it, who does not need telling that it exists.
+    if (plan === "announce") {
+        const below = await belowThresholdFor(index);
+        const counts = queueCounts(
+            below.map((row) => ({ outcome: row.reviewOutcome, held: row.heldForLeave }))
+        );
+        const review = await findReview(index);
+        if (review && counts.remaining + counts.held > 0) {
+            await pingExecutives(
+                client,
+                config,
+                pingKey.review(index),
+                { channelId: review.headerChannelId, messageId: review.headerMessageId },
+                `Fortnight ${label} is ready for review: ${counts.remaining + counts.held} ` +
+                    `${counts.remaining + counts.held === 1 ? "member is" : "members are"} ` +
+                    "under their requirement."
+            );
+        }
+        for (const row of below.filter((entry) => entry.heldForLeave)) {
+            await rowAttention(client, config, row, false);
+        }
+    }
+
     return plan;
 }
 
@@ -240,7 +270,9 @@ export async function refreshQueueHeader(
     const below = await belowThresholdFor(index);
     const window = windowForIndex(index, config);
     const label = labelWindow(window.week1Start, window.end, config.accountingTimezone);
-    const counts = queueCounts(below.map((row) => ({ outcome: row.reviewOutcome })));
+    const counts = queueCounts(
+        below.map((row) => ({ outcome: row.reviewOutcome, held: row.heldForLeave }))
+    );
 
     // The header first, so it sits above the rows on a first posting.
     const existing = await findReview(index);
@@ -248,8 +280,12 @@ export async function refreshQueueHeader(
     // Every member assessed, not just the ones below: the point of the chart is
     // to say whether this was a bad fortnight for two people or for everybody.
     const everyone = await assessmentsForFortnight(index);
+    // The line is the full requirement, two weekly targets, under the rules
+    // this fortnight was assessed by. Somebody whose leave lowered theirs is
+    // left off the chart rather than drawn against a line that is not theirs.
+    const fullRequirement = fullRequirementOf(everyone, config);
     const spreadEntries = everyone
-        .filter((entry) => entry.status !== "exempt")
+        .filter((entry) => entry.status !== "exempt" && !entry.week1Exempt && !entry.week2Exempt)
         .map((entry) => ({
             minutes: entry.totalMinutes,
             below: entry.status === "below"
@@ -258,7 +294,7 @@ export async function refreshQueueHeader(
     const header = reviewHeaderCard({
         fortnightIndex: index,
         windowLabel: label,
-        headline: queueHeadline(counts, config.fortnightRequiredMinutes),
+        headline: queueHeadline(counts),
         remaining: counts.remaining,
         rehearsal: options.rehearsal ?? false,
         spread:
@@ -266,10 +302,10 @@ export async function refreshQueueHeader(
                 ? {
                       png: renderSpread({
                           entries: spreadEntries,
-                          requiredMinutes: config.fortnightRequiredMinutes,
+                          requiredMinutes: fullRequirement,
                           title: "Everyone this fortnight"
                       }),
-                      alt: describeSpread(spreadEntries, config.fortnightRequiredMinutes)
+                      alt: describeSpread(spreadEntries, fullRequirement)
                   }
                 : null
     });
@@ -288,6 +324,11 @@ export async function refreshQueueHeader(
         headerMessageId = posted.id;
     }
     await rememberHeader(index, channel.id, headerMessageId);
+
+    // Nothing left for anybody to decide, so the ping has done its job.
+    if (counts.remaining + counts.held === 0) {
+        await resolvePing(client, pingKey.review(index));
+    }
 
     // No rows at all still gets a header, which reads "nothing to review". A
     // separate "assessed" notice for that case was a second message saying the
@@ -323,6 +364,92 @@ export async function upsertReviewRow(
 
     const posted = await channel.send(sendOptions(row));
     await setReviewCard(assessment._id, posted.channelId, posted.id);
+}
+
+/**
+ * Ping about a row that needs an Executive, or clear the ping once it does
+ * not. Used when a queue is first posted, for its held rows, and whenever
+ * leave changes a row after the fortnight closed.
+ */
+export async function rowAttention(
+    client: Client,
+    config: StaffBotConfig,
+    assessment: FortnightAssessmentDoc,
+    newlyBelow: boolean
+): Promise<void> {
+    const key = pingKey.row(assessment._id);
+    const fresh = await findAssessment(assessment._id);
+    const waiting = fresh !== null && fresh.status === "below" && !fresh.reviewOutcome;
+    if (!waiting || !fresh.reviewChannelId || !fresh.reviewMessageId) {
+        await resolvePing(client, key);
+        return;
+    }
+
+    const staff = await findStaffById(fresh.staffId);
+    const who = staff ? `<@${staff.discordId}>` : "A departed member";
+    const line = fresh.heldForLeave
+        ? `${who}'s row for fortnight ${fresh.fortnightIndex} is held. A leave request ` +
+          "waiting on you would take them off the queue, so decide the leave first."
+        : newlyBelow
+          ? `${who}'s row for fortnight ${fresh.fortnightIndex} needs a decision. Their ` +
+            "leave changed after the fortnight closed and they are now under the requirement."
+          : `${who}'s row for fortnight ${fresh.fortnightIndex} can be decided now that ` +
+            "their leave has been.";
+
+    await pingExecutives(
+        client,
+        config,
+        key,
+        { channelId: fresh.reviewChannelId, messageId: fresh.reviewMessageId },
+        line
+    );
+}
+
+/** Two weekly targets under the rules the fortnight was assessed by. */
+function fullRequirementOf(
+    assessments: FortnightAssessmentDoc[],
+    config: StaffBotConfig
+): number {
+    return (assessments[0]?.weeklyTargetMinutes ?? config.weeklyTargetMinutes) * 2;
+}
+
+/**
+ * What leave did to a row, in the words the row prints. Pure, so every
+ * combination can be read without a database.
+ */
+export function leaveLinesFor(assessment: {
+    week1LeaveDays: number;
+    week2LeaveDays: number;
+    week1Exempt: boolean;
+    week2Exempt: boolean;
+    requiredMinutes: number;
+    heldForLeave: boolean;
+    minimumLeaveDays: number;
+}): string[] {
+    const lines: string[] = [];
+    const weeks = [
+        { name: "Week one", days: assessment.week1LeaveDays, exempt: assessment.week1Exempt },
+        { name: "Week two", days: assessment.week2LeaveDays, exempt: assessment.week2Exempt }
+    ];
+    for (const week of weeks) {
+        if (week.days <= 0) continue;
+        lines.push(
+            `${week.name}: ${week.days} ${week.days === 1 ? "day" : "days"} of leave, ` +
+                (week.exempt
+                    ? "set aside."
+                    : `under the ${assessment.minimumLeaveDays} it takes to set a week aside.`)
+        );
+    }
+    if (assessment.week1Exempt !== assessment.week2Exempt) {
+        lines.push(`One week counts, so this fortnight asks for ${assessment.requiredMinutes} minutes.`);
+    }
+    if (assessment.heldForLeave) {
+        lines.push(
+            "📆 A leave request waiting on an Executive would take them off the queue. Decide " +
+                "it before warning."
+        );
+    }
+    return lines;
 }
 
 /**
@@ -395,8 +522,12 @@ export async function reviewRowFor(
         buttons: rowButtons({
             outcome: assessment.reviewOutcome,
             departed,
-            rehearsal
+            rehearsal,
+            below: assessment.status === "below",
+            held: assessment.heldForLeave
         }),
+        below: assessment.status === "below",
+        leaveLines: leaveLinesFor(assessment),
         outcome: assessment.reviewOutcome,
         decidedLine,
         reason: assessment.reviewNote,
@@ -412,20 +543,31 @@ export async function reviewRowFor(
             ? {
                   png: renderTrend({
                       points: trend.points,
-                      requiredMinutes: config.fortnightRequiredMinutes,
+                      requiredMinutes: assessment.weeklyTargetMinutes * 2,
                       title: "Recent fortnights"
                   }),
                   alt: trend.alt
               }
             : null,
-        // A recompute can lift somebody above the requirement after they were
-        // decided. The figures move; the decision is a human's and stays put,
-        // flagged so a human can reopen it if they want to.
+        // A recompute or a leave change can take somebody off the queue after
+        // they were decided. The figures move; the decision is a human's and
+        // stays put, flagged so a human can reopen it if they want to. An
+        // undecided row says the same thing without the decision to question.
         contradiction:
-            assessment.reviewOutcome && assessment.totalMinutes >= assessment.requiredMinutes
-                ? "⚠️ A recompute has since put them above the minimum. The decision " +
-                  "above still stands; reopen it if it should not."
-                : null
+            assessment.status === "below"
+                ? null
+                : assessment.reviewOutcome
+                  ? `⚠️ ${
+                        assessment.leaveChangedAt
+                            ? `Leave changed ${ts(assessment.leaveChangedAt, "R")} and`
+                            : "A recompute has since"
+                    } put them off the queue (${assessment.status}). The decision above ` +
+                    "still stands; reopen it if it should not."
+                  : `${
+                        assessment.leaveChangedAt
+                            ? `Leave changed ${ts(assessment.leaveChangedAt, "R")} and took`
+                            : "A recompute took"
+                    } them off the queue (${assessment.status}). Nothing to decide.`
     });
 }
 
@@ -486,7 +628,9 @@ export async function chaseUnworkedQueues(
     let sent = 0;
     for (const review of await unremindedReviews()) {
         const below = await belowThresholdFor(review._id);
-        const counts = queueCounts(below.map((row) => ({ outcome: row.reviewOutcome })));
+        const counts = queueCounts(
+            below.map((row) => ({ outcome: row.reviewOutcome, held: row.heldForLeave }))
+        );
 
         if (
             !reminderDue({
@@ -500,18 +644,19 @@ export async function chaseUnworkedQueues(
             continue;
         }
 
+        // A reply to the header, replacing the ping that announced the review,
+        // so the channel holds one outstanding ping per review at most.
         const window = windowForIndex(review._id, config);
-        await channel.send({
-            ...noticeCard(
-                "A review is still waiting",
-                `${labelWindow(window.week1Start, window.end, config.accountingTimezone)}: ` +
-                    `**${counts.remaining}** of ${counts.below} ` +
-                    `${counts.below === 1 ? "row" : "rows"} still has no decision, ` +
-                    `${ts(review.postedAt, "R")} after it was posted.\n\n` +
-                    "The cards are above. This is the only reminder.",
-                { colour: COLOUR.pending }
-            )
-        });
+        await pingExecutives(
+            client,
+            config,
+            pingKey.review(review._id),
+            { channelId: review.headerChannelId, messageId: review.headerMessageId },
+            `Reminder: ${labelWindow(window.week1Start, window.end, config.accountingTimezone)} ` +
+                `still has **${counts.remaining}** of ${counts.below} ` +
+                `${counts.below === 1 ? "row" : "rows"} undecided, posted ` +
+                `${ts(review.postedAt, "R")}. This is the only reminder.`
+        );
 
         await markReminded(review._id, now);
         sent += 1;
@@ -542,10 +687,11 @@ async function trendFor(
             label: labelDate(entry.windowStart, config.accountingTimezone),
             minutes: entry.totalMinutes,
             exempt: entry.status === "exempt",
-            current: entry.fortnightIndex === currentIndex
+            current: entry.fortnightIndex === currentIndex,
+            requiredMinutes: entry.requiredMinutes
         }));
 
-    return { points, alt: describeTrend(points, config.fortnightRequiredMinutes) };
+    return { points, alt: describeTrend(points, fullRequirementOf(history, config)) };
 }
 
 /**
@@ -557,7 +703,9 @@ async function trendFor(
 function describeTrend(points: TrendPoint[], required: number): string {
     if (points.length === 0) return "No earlier fortnight to compare against.";
     const measured = points.filter((point) => !point.exempt);
-    const met = measured.filter((point) => point.minutes >= required).length;
+    const met = measured.filter(
+        (point) => point.minutes >= (point.requiredMinutes ?? required)
+    ).length;
     const exempt = points.length - measured.length;
 
     return (

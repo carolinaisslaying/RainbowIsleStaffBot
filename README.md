@@ -146,6 +146,7 @@ crosses that gap by fetching from whichever server the key refers to.
 | --- | --- |
 | `moderationDepartmentRole` | Nobody resolves as staff; every command is refused |
 | `executiveRoles` | No one can configure, decide leave, or review assessments |
+| `staffExecutivePingRole` | Leave requests and reviews wait without anybody being pinged. A role in the **staff** server, and it must be mentionable by the bot |
 | `availabilityRole` | Shifts open, but nothing shows who is available |
 | `trackedChannels` | **No activity minutes are ever credited** |
 | `leaveChannelId` | Leave requests have nowhere to post and nobody can approve one |
@@ -277,6 +278,34 @@ Extra messages in the same minute earn nothing.
 measure clocked availability. Activity minutes measure participation. Only
 activity minutes count toward compliance. The code and the user-facing strings
 both keep these apart deliberately; do not let them merge.
+
+## Leave and the requirement
+
+A fortnight requires `weeklyTargetMinutes` (default 120) for each of its two
+weeks, pooled, so a slow week can be made up in the next. Leave changes how
+many weeks count:
+
+- Each week is judged on its own. Its hours of leave, divided by 24 and rounded
+  to the nearest whole number, are its leave days.
+- A week with at least `minimumLeaveDays` (default 3) of them is **exempt**. Its
+  rings go grey and the fortnight asks for one weekly target less. Minutes
+  earned in that week still count.
+- Both weeks exempt waives the fortnight. There is no other waiver.
+- `minimumLeaveDays` is also the shortest leave anybody can book. Every leave
+  has an end date.
+- A leave split across a week boundary can exempt neither week (four days split
+  two and two). The confirmation card says what a leave will do, week by week,
+  before the member commits to it.
+- Ending leave early moves its end to the day it actually ended, so the
+  exemption follows the leave taken, not the leave booked.
+- `/leave extend` asks. The leave keeps its current end until an Executive
+  approves the extension on the leave card.
+- A leave change after a fortnight has closed reassesses that fortnight without
+  messaging anyone. A row that falls below goes on the review queue. A warning
+  on a fortnight leave takes off the queue is flagged for an Executive, who
+  decides whether to withdraw it.
+- A row that would come off the queue if pending leave were approved is held:
+  it cannot be warned until the leave is decided.
 
 ## Privacy
 

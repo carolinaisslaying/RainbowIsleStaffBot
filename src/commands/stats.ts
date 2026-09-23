@@ -115,7 +115,7 @@ async function showRings({ client, config, interaction, staff, tier }: CommandCo
             softRingsEnabled: config.softRingsEnabled,
             face: subject.ringFace,
             streak,
-            footnote: leaveNoteFor(stats)
+            footnote: leaveNoteFor(stats, config.minimumLeaveDays)
         })
     );
 }

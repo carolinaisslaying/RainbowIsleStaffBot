@@ -31,14 +31,28 @@ export interface RowFacts {
     departed: boolean;
     /** Written by a rehearsal, and never counted against anyone. */
     rehearsal: boolean;
+    /**
+     * Still below the requirement. Absent reads as below, which is what every
+     * row in the queue was until leave could move one off it.
+     */
+    below?: boolean;
+    /** Leave waiting on an Executive would take them off the queue if approved. */
+    held?: boolean;
 }
 
 /** Which buttons a row draws, in order. Empty means the row is inert. */
 export function rowButtons(facts: RowFacts): ReviewAction[] {
     if (facts.outcome) return ["reopen"];
+    // Leave approved since has taken the row off the queue, so there is
+    // nothing left to decide on it.
+    if (facts.below === false) return [];
     // A departed member can be excused or dismissed so the queue can be closed
-    // out, but not warned: there is nobody left to serve it on.
-    return facts.departed ? ["excuse", "dismiss"] : ["warn", "excuse", "dismiss"];
+    // out, but not warned: there is nobody left to serve it on. A held row is
+    // the same until its leave is decided: warning somebody for a fortnight
+    // their pending leave may yet excuse is a decision made on half the facts.
+    return facts.departed || facts.held
+        ? ["excuse", "dismiss"]
+        : ["warn", "excuse", "dismiss"];
 }
 
 export type Refusal = { ok: false; reason: string };
@@ -60,6 +74,9 @@ export function decisionPermitted(options: {
     actorStaffId: ObjectId;
     subjectStaffId: ObjectId;
     departed: boolean;
+    /** Absent reads as below. */
+    below?: boolean;
+    held?: boolean;
 }): Permitted | Refusal {
     if (!options.isExecutive) {
         return {
@@ -67,6 +84,15 @@ export function decisionPermitted(options: {
             reason:
                 "Review decisions are Executive only. Leads can view the queue and " +
                 "warning history."
+        };
+    }
+
+    if (options.below === false && options.action !== "reopen") {
+        return {
+            ok: false,
+            reason:
+                "Leave approved since this row was posted takes them off the queue, so there " +
+                "is nothing to decide."
         };
     }
 
@@ -78,6 +104,16 @@ export function decisionPermitted(options: {
             reason:
                 "You cannot warn yourself. Another Executive has to take this one. You can " +
                 "still excuse or dismiss your own row to clear it from the queue."
+        };
+    }
+
+    if (options.held && options.action === "warn") {
+        return {
+            ok: false,
+            reason:
+                "They have a leave request waiting on an Executive that would take them off " +
+                "the queue if approved. Decide the leave first. You can still excuse or " +
+                "dismiss the row now."
         };
     }
 
@@ -348,34 +384,49 @@ function ordinal(value: number): string {
 export interface QueueCounts {
     below: number;
     decided: number;
+    /** Undecided rows an Executive can decide now, the bulk buttons' count. */
     remaining: number;
+    /** Undecided rows waiting on a leave decision first. */
+    held: number;
 }
 
-export function queueCounts(rows: { outcome: ReviewOutcome | null }[]): QueueCounts {
+export function queueCounts(
+    rows: { outcome: ReviewOutcome | null; held?: boolean }[]
+): QueueCounts {
     const decided = rows.filter((row) => row.outcome !== null).length;
+    const held = rows.filter((row) => row.outcome === null && row.held === true).length;
     return {
         below: rows.length,
         decided,
-        remaining: rows.length - decided
+        remaining: rows.length - decided - held,
+        held
     };
 }
 
-/** The header's own sentence, which has to read correctly at every count. */
-export function queueHeadline(counts: QueueCounts, requiredMinutes: number): string {
+/**
+ * The header's own sentence, which has to read correctly at every count. It
+ * names no minute figure, because leave gives members different requirements
+ * in the same fortnight and each row states its own.
+ */
+export function queueHeadline(counts: QueueCounts): string {
     if (counts.below === 0) {
-        return `Every active member met the ${requiredMinutes} minute fortnight minimum. Nothing to review.`;
+        return "Every active member met their fortnight requirement. Nothing to review.";
     }
-    if (counts.remaining === 0) {
+    const heldNote =
+        counts.held > 0
+            ? ` ${counts.held} ${counts.held === 1 ? "waits" : "wait"} on a leave decision first.`
+            : "";
+    if (counts.remaining === 0 && counts.held === 0) {
         return (
-            `${counts.below} ${counts.below === 1 ? "member was" : "members were"} under the ` +
-            `${requiredMinutes} minute fortnight minimum. All reviewed.`
+            `${counts.below} ${counts.below === 1 ? "member was" : "members were"} under ` +
+            "their fortnight requirement. All reviewed."
         );
     }
     return (
-        `${counts.below} ${counts.below === 1 ? "member is" : "members are"} under the ` +
-        `${requiredMinutes} minute fortnight minimum. ` +
-        `${counts.remaining} still to decide` +
-        (counts.decided > 0 ? `, ${counts.decided} done.` : ".")
+        `${counts.below} ${counts.below === 1 ? "member is" : "members are"} under their ` +
+        `fortnight requirement. ${counts.remaining} still to decide` +
+        (counts.decided > 0 ? `, ${counts.decided} done.` : ".") +
+        heldNote
     );
 }
 

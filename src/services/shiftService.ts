@@ -82,7 +82,7 @@ async function ringCardFor(
         face: staff.ringFace,
         streak,
         heading,
-        footnote: leaveNoteFor(stats)
+        footnote: leaveNoteFor(stats, config.minimumLeaveDays)
     });
 }
 

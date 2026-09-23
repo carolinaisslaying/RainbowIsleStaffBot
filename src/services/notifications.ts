@@ -7,6 +7,7 @@ import { findStaffById, listActiveStaff } from "../domain/staff.js";
 import {
     computeStreak,
     currentWeekStats,
+    leaveNoteFor,
     previousWeekWindow,
     weekWindowFor,
     type WeekWindow
@@ -268,10 +269,8 @@ async function sendRecap(
         streak,
         heading: "## Your week",
         footnote:
-            (stored.partialLeave
-                ? "You were on leave for part of this week, and the week still counted for " +
-                  "the days you were here. "
-                : "") +
+            (leaveNoteFor(stored, config.minimumLeaveDays) ?? "") +
+            (stored.leaveDays > 0 && !stored.onLeave ? " " : "") +
             `Rank ${rank || "unranked"} of ${teamSize} (${movement}). ` +
             `The team recorded ${formatMinutes(teamMinutes)} between them. ` +
             `This week closes ${ts(weekWindowFor(new Date(), config).end, "F")}.`

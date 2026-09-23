@@ -39,6 +39,11 @@ export const EMOJI = {
     onShift: "▶️",
     /** A shift paused, as against a decision pending: both are amber. */
     away: "⏸️",
+    /**
+     * Leave waiting on an Executive, as against a fortnight review waiting on
+     * one: both are amber, and ⏳ belongs to the review.
+     */
+    leave: "📆",
     /** Coming back from leave. Warmer than the green it is drawn in. */
     welcome: "👋",
     /** Timezones and the clock. */

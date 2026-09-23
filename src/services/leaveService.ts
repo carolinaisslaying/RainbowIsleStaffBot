@@ -9,20 +9,25 @@ import {
     leaveDueToEnd,
     markLeaveActive,
     markLeaveEnded,
+    otherCountingLeave,
     recordLeaveCard
 } from "../domain/leave.js";
+import { describeLeaveEffect, leaveEffect, type LeaveSpan } from "../domain/leaveDays.js";
+import { fortnightAnchorDate } from "../config/guildConfig.js";
 import { findStaffById } from "../domain/staff.js";
 import { getOpenShift } from "../domain/shifts.js";
 import { finishShift } from "./shiftService.js";
 import { audit } from "../domain/audit.js";
 import { leaveRequestCard, noticeCard, type RenderedMessage } from "../render/cards.js";
 import { log } from "../log.js";
-import { formatDays, ts } from "../time/format.js";
+import { formatDays, labelDate, ts } from "../time/format.js";
 import { EMOJI } from "../render/emoji.js";
 import { COLOUR } from "../render/theme.js";
 import { cmd } from "../discord/commandMentions.js";
 import { staffDisplayName } from "../discord/displayName.js";
 import { sendOptions } from "../discord/respond.js";
+import { pingExecutives, pingKey, resolvePing } from "./pings.js";
+import { reassessAfterLeaveChange } from "./leaveReassess.js";
 
 export async function staffChannel(
     client: Client,
@@ -88,14 +93,69 @@ export async function activateLeave(
         ...noticeCard(
             `Your leave has started`,
             "Your staff roles are set aside until you get back.\n" +
-                (leave.endDate
-                    ? `You are due back ${ts(leave.endDate, "D")}, ${ts(leave.endDate, "R")}.`
-                    : "Your leave is open ended. Use " +
-                      `${cmd("leave end")} when you are ready to come back.`) +
-                "\n\nWhile you are away, no fortnight assessment applies to you and your " +
-                "streak freezes where it stands.",
+                `You are due back ${ts(leave.endDate, "D")}, ${ts(leave.endDate, "R")}. ` +
+                `Use ${cmd("leave end")} if you are back sooner.` +
+                `\n\nA week holding ${config.minimumLeaveDays} or more days of this leave is ` +
+                "set aside: its rings go grey and your fortnight asks one weekly target less " +
+                "for it. Your streak freezes where it stands.",
             { colour: COLOUR.settled }
         )
+    });
+}
+
+/**
+ * What a leave change would do to the member's requirements, as the lines the
+ * confirmation card and the leave card print.
+ *
+ * A request is measured against the member's other leave; an extension against
+ * the same leave ending on its current date. Either way the member's other
+ * counting leave is included, because two leaves in one week add up.
+ */
+export async function describeLeaveChange(
+    config: StaffBotConfig,
+    staffId: ObjectId,
+    change:
+        | { kind: "request"; startDate: Date; endDate: Date }
+        | { kind: "extension"; leave: LeaveDoc; endDate: Date }
+): Promise<string[]> {
+    const others = await otherCountingLeave(
+        staffId,
+        change.kind === "extension" ? change.leave._id : null
+    );
+    const before: LeaveSpan[] = others.map((record) => ({
+        startDate: record.startDate,
+        endDate: record.endDate
+    }));
+    const span: LeaveSpan =
+        change.kind === "request"
+            ? { startDate: change.startDate, endDate: change.endDate }
+            : { startDate: change.leave.endDate, endDate: change.endDate };
+    if (change.kind === "extension") {
+        before.push({ startDate: change.leave.startDate, endDate: change.leave.endDate });
+    }
+    const after =
+        change.kind === "request"
+            ? [...before, span]
+            : [
+                  ...before.slice(0, -1),
+                  { startDate: change.leave.startDate, endDate: change.endDate }
+              ];
+
+    const effect = leaveEffect({
+        span,
+        before,
+        after,
+        rules: {
+            anchor: fortnightAnchorDate(config),
+            timeZone: config.accountingTimezone,
+            weekStartDay: config.weekStartDay
+        },
+        minimumLeaveDays: config.minimumLeaveDays,
+        weeklyTargetMinutes: config.weeklyTargetMinutes
+    });
+    return describeLeaveEffect(effect, {
+        kind: change.kind,
+        label: (date) => labelDate(date, config.accountingTimezone)
     });
 }
 
@@ -148,24 +208,45 @@ export async function leaveCardFor(
             `-# Back ${ts(leave.rolesRestoredAt, "R")}` +
             (early
                 ? `, ended early by <@${early.discordId}>.`
-                : leave.endDate
-                  ? ", on schedule."
-                  : ", they closed it themselves.") +
+                : leave.plannedEndDate
+                  ? ", they ended it themselves."
+                  : ", on schedule.") +
             (leave.restoreErrors.length > 0
                 ? ` ${leave.restoreErrors.length} staff role(s) could not be restored.`
                 : "");
     }
 
+    const extension = leave.pendingExtension;
     return leaveRequestCard({
         leaveId: leave._id.toHexString(),
         displayName: subject ? `${name} (<@${subject.discordId}>)` : name,
         startDate: leave.startDate,
         endDate: leave.endDate,
+        plannedEndDate: leave.plannedEndDate,
         reason: leave.reason,
         status: leave.status,
         decided,
         outcome,
-        purged: extra.purged ?? null
+        purged: extra.purged ?? null,
+        effectLines:
+            leave.status === "pending"
+                ? await describeLeaveChange(config, leave.staffId, {
+                      kind: "request",
+                      startDate: leave.startDate,
+                      endDate: leave.endDate
+                  })
+                : [],
+        pendingExtension: extension
+            ? {
+                  endDate: extension.endDate,
+                  reason: extension.reason,
+                  effectLines: await describeLeaveChange(config, leave.staffId, {
+                      kind: "extension",
+                      leave,
+                      endDate: extension.endDate
+                  })
+              }
+            : null
     });
 }
 
@@ -251,7 +332,13 @@ export async function endLeave(
     }
 
     const earlyBy = endedBy.kind === "executive" ? endedBy.staffId : null;
-    await markLeaveEnded(leave._id, errors, earlyBy);
+    const ended = (await markLeaveEnded(leave, errors, earlyBy)) ?? {
+        ...leave,
+        status: "ended" as const,
+        rolesRestoredAt: new Date(),
+        restoreErrors: errors,
+        endedEarlyBy: earlyBy
+    };
     await audit("leave.end", {
         actorId: endedBy.kind === "executive" ? endedBy.discordId : staff.discordId,
         targetStaffId: staff._id,
@@ -274,26 +361,45 @@ export async function endLeave(
 
     // The channel card follows the record into its final state, so the leave
     // channel shows one row per request from "pending" through to "back".
-    await updateLeaveCard(client, config, {
-        ...leave,
-        status: "ended",
-        rolesRestoredAt: new Date(),
-        restoreErrors: errors,
-        endedEarlyBy: earlyBy
-    });
+    await updateLeaveCard(client, config, ended);
+    // An extension nobody decided has nothing left to extend.
+    await resolvePing(client, pingKey.extension(leave._id));
+
+    // Ending early shortens the leave actually taken, which can un-exempt a
+    // week in a fortnight that has already closed.
+    if (ended.endDate.getTime() < leave.endDate.getTime()) {
+        await reassessAfterLeaveChange(
+            client,
+            config,
+            leave.staffId,
+            [{ startDate: leave.startDate, endDate: leave.endDate }],
+            "leave ended early"
+        );
+    }
 
     if (errors.length > 0) {
-        const channel = await staffChannel(client, config, config.leaveChannelId);
-        await channel?.send({
-            ...noticeCard(
-                "Some staff roles could not be restored",
-                `<@${staff.discordId}> is back from leave. These staff roles no longer exist, so ` +
-                    "they did not come back:\n" +
-                    errors.map((roleId) => `- **${roleNames.get(roleId) ?? roleId}**`).join("\n") +
-                    "\n\nGrant the current equivalents by hand.",
-                { colour: COLOUR.adverse, emoji: EMOJI.warning }
-            )
-        });
+        const line =
+            `<@${staff.discordId}> is back from leave, but these staff roles no longer exist ` +
+            "and did not come back: " +
+            errors.map((roleId) => `**${roleNames.get(roleId) ?? roleId}**`).join(", ") +
+            ". Grant the current equivalents by hand.";
+        if (leave.logChannelId && leave.logMessageId) {
+            await pingExecutives(
+                client,
+                config,
+                pingKey.restore(leave._id),
+                { channelId: leave.logChannelId, messageId: leave.logMessageId },
+                line
+            );
+        } else {
+            const channel = await staffChannel(client, config, config.leaveChannelId);
+            await channel?.send({
+                ...noticeCard("Some staff roles could not be restored", line, {
+                    colour: COLOUR.adverse,
+                    emoji: EMOJI.warning
+                })
+            });
+        }
     }
 
     return welcomeBackCard({ ...summary, guildId: readIn });
@@ -301,7 +407,7 @@ export async function endLeave(
 
 /** Whether the leave stopped before the date it was booked to. */
 function cutShort(leave: LeaveDoc, at = new Date()): boolean {
-    return leave.endDate !== null && leave.endDate.getTime() > at.getTime();
+    return leave.endDate.getTime() > at.getTime();
 }
 
 /**
@@ -328,18 +434,16 @@ function welcomeBackCard(options: {
     const opening =
         endedBy.kind === "executive"
             ? `**Your leave has been ended early** by <@${endedBy.discordId}>. ` +
-              (leave.endDate
-                  ? `You were booked back ${ts(leave.endDate, "D")}; you are back as of now.`
-                  : "Your leave was open ended; you are back as of now.")
+              `You were booked back ${ts(leave.endDate, "D")}; you are back as of now.`
             : endedBy.kind === "member"
               ? "**Your leave is closed** because you ended it."
               : `**Your leave is over.** It ran its full course and closed ` +
-                `${ts(leave.endDate ?? now, "R")}, as booked.`;
+                `${ts(leave.endDate, "R")}, as booked.`;
 
     const lines = [
         opening,
-        `You were away ${away}, from ${ts(leave.startDate, "D")}` +
-            (leave.endDate ? ` to ${ts(leave.endDate, "D")}.` : ", open ended."),
+        `You were away ${away}, from ${ts(leave.startDate, "D")} to ` +
+            `${ts(cutShort(leave, now) ? now : leave.endDate, "D")}.`,
         ""
     ];
 
@@ -367,8 +471,11 @@ function welcomeBackCard(options: {
     lines.push(
         "",
         "**What starts again now**",
-        "- Fortnight assessment counts you from today. The fortnights your leave covered stay " +
-            "excused.",
+        "- Your activity counts again from today. Weeks holding enough of your leave stay set " +
+            "aside" +
+            (cutShort(leave, now)
+                ? ", measured on the leave you took rather than the leave you booked."
+                : "."),
         "- Your streak picks up where it froze rather than starting over.",
         "- Your rings and your leaderboard row come back out of grey.",
         "",

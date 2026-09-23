@@ -11,6 +11,7 @@ import { findStaffByDiscordId } from "../domain/staff.js";
 import { audit } from "../domain/audit.js";
 import { upsertReviewRow } from "../services/assessmentService.js";
 import { upsertWarningCard } from "../services/conductService.js";
+import { pingKey, resolvePing } from "../services/pings.js";
 import { errorCard, noticeCard } from "../render/cards.js";
 import { respond, sendOptions } from "../discord/respond.js";
 import { COLOUR } from "../render/theme.js";
@@ -118,4 +119,7 @@ export async function handleWarningButton(
         }
     }
     await upsertWarningCard(client, config, warning._id);
+    // They have it now, so a ping about it failing to arrive is out of date. A
+    // ping about leave covering it is not, and stays until somebody decides.
+    if (!warning.coveredByLeaveAt) await resolvePing(client, pingKey.warning(warning._id));
 }

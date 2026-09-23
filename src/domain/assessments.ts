@@ -10,7 +10,13 @@ import type { StaffBotConfig } from "../config/guildConfig.js";
 import { fortnightAnchorDate } from "../config/guildConfig.js";
 import { completesFortnight, fortnightIndexFor, fortnightWindow } from "../time/calendar.js";
 import { countMinutesBetween } from "./activity.js";
-import { leaveCoverageFor } from "./leave.js";
+import { leaveOverlapping, pendingSpansOverlapping } from "./leave.js";
+import {
+    fortnightRequirement,
+    fortnightStatus,
+    weekLeave,
+    type LeaveSpan
+} from "./leaveDays.js";
 import { listActiveStaff } from "./staff.js";
 import { weekWindowFor, type WeekWindow } from "./weekly.js";
 import { audit } from "./audit.js";
@@ -20,7 +26,8 @@ import { audit } from "./audit.js";
  * only and trigger nothing.
  *
  * A member may record 0 minutes in week one and the full target in week two and
- * pass. That is intended.
+ * pass. That is intended. Leave changes how many weekly targets the fortnight
+ * asks for (`domain/leaveDays.ts`), never how the minutes are pooled.
  *
  * The bot never issues a warning by itself. It assesses, posts one review card,
  * and waits for an Executive.
@@ -44,7 +51,20 @@ export function windowForIndex(index: number, config: StaffBotConfig) {
     );
 }
 
-export interface AssessmentComputation {
+export interface AssessmentRules {
+    weeklyTargetMinutes: number;
+    minimumLeaveDays: number;
+}
+
+/** The rules a fortnight is first assessed under, from live config. */
+export function rulesFrom(config: StaffBotConfig): AssessmentRules {
+    return {
+        weeklyTargetMinutes: config.weeklyTargetMinutes,
+        minimumLeaveDays: config.minimumLeaveDays
+    };
+}
+
+export interface AssessmentComputation extends AssessmentRules {
     staffId: ObjectId;
     fortnightIndex: number;
     windowStart: Date;
@@ -52,42 +72,86 @@ export interface AssessmentComputation {
     week1Minutes: number;
     week2Minutes: number;
     totalMinutes: number;
+    week1LeaveDays: number;
+    week2LeaveDays: number;
+    week1Exempt: boolean;
+    week2Exempt: boolean;
     requiredMinutes: number;
     status: AssessmentStatus;
+    heldForLeave: boolean;
+}
+
+/**
+ * The verdict, from figures already fetched. Pure, so every case the leave
+ * rules produce can be stated without a database.
+ *
+ * `pending` is leave still waiting on an Executive. It never changes the
+ * verdict, only whether the row is held: a member below the requirement whose
+ * pending leave would, if approved, take them off the queue is not somebody to
+ * warn yet.
+ */
+export function assessmentVerdict(options: {
+    week1Minutes: number;
+    week2Minutes: number;
+    counting: LeaveSpan[];
+    pending: LeaveSpan[];
+    window: { week1Start: Date; week2Start: Date; end: Date };
+    rules: AssessmentRules;
+}): Pick<
+    AssessmentComputation,
+    | "totalMinutes"
+    | "week1LeaveDays"
+    | "week2LeaveDays"
+    | "week1Exempt"
+    | "week2Exempt"
+    | "requiredMinutes"
+    | "status"
+    | "heldForLeave"
+> {
+    const { window, rules } = options;
+    const totalMinutes = options.week1Minutes + options.week2Minutes;
+
+    const judge = (spans: LeaveSpan[]) => {
+        const week1 = weekLeave(spans, window.week1Start, window.week2Start, rules.minimumLeaveDays);
+        const week2 = weekLeave(spans, window.week2Start, window.end, rules.minimumLeaveDays);
+        const requirement = fortnightRequirement(
+            week1.exempt,
+            week2.exempt,
+            rules.weeklyTargetMinutes
+        );
+        return { week1, week2, requirement, status: fortnightStatus(totalMinutes, requirement) };
+    };
+
+    const actual = judge(options.counting);
+    const ifApproved =
+        options.pending.length > 0 ? judge([...options.counting, ...options.pending]) : actual;
+
+    return {
+        totalMinutes,
+        week1LeaveDays: actual.week1.days,
+        week2LeaveDays: actual.week2.days,
+        week1Exempt: actual.week1.exempt,
+        week2Exempt: actual.week2.exempt,
+        requiredMinutes: actual.requirement.requiredMinutes,
+        status: actual.status,
+        heldForLeave: actual.status === "below" && ifApproved.status !== "below"
+    };
 }
 
 export async function computeAssessment(
     staffId: ObjectId,
     index: number,
-    config: StaffBotConfig
+    config: StaffBotConfig,
+    rules: AssessmentRules = rulesFrom(config)
 ): Promise<AssessmentComputation> {
     const window = windowForIndex(index, config);
 
-    const [week1Minutes, week2Minutes, week1Leave, week2Leave] = await Promise.all([
+    const [week1Minutes, week2Minutes, counting, pending] = await Promise.all([
         countMinutesBetween(staffId, window.week1Start, window.week2Start),
         countMinutesBetween(staffId, window.week2Start, window.end),
-        leaveCoverageFor(staffId, window.week1Start, window.week2Start),
-        leaveCoverageFor(staffId, window.week2Start, window.end)
+        leaveOverlapping(staffId, window.week1Start, window.end),
+        pendingSpansOverlapping(staffId, window.week1Start, window.end)
     ]);
-
-    const totalMinutes = week1Minutes + week2Minutes;
-    const requiredMinutes = config.fortnightRequiredMinutes;
-
-    // Exemption follows whole weeks, not any overlap at all.
-    //
-    // A day of leave used to exempt an entire fortnight, which was too generous
-    // in one direction and, because the same test greyed the member's rings,
-    // misleading in the other: it told everyone they had been away when they
-    // had worked thirteen of the fourteen days. A member who loses a full week
-    // cannot reasonably make up a fortnight's target in the week that remains,
-    // so a full week of leave, in either half, is what exempts them.
-    const exempt = week1Leave.full || week2Leave.full;
-
-    const status: AssessmentStatus = exempt
-        ? "exempt"
-        : totalMinutes >= requiredMinutes
-          ? "met"
-          : "below";
 
     return {
         staffId,
@@ -96,9 +160,8 @@ export async function computeAssessment(
         windowEnd: window.end,
         week1Minutes,
         week2Minutes,
-        totalMinutes,
-        requiredMinutes,
-        status
+        ...rules,
+        ...assessmentVerdict({ week1Minutes, week2Minutes, counting, pending, window, rules })
     };
 }
 
@@ -123,13 +186,16 @@ export function rehearsalUpdate(rehearsal: boolean): { rehearsal: false } | Reco
 }
 
 /**
- * Persist an assessment. requiredMinutes is snapshotted here and never re-read
- * from live config: changing the target must not retroactively rewrite past
- * outcomes. A re-run refreshes the figures but leaves any review decision alone.
+ * Persist an assessment. The rules (`weeklyTargetMinutes`, `minimumLeaveDays`)
+ * are snapshotted on first write and never re-read from live config: changing
+ * a target must not rewrite past outcomes. Everything leave decides is written
+ * on every run, because leave approved or ended later is meant to move it. A
+ * re-run refreshes the figures but leaves any review decision alone.
  */
 export async function saveAssessment(
     computation: AssessmentComputation,
-    rehearsal = false
+    rehearsal = false,
+    leaveChangedAt: Date | null = null
 ): Promise<FortnightAssessmentDoc> {
     const result = await collections.fortnightAssessments().findOneAndUpdate(
         { staffId: computation.staffId, fortnightIndex: computation.fortnightIndex },
@@ -140,7 +206,14 @@ export async function saveAssessment(
                 week1Minutes: computation.week1Minutes,
                 week2Minutes: computation.week2Minutes,
                 totalMinutes: computation.totalMinutes,
+                week1LeaveDays: computation.week1LeaveDays,
+                week2LeaveDays: computation.week2LeaveDays,
+                week1Exempt: computation.week1Exempt,
+                week2Exempt: computation.week2Exempt,
+                requiredMinutes: computation.requiredMinutes,
                 status: computation.status,
+                heldForLeave: computation.heldForLeave,
+                ...(leaveChangedAt ? { leaveChangedAt } : {}),
                 // A real run promotes a rehearsal's row to real. See above.
                 ...rehearsalUpdate(rehearsal)
             },
@@ -148,7 +221,9 @@ export async function saveAssessment(
                 _id: new ObjectId(),
                 staffId: computation.staffId,
                 fortnightIndex: computation.fortnightIndex,
-                requiredMinutes: computation.requiredMinutes,
+                weeklyTargetMinutes: computation.weeklyTargetMinutes,
+                minimumLeaveDays: computation.minimumLeaveDays,
+                ...(leaveChangedAt ? {} : { leaveChangedAt: null }),
                 reviewedBy: null,
                 reviewOutcome: null,
                 reviewedAt: null,
@@ -164,6 +239,21 @@ export async function saveAssessment(
     return result;
 }
 
+/** The rules an existing assessment was first measured against. */
+export function rulesOf(assessment: FortnightAssessmentDoc): AssessmentRules {
+    return {
+        weeklyTargetMinutes: assessment.weeklyTargetMinutes,
+        minimumLeaveDays: assessment.minimumLeaveDays
+    };
+}
+
+export async function findAssessmentFor(
+    staffId: ObjectId,
+    index: number
+): Promise<FortnightAssessmentDoc | null> {
+    return collections.fortnightAssessments().findOne({ staffId, fortnightIndex: index });
+}
+
 /** Assess every active staff member for the fortnight that just closed. */
 export async function assessFortnight(
     index: number,
@@ -173,7 +263,15 @@ export async function assessFortnight(
     const staff = await listActiveStaff();
     const saved: FortnightAssessmentDoc[] = [];
     for (const member of staff) {
-        const computation = await computeAssessment(member._id, index, config);
+        // A fortnight assessed before keeps the rules it was first assessed
+        // under, so re-running it after a target changed moves nothing.
+        const existing = await findAssessmentFor(member._id, index);
+        const computation = await computeAssessment(
+            member._id,
+            index,
+            config,
+            existing ? rulesOf(existing) : rulesFrom(config)
+        );
         saved.push(await saveAssessment(computation, rehearsal));
     }
     await audit("assessment.run", {

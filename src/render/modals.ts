@@ -135,19 +135,19 @@ export function leaveExtendModal(
 ): ModalBuilder {
     return new ModalBuilder()
         .setCustomId(`${LEAVE_EXTEND_MODAL}:${leaveId}`)
-        .setTitle("Extend leave")
+        .setTitle("Ask to extend leave")
         .addTextDisplayComponents(clockNote(timeZone))
         .addLabelComponents(
             dateField(
                 FIELD_END,
                 "New return",
-                `Currently ${currentEnd}. The new date has to be later than that.`,
+                `Currently ${currentEnd}. Later than that, and an Executive approves it.`,
                 example,
                 currentEnd
             ),
             reasonField(
                 "Why the extension",
-                "Visible to Executives only. Appended to your original reason."
+                "Visible to Executives only. Added to your original reason if approved."
             )
         );
 }

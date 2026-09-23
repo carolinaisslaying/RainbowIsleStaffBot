@@ -1,7 +1,10 @@
 import { MessageFlags, type ButtonInteraction, type Client } from "discord.js";
 import type { ObjectId } from "mongodb";
 import type { StaffBotConfig } from "../config/guildConfig.js";
-import { decideLeave, findLeave } from "../domain/leave.js";
+import { decideExtension, decideLeave, findLeave } from "../domain/leave.js";
+import type { LeaveDoc } from "../db/types.js";
+import { reassessAfterLeaveChange } from "../services/leaveReassess.js";
+import { pingKey, resolvePing } from "../services/pings.js";
 import { ensureStaff, findStaffById } from "../domain/staff.js";
 import { fetchPublicMember, resolveTier, isExecutive } from "../domain/permissions.js";
 import { tryDm } from "../discord/roles.js";
@@ -123,6 +126,11 @@ export async function handleLeaveButton(
         return;
     }
 
+    if (action === "extApprove" || action === "extDecline") {
+        await decideExtensionFromCard(client, config, interaction, leave, action === "extApprove");
+        return;
+    }
+
     if (action !== "approve" && action !== "decline") return;
 
     if (leave.status !== "pending") {
@@ -163,10 +171,11 @@ export async function handleLeaveButton(
                 approved ? "Leave approved" : "Leave declined",
                 approved
                     ? `Your leave from ${ts(leave.startDate, "f")} to ` +
-                          `${leave.endDate ? ts(leave.endDate, "f") : "an open ended return"} ` +
-                          "has been approved.\n\nYour staff roles are set aside when it starts and come " +
-                          "back on their own when it ends. No fortnight assessment applies to " +
-                          "you while away, and your streak freezes where it stands."
+                          `${ts(leave.endDate, "f")} has been approved.\n\nYour staff roles are ` +
+                          "set aside when it starts and come back on their own when it ends. A " +
+                          `week holding ${config.minimumLeaveDays} or more days of it is set ` +
+                          "aside too, and your fortnight asks one weekly target less for it. " +
+                          "Your streak freezes where it stands."
                     : "An Executive declined your leave request. Speak to them if you want to " +
                           "discuss it.",
                 { colour: approved ? COLOUR.approved : COLOUR.adverse }
@@ -184,6 +193,17 @@ export async function handleLeaveButton(
     const current = (await findLeave(leaveId)) ?? decided;
 
     await interaction.editReply(sendOptions(await leaveCardFor(client, config, current)) as never);
+    await resolvePing(client, pingKey.leave(leaveId));
+
+    // A request still pending when a fortnight it touches closed holds that
+    // fortnight's row. Deciding it, either way, settles the row.
+    await reassessAfterLeaveChange(
+        client,
+        config,
+        leave.staffId,
+        [{ startDate: leave.startDate, endDate: leave.endDate }],
+        approved ? "leave approved" : "leave declined"
+    );
 
     // The card this button sits on is the one just edited. Records created
     // before the location was stored learn it here, so a later end can still
@@ -192,4 +212,73 @@ export async function handleLeaveButton(
     if (!current.logMessageId) {
         await rememberLeaveCard(leaveId, interaction.channelId, interaction.message.id);
     }
+}
+
+/**
+ * Approve or decline an extension from the leave card.
+ *
+ * The card this sits on is edited in place, as every leave decision is, and the
+ * member hears either way: a declined extension means their return date has
+ * not moved, which they need to know before the day arrives.
+ */
+async function decideExtensionFromCard(
+    client: Client,
+    config: StaffBotConfig,
+    interaction: ButtonInteraction,
+    leave: LeaveDoc,
+    approved: boolean
+): Promise<void> {
+    const extension = leave.pendingExtension;
+    if (!extension) {
+        await respond(interaction, errorCard("There is no extension waiting on that leave."));
+        return;
+    }
+
+    await interaction.deferUpdate();
+    const decided = await decideExtension(leave, approved);
+    if (!decided) {
+        await interaction.followUp({
+            ...sendOptions(errorCard("Someone else decided that extension first.")),
+            flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2
+        } as never);
+        return;
+    }
+
+    await audit(approved ? "leave.extensionApproved" : "leave.extensionDeclined", {
+        actorId: interaction.user.id,
+        targetStaffId: leave.staffId,
+        detail: {
+            leaveId: leave._id.toHexString(),
+            from: leave.endDate,
+            to: extension.endDate
+        }
+    });
+
+    const subject = await findStaffById(leave.staffId);
+    if (subject) {
+        await tryDm(client, subject.discordId, {
+            ...noticeCard(
+                approved ? "Extension approved" : "Extension declined",
+                approved
+                    ? `You are now due back ${ts(extension.endDate, "f")}, ` +
+                          `${ts(extension.endDate, "R")}. Your leave closes itself then and your ` +
+                          "staff roles come back."
+                    : `An Executive declined your extension. You are still due back ` +
+                          `${ts(leave.endDate, "f")}, ${ts(leave.endDate, "R")}. Speak to them ` +
+                          "if you want to discuss it.",
+                { colour: approved ? COLOUR.approved : COLOUR.adverse }
+            )
+        });
+    }
+
+    await interaction.editReply(sendOptions(await leaveCardFor(client, config, decided)) as never);
+    await resolvePing(client, pingKey.extension(leave._id));
+
+    await reassessAfterLeaveChange(
+        client,
+        config,
+        leave.staffId,
+        [{ startDate: leave.endDate, endDate: extension.endDate }],
+        approved ? "leave extension approved" : "leave extension declined"
+    );
 }

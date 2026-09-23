@@ -7,7 +7,7 @@ import {
     countMinutesBetween
 } from "./activity.js";
 import { shiftMsInWindow, shiftsOverlapping } from "./shifts.js";
-import { leaveCoverageFor } from "./leave.js";
+import { weekLeaveFor } from "./leave.js";
 import { ringStateFor } from "./rings.js";
 import {
     nextWeekStart,
@@ -49,25 +49,16 @@ export function previousWeekWindow(instant: Date, config: StaffBotConfig): WeekW
     };
 }
 
-/**
- * A week's figures, plus what the card needs to explain a week that leave only
- * touched. The two extra fields are derived on read and never stored: they
- * describe a boundary, and the boundary is already in the leave record.
- */
-export interface WeekStats extends Omit<WeeklyStatsDoc, "_id"> {
-    /** When leave ended inside this week, if it did. */
-    leaveEndedAt: Date | null;
-    /** When leave began inside this week, if it did. */
-    leaveStartedAt: Date | null;
-}
+export type WeekStats = Omit<WeeklyStatsDoc, "_id">;
 
 /**
  * Compute one week for one member from raw data. No writes.
  *
- * Only leave covering the entire week counts as being on leave. A week in which
- * leave started on the Thursday, or ended on the Tuesday, is a worked week with
- * a note on it: the member's minutes are real, they are ranked on them, and the
- * rings show the state those minutes earned rather than a flat grey.
+ * A week holding `minimumLeaveDays` of leave is exempt: the rings go grey and
+ * the week drops out of its fortnight, the same test the assessment applies.
+ * Less leave than that is a worked week with a note on it: the member's
+ * minutes are real, they are ranked on them, and the full weekly target
+ * applies.
  */
 export async function computeWeek(
     staffId: ObjectId,
@@ -75,10 +66,10 @@ export async function computeWeek(
     config: StaffBotConfig,
     now = new Date()
 ): Promise<WeekStats> {
-    const [activityMinutes, activeDays, coverage, shifts] = await Promise.all([
+    const [activityMinutes, activeDays, leave, shifts] = await Promise.all([
         countMinutesBetween(staffId, window.start, window.end),
         countActiveDaysBetween(staffId, window.start, window.end),
-        leaveCoverageFor(staffId, window.start, window.end),
+        weekLeaveFor(staffId, window.start, window.end, config.minimumLeaveDays),
         shiftsOverlapping(staffId, window.start, window.end)
     ]);
 
@@ -93,41 +84,33 @@ export async function computeWeek(
         activityMinutes,
         shiftMs,
         activeDays,
-        onLeave: coverage.full,
-        partialLeave: coverage.partial,
-        leaveEndedAt: coverage.endedAt,
-        leaveStartedAt: coverage.startedAt,
+        onLeave: leave.exempt,
+        leaveDays: leave.days,
         ringState: ringStateFor({
             activityMinutes,
             weeklyTargetMinutes: config.weeklyTargetMinutes,
             amberThresholdPercent: config.amberThresholdPercent,
-            onLeave: coverage.full
+            onLeave: leave.exempt
         })
     };
 }
 
 /**
- * The line a card shows when leave only touched the week.
+ * The line a card shows when leave touched the week without exempting it.
  *
- * Written as a fact about the week rather than as a caveat, because the member
- * did work it and the target did apply to the part they worked.
+ * Stated as the rule it is, with the numbers, because a member who took two
+ * days off and still sees a red ring deserves to know why.
  */
-export function leaveNoteFor(stats: WeekStats): string | undefined {
-    if (stats.onLeave) return undefined;
-    if (!stats.partialLeave) return undefined;
-    if (stats.leaveEndedAt && stats.leaveStartedAt) {
-        return "You were on leave during part of this week. The weekly minimum still " +
-            "applies to the rest of it.";
-    }
-    if (stats.leaveEndedAt) {
-        return "Your leave ended part way through this week, so this week counts. The " +
-            "minimum only covers the days after it.";
-    }
-    if (stats.leaveStartedAt) {
-        return "Your leave starts part way through this week, so the days before it still " +
-            "count.";
-    }
-    return undefined;
+export function leaveNoteFor(
+    stats: Pick<WeekStats, "onLeave" | "leaveDays">,
+    minimumLeaveDays: number
+): string | undefined {
+    if (stats.onLeave || stats.leaveDays <= 0) return undefined;
+    return (
+        `You had ${stats.leaveDays} ${stats.leaveDays === 1 ? "day" : "days"} of leave this ` +
+        `week. It takes ${minimumLeaveDays} to set a week aside, so the weekly minimum still ` +
+        "applies in full."
+    );
 }
 
 export async function upsertWeek(stats: Omit<WeeklyStatsDoc, "_id">): Promise<void> {
@@ -139,7 +122,7 @@ export async function upsertWeek(stats: Omit<WeeklyStatsDoc, "_id">): Promise<vo
                 shiftMs: stats.shiftMs,
                 activeDays: stats.activeDays,
                 onLeave: stats.onLeave,
-                partialLeave: stats.partialLeave,
+                leaveDays: stats.leaveDays,
                 ringState: stats.ringState
             },
             $setOnInsert: {

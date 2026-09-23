@@ -31,7 +31,8 @@ import { fetchPublicMember, resolveTier, isExecutive } from "../domain/permissio
 import { audit } from "../domain/audit.js";
 import { tryDm } from "../discord/roles.js";
 import { refreshQueueHeader, upsertReviewRow } from "../services/assessmentService.js";
-import { upsertWarningCard } from "../services/conductService.js";
+import { pingUndelivered, upsertWarningCard } from "../services/conductService.js";
+import { pingKey, resolvePing } from "../services/pings.js";
 import {
     errorCard,
     noticeCard,
@@ -111,7 +112,9 @@ export async function handleReviewModal(
             isExecutive: true,
             actorStaffId: actor._id,
             subjectStaffId: assessment.staffId,
-            departed: subject ? subject.active === false : true
+            departed: subject ? subject.active === false : true,
+            below: assessment.status === "below",
+            held: assessment.heldForLeave
         });
         if (!permitted.ok) {
             await respond(interaction, errorCard(permitted.reason));
@@ -171,7 +174,7 @@ export async function handleReviewModal(
         await deferOntoOwnCard(interaction);
 
         const rows = (await belowThresholdFor(fortnightIndex)).filter(
-            (row) => !row.reviewOutcome
+            (row) => !row.reviewOutcome && !row.heldForLeave
         );
 
         // The confirmation named a set, and a modal can sit open while somebody
@@ -238,7 +241,7 @@ export async function handleReviewModal(
     const live = (await belowThresholdFor(fortnightIndex)).filter((row) =>
         ticked.has(row._id.toHexString())
     );
-    const rows = live.filter((row) => !row.reviewOutcome);
+    const rows = live.filter((row) => !row.reviewOutcome && !row.heldForLeave);
 
     await runDecisions({
         client,
@@ -340,7 +343,9 @@ async function runDecisions(options: {
             isExecutive: true,
             actorStaffId: actor._id,
             subjectStaffId: row.staffId,
-            departed: subject ? subject.active === false : true
+            departed: subject ? subject.active === false : true,
+            below: row.status === "below",
+            held: row.heldForLeave
         });
         if (!permitted.ok) {
             skipped.push(`<@${subject?.discordId ?? "unknown"}>`);
@@ -441,6 +446,7 @@ async function applyDecision(
         // presenting a warning that no longer counts against anybody.
         for (const withdrawn of await warningsForAssessment(assessment._id)) {
             await upsertWarningCard(client, config, withdrawn._id);
+            await resolvePing(client, pingKey.warning(withdrawn._id));
         }
         await clearReview(assessment._id);
         await audit("assessment.reopen", {
@@ -503,6 +509,8 @@ async function applyDecision(
 
     const outcome = OUTCOME_FOR[action];
     await recordReview(assessment._id, actorStaffId, outcome, reason);
+    // Decided, so nobody needs pinging about this row any more.
+    await resolvePing(client, pingKey.row(assessment._id));
 
     // Held, because the delivery result is written back against it afterwards.
     const issued =
@@ -553,7 +561,7 @@ async function applyDecision(
                 : await tryDm(client, subject.discordId, {
                       ...noticeCard(
                           "Fortnight excused",
-                          `Fortnight ${label}. Your activity was under the fortnight minimum, and ` +
+                          `Fortnight ${label}. Your activity was under your fortnight requirement, and ` +
                               `an Executive has excused it. Nothing goes on your record.\n\n` +
                               `**Why:** ${reason}`,
                           { colour: COLOUR.approved }
@@ -570,6 +578,9 @@ async function applyDecision(
         // queue — organised by fortnight, not by member, and purgeable — and the
         // log is the durable record of what has actually been issued.
         await upsertWarningCard(client, config, issued._id);
+        if (attempted && !messaged && !rehearsal) {
+            await pingUndelivered(client, config, issued._id);
+        }
     }
 
     return {

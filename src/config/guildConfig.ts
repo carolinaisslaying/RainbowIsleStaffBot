@@ -18,6 +18,7 @@ export interface StaffBotConfig {
     staffRankRoles: string[];
     leadRoles: string[];
     executiveRoles: string[];
+    staffExecutivePingRole: string;
 
     trackedChannels: string[];
     leaveChannelId: string;
@@ -30,7 +31,7 @@ export interface StaffBotConfig {
     fortnightAnchor: string;
 
     weeklyTargetMinutes: number;
-    fortnightRequiredMinutes: number;
+    minimumLeaveDays: number;
     weeklyShiftTargetHours: number;
     weeklyActiveDaysTarget: number;
     amberThresholdPercent: number;
@@ -99,6 +100,14 @@ export const CONFIG_KEYS: Record<keyof StaffBotConfig, KeySpec> = {
         importance: "required",
         group: "roles",
         consequence: "Nobody can configure the bot or decide anything"
+    },
+    staffExecutivePingRole: {
+        kind: "string",
+        description: "Pinged in the staff server when something needs an Executive",
+        target: "role",
+        importance: "required",
+        group: "roles",
+        consequence: "Leave requests and reviews wait without anybody being pinged"
     },
     availabilityRole: {
         kind: "string",
@@ -174,21 +183,21 @@ export const CONFIG_KEYS: Record<keyof StaffBotConfig, KeySpec> = {
     },
     weeklyTargetMinutes: {
         kind: "number",
-        description: "Weekly minimum (expected, not reviewed)",
+        description: "Weekly minimum. A fortnight requires one per week that counts",
         target: "plain",
         importance: "optional",
         group: "targets",
         min: 1,
         max: 10080
     },
-    fortnightRequiredMinutes: {
+    minimumLeaveDays: {
         kind: "number",
-        description: "Fortnight minimum (reviewed)",
+        description: "Shortest leave accepted, and the leave days that exempt a week",
         target: "plain",
         importance: "optional",
         group: "targets",
-        min: 0,
-        max: 20160
+        min: 1,
+        max: 7
     },
     weeklyShiftTargetHours: {
         kind: "number",
@@ -355,6 +364,7 @@ export const DEFAULT_CONFIG: StaffBotConfig = {
     staffRankRoles: [],
     leadRoles: [],
     executiveRoles: [],
+    staffExecutivePingRole: "",
     trackedChannels: [],
     leaveChannelId: "",
     reportChannelId: "",
@@ -364,7 +374,7 @@ export const DEFAULT_CONFIG: StaffBotConfig = {
     weekStartDay: 1,
     fortnightAnchor: "2026-09-28T00:00:00Z",
     weeklyTargetMinutes: 120,
-    fortnightRequiredMinutes: 240,
+    minimumLeaveDays: 3,
     weeklyShiftTargetHours: 4,
     weeklyActiveDaysTarget: 3,
     amberThresholdPercent: 75,

@@ -105,9 +105,15 @@ async function suggestChannels(
 
 /** Which guild a key's roles or channels belong to. */
 function guildForKey(key: keyof StaffBotConfig, config: StaffBotConfig): string {
-    // Review and recap channels are in the staff server; everything else,
-    // including every role, is in the community server.
-    if (key === "leaveChannelId" || key === "reportChannelId" || key === "recapChannelId") {
+    // Review and recap channels, and the role pinged in them, are in the staff
+    // server; everything else, including every other role, is in the community
+    // server.
+    if (
+        key === "leaveChannelId" ||
+        key === "reportChannelId" ||
+        key === "recapChannelId" ||
+        key === "staffExecutivePingRole"
+    ) {
         return config.staffGuildId;
     }
     return config.publicGuildId;

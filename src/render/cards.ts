@@ -235,7 +235,7 @@ export function shiftSummaryCard(input: ShiftSummaryInput): RenderedMessage {
             (input.pausedMs > 0 ? `Paused for ${formatDuration(input.pausedMs)}.` : "Never paused."),
         "",
         "-# Shift time measures availability, activity minutes measure participation. " +
-            "Only activity minutes count, and only the fortnight minimum is reviewed."
+            "Only activity minutes count, and only the fortnight requirement is reviewed."
     ].join("\n");
 
     const container = card.components[0] as ContainerBuilder;
@@ -383,8 +383,12 @@ export interface ReviewRowInput {
     acknowledgedLine: string | null;
     departed: boolean;
     rehearsal: boolean;
-    /** Set when a recompute has moved them above the requirement since. */
+    /** Set when a recompute or a leave change has moved them off the queue since. */
     contradiction: string | null;
+    /** Still below the requirement. False once leave has taken them off the queue. */
+    below: boolean;
+    /** What leave did to this fortnight, and whether a request is still pending. */
+    leaveLines: string[];
     /** Their recent fortnights, drawn. Omitted while there is nothing to plot. */
     trend?: { png: Buffer; alt: string } | null;
 }
@@ -421,13 +425,20 @@ const REVIEW_BUTTON: Record<
 export function reviewRowCard(row: ReviewRowInput): ContainerBuilder {
     const shortfall = Math.max(0, row.requiredMinutes - row.totalMinutes);
     const reached = percent(row.totalMinutes, row.requiredMinutes);
-    const colour = row.outcome ? REVIEW_OUTCOME_COLOUR[row.outcome] : COLOUR.adverse;
+    const colour = row.outcome
+        ? REVIEW_OUTCOME_COLOUR[row.outcome]
+        : row.below
+          ? COLOUR.adverse
+          : COLOUR.settled;
 
     const lines = [
         `**${row.displayName}**`,
-        `**${row.totalMinutes} of ${row.requiredMinutes} minutes** (${reached}%), ` +
-            `**${shortfall}** under the minimum`,
+        row.requiredMinutes === 0
+            ? `**${row.totalMinutes} minutes**, nothing required`
+            : `**${row.totalMinutes} of ${row.requiredMinutes} minutes** (${reached}%)` +
+              (shortfall > 0 ? `, **${shortfall}** under the requirement` : ""),
         `-# Week one ${row.week1Minutes} min, week two ${row.week2Minutes} min`,
+        ...row.leaveLines.map((line) => `-# ${line}`),
         `-# Earlier fortnights: ${row.priorOutcomes}`
     ];
 
@@ -437,7 +448,7 @@ export function reviewRowCard(row: ReviewRowInput): ContainerBuilder {
 
     // Said before the click, not after it. The bot counts and surfaces; it
     // never escalates by itself.
-    if (!row.outcome) lines.push(`-# ${row.warningWeight}`);
+    if (!row.outcome && row.below) lines.push(`-# ${row.warningWeight}`);
 
     const container = new ContainerBuilder()
         .setAccentColor(colour)
@@ -664,7 +675,7 @@ export function warningDmCard(input: {
                 `### ${emojiForColour(COLOUR.adverse)} You have received an activity warning\n` +
                     `Fortnight ${input.windowLabel}. You recorded ` +
                     `**${input.totalMinutes} of ${input.requiredMinutes} activity minutes**, ` +
-                    `**${shortfall}** under the fortnight minimum.\n\n` +
+                    `**${shortfall}** under your fortnight requirement.\n\n` +
                     `**Why**\n> ${input.reason}\n\n` +
                     "If you think this is wrong, or something was going on that we should " +
                     "know about, contact an Executive.\n\n" +
@@ -1085,34 +1096,77 @@ export function leaveRequestCard(options: {
     leaveId: string;
     displayName: string;
     startDate: Date;
-    endDate: Date | null;
+    endDate: Date;
+    /** The return date as booked, when the leave ended before it. */
+    plannedEndDate?: Date | null;
     reason: string;
     status: LeaveStatus;
     decided: string | null;
     /** What became of the leave itself: ended early, ran its course, came back. */
     outcome?: string | null;
     purged?: string | null;
+    /** What approving this request would do to the member's requirements. */
+    effectLines?: string[];
+    /** A later return date waiting on an Executive, and what it would change. */
+    pendingExtension?: { endDate: Date; reason: string; effectLines: string[] } | null;
 }): RenderedMessage {
     // A purged record is grey whatever state it was decided in, so the mark
     // follows the colour the card is actually drawn in rather than the status
     // it still reports.
     const colour = options.purged ? COLOUR.settled : LEAVE_STATUS_COLOUR[options.status];
+    // Waiting leave is amber like a waiting review, so it carries its own mark
+    // rather than the review's ⏳. Every other state keeps its colour's emoji.
+    const leaveMark = colour === COLOUR.pending ? EMOJI.leave : emojiForColour(colour);
 
     const container = new ContainerBuilder()
         .setAccentColor(colour)
         .addTextDisplayComponents(
             text(
-                `## ${emojiForColour(colour)} Leave request\n` +
+                `## ${leaveMark} Leave request\n` +
                     `**${options.displayName}**\n` +
                     `-# ${LEAVE_STATUS_LABEL[options.status]}\n` +
-                    `From ${ts(options.startDate, "f")} ` +
-                    `to ${options.endDate ? ts(options.endDate, "f") : "**open ended**"}` +
-                    (options.endDate && options.status !== "ended"
-                        ? `, ending ${ts(options.endDate, "R")}`
+                    `From ${ts(options.startDate, "f")} to ${ts(options.endDate, "f")}` +
+                    (options.status !== "ended" ? `, ending ${ts(options.endDate, "R")}` : "") +
+                    (options.plannedEndDate
+                        ? `\n-# Booked until ${ts(options.plannedEndDate, "f")}`
                         : "") +
                     `\n\n**Reason**\n${options.reason}`
             )
         );
+
+    if (options.status === "pending" && options.effectLines && options.effectLines.length > 0) {
+        container.addTextDisplayComponents(
+            text(`**If approved**\n${options.effectLines.map((line) => `-# ${line}`).join("\n")}`)
+        );
+    }
+
+    const extension =
+        options.status === "approved" || options.status === "active"
+            ? options.pendingExtension
+            : null;
+    if (extension && !options.purged) {
+        container.addSeparatorComponents(separator());
+        container.addTextDisplayComponents(
+            text(
+                `**Extension requested** to ${ts(extension.endDate, "f")}\n` +
+                    `> ${extension.reason}\n` +
+                    extension.effectLines.map((line) => `-# ${line}`).join("\n") +
+                    "\n-# The leave still ends on its current date until this is decided."
+            )
+        );
+        container.addActionRowComponents(
+            new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`leave:${options.leaveId}:extApprove`)
+                    .setLabel("Approve extension")
+                    .setStyle(ButtonStyle.Success),
+                new ButtonBuilder()
+                    .setCustomId(`leave:${options.leaveId}:extDecline`)
+                    .setLabel("Decline extension")
+                    .setStyle(ButtonStyle.Danger)
+            )
+        );
+    }
 
     if (options.decided) {
         // The decision replaces the buttons in place, so the channel keeps one
@@ -1195,7 +1249,7 @@ export function leaveRequestCard(options: {
 export function leaveEndConfirmCard(options: {
     leaveId: string;
     displayName: string;
-    endDate: Date | null;
+    endDate: Date;
     active: boolean;
 }): RenderedMessage {
     const container = new ContainerBuilder()
@@ -1205,16 +1259,14 @@ export function leaveEndConfirmCard(options: {
                 `### ${options.active ? "Bring them back now?" : "Cancel this leave?"}\n` +
                     `${options.displayName} ` +
                     (options.active
-                        ? options.endDate
-                            ? `is due back ${ts(options.endDate, "D")}, ` +
-                              `${ts(options.endDate, "R")}. Ending it now restores their staff roles ` +
-                              "and tells them they are back."
-                            : "is on open ended leave. Ending it now restores their staff roles and " +
-                              "tells them they are back."
+                        ? `is due back ${ts(options.endDate, "D")}, ` +
+                          `${ts(options.endDate, "R")}. Ending it now restores their staff roles ` +
+                          "and tells them they are back."
                         : "has not started this leave yet. Cancelling it means their staff roles " +
                           "are never set aside and they are told it is off.") +
-                    "\n\nThe fortnights this leave excused stay excused. They can request " +
-                    "leave again at any time."
+                    "\n\nExemptions follow the leave they actually took, so a week this cuts " +
+                    "short can stop being exempt, and any closed fortnight it changes is " +
+                    "reassessed. They can request leave again at any time."
             )
         )
         .addActionRowComponents(
@@ -1251,6 +1303,8 @@ export function leaveInterpretationCard(options: {
     reasonLabel: string;
     timeZone: string;
     typed: string[];
+    /** What the leave does to their requirements. */
+    effectLines: string[];
 }): RenderedMessage {
     const quoted = options.typed.map((value) => `**${value}**`).join(" and ");
     const lines = options.startDate
@@ -1268,7 +1322,13 @@ export function leaveInterpretationCard(options: {
             )
         )
         .addSeparatorComponents(separator())
-        .addTextDisplayComponents(text(`**${options.reasonLabel}**\n${options.reason}`))
+        .addTextDisplayComponents(
+            text(
+                (options.effectLines.length > 0
+                    ? `**What it changes**\n${options.effectLines.join("\n")}\n\n`
+                    : "") + `**${options.reasonLabel}**\n${options.reason}`
+            )
+        )
         .addActionRowComponents(
             new ActionRowBuilder<ButtonBuilder>().addComponents(
                 new ButtonBuilder()
@@ -1296,9 +1356,10 @@ export function purgeConfirmCard(options: {
     leaveId: string;
     displayName: string;
     startDate: Date;
-    endDate: Date | null;
+    endDate: Date;
     status: string;
-    exemptions: string[];
+    /** Verdicts the purge would move, one line each. */
+    verdictChanges: string[];
 }): RenderedMessage {
     const container = new ContainerBuilder()
         .setAccentColor(COLOUR.adverse)
@@ -1306,7 +1367,7 @@ export function purgeConfirmCard(options: {
             text(
                 "### Purge this leave record?\n" +
                     `**${options.displayName}**, ${ts(options.startDate, "D")} to ` +
-                    `${options.endDate ? ts(options.endDate, "D") : "open ended"}, ` +
+                    `${ts(options.endDate, "D")}, ` +
                     `currently **${options.status}**.\n\n` +
                     "This deletes the record from the database. It cannot be undone from " +
                     "Discord. The audit log keeps a copy of everything it held, which is the " +
@@ -1314,14 +1375,15 @@ export function purgeConfirmCard(options: {
             )
         );
 
-    if (options.exemptions.length > 0) {
+    if (options.verdictChanges.length > 0) {
         container.addSeparatorComponents(separator());
         container.addTextDisplayComponents(
             text(
-                "**This record is exempting assessments**\n" +
-                    options.exemptions.map((line) => `- ${line}`).join("\n") +
-                    "\n\nRemoving it means the next recompute assesses those fortnights on " +
-                    "the figures alone, and they may come out adverse."
+                `**Purging this changes ${options.verdictChanges.length} ` +
+                    `${options.verdictChanges.length === 1 ? "verdict" : "verdicts"}**\n` +
+                    options.verdictChanges.map((line) => `- ${line}`).join("\n") +
+                    "\n\nThose fortnights are reassessed as soon as the record is gone. A row " +
+                    "that falls below the requirement goes back on the review queue."
             )
         );
     }
@@ -1330,7 +1392,7 @@ export function purgeConfirmCard(options: {
         new ActionRowBuilder<ButtonBuilder>().addComponents(
             new ButtonBuilder()
                 .setCustomId(`leavePurge:${options.leaveId}:go`)
-                .setLabel("Purge it")
+                .setLabel(options.verdictChanges.length > 0 ? "Purge and reassess" : "Purge it")
                 .setStyle(ButtonStyle.Danger),
             new ButtonBuilder()
                 .setCustomId(`leavePurge:${options.leaveId}:cancel`)
@@ -1523,6 +1585,8 @@ export function warningLogCard(input: {
     acknowledgedAt: Date | null;
     delivery: "delivered" | "failed" | "unknown";
     withdrawn: { at: Date; by: string; reason: string } | null;
+    /** When leave took the fortnight this warning was issued for off the queue. */
+    coveredByLeaveAt?: Date | null;
 }): RenderedMessage {
     // The rung owns the accent here, which is the one place in this bot where
     // colour means severity rather than state. Three rungs drawn in state
@@ -1572,7 +1636,15 @@ export function warningLogCard(input: {
         "",
         `> ${input.reason.split("\n").join("\n> ")}`,
         "",
-        stateLine
+        stateLine,
+        ...(input.coveredByLeaveAt && !input.withdrawn
+            ? [
+                  "",
+                  `⚠️ **Leave changed ${ts(input.coveredByLeaveAt, "R")}** and took the ` +
+                      "fortnight this warning was issued for off the review queue. It still " +
+                      "stands until an Executive withdraws it."
+              ]
+            : [])
     ];
 
     const container = new ContainerBuilder()

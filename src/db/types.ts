@@ -74,10 +74,10 @@ export interface WeeklyStatsDoc {
     activityMinutes: number;
     shiftMs: number;
     activeDays: number;
-    /** Leave covered the WHOLE week. Only this greys the rings. */
+    /** Enough leave to exempt the week (`minimumLeaveDays`). Only this greys the rings. */
     onLeave: boolean;
-    /** Leave touched the week without covering it. Display only. */
-    partialLeave: boolean;
+    /** Leave in the week, in whole days (hours / 24, rounded). */
+    leaveDays: number;
     ringState: RingState;
 }
 
@@ -93,9 +93,29 @@ export interface FortnightAssessmentDoc {
     week1Minutes: number;
     week2Minutes: number;
     totalMinutes: number;
-    /** Snapshot of config at assessment time. Never re-read from live config. */
+    /**
+     * The policy this fortnight is measured against, snapshotted on first
+     * assessment and never re-read from live config, so changing a target does
+     * not rewrite past outcomes. Leave can still move the requirement, because
+     * leave approved or ended later reassesses the fortnight against these.
+     */
+    weeklyTargetMinutes: number;
+    minimumLeaveDays: number;
+    /** Leave in each week, in whole days, and whether it exempted that week. */
+    week1LeaveDays: number;
+    week2LeaveDays: number;
+    week1Exempt: boolean;
+    week2Exempt: boolean;
+    /** One weekly target per week that still counts: two, one or none. */
     requiredMinutes: number;
     status: AssessmentStatus;
+    /**
+     * Below, but a leave request still waiting on an Executive would change
+     * that if approved. The row offers no Warn until the leave is decided.
+     */
+    heldForLeave: boolean;
+    /** When a leave change last reassessed this fortnight after it closed. */
+    leaveChangedAt: Date | null;
     reviewedBy: ObjectId | null;
     reviewOutcome: ReviewOutcome | null;
     reviewedAt: Date | null;
@@ -210,6 +230,13 @@ export interface WarningDoc {
      */
     deliveredAt?: Date | null;
     deliveryFailedAt?: Date | null;
+
+    /**
+     * Set when leave approved or changed after the warning took the fortnight
+     * it was issued for off the review queue. The warning still stands: an
+     * Executive decides whether to withdraw it, and the log card says so.
+     */
+    coveredByLeaveAt?: Date | null;
 }
 
 export type LeaveStatus = "pending" | "approved" | "declined" | "active" | "ended";
@@ -219,8 +246,19 @@ export interface LeaveDoc {
     staffId: ObjectId;
     requestedAt: Date;
     startDate: Date;
-    /** null = open ended. */
-    endDate: Date | null;
+    /**
+     * When the leave ends. Required: every leave is booked with a return date.
+     * Ending leave early moves this to the moment it ended, so exemption
+     * follows the leave actually taken, and keeps the booked date below.
+     */
+    endDate: Date;
+    /** The return date as booked, when the leave ended before it. */
+    plannedEndDate: Date | null;
+    /**
+     * A later return date the member asked for, waiting on an Executive. The
+     * leave keeps running on `endDate` until somebody decides.
+     */
+    pendingExtension: PendingExtension | null;
     reason: string;
     status: LeaveStatus;
     decidedBy: ObjectId | null;
@@ -244,6 +282,25 @@ export interface LeaveDoc {
      * three cases can be told apart on the record and in the wording.
      */
     endedEarlyBy?: ObjectId | null;
+}
+
+export interface PendingExtension {
+    endDate: Date;
+    reason: string;
+    requestedAt: Date;
+}
+
+/**
+ * A reply that pinged the Executives about a card, kept so it can be deleted
+ * once the card no longer needs them. Keyed by what it is about
+ * (`leave:<id>`, `row:<id>`, `review:<index>` and so on), so there is at most
+ * one outstanding ping per thing and a newer one replaces the older.
+ */
+export interface PingDoc {
+    _id: string;
+    channelId: string;
+    messageId: string;
+    at: Date;
 }
 
 /** Server load, for the heatmap. No identity attached, ever. */

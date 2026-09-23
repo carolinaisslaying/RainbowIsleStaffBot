@@ -36,7 +36,7 @@ export const leaveCommand: Command = {
             sub.setName("request").setDescription("Request leave. Opens a form.")
         )
         .addSubcommand((sub) =>
-            sub.setName("extend").setDescription("Push out your return date. Opens a form.")
+            sub.setName("extend").setDescription("Ask for a later return date. An Executive approves it.")
         )
         .addSubcommand((sub) => sub.setName("end").setDescription("End your leave and come back"))
         .addSubcommand((sub) =>
@@ -57,7 +57,7 @@ export const leaveCommand: Command = {
                     errorCard(
                         `You already have leave **${held.status}**, ` +
                             `${ts(held.startDate, "D")} to ` +
-                            `${held.endDate ? ts(held.endDate, "D") : "open ended"}. Use ` +
+                            `${ts(held.endDate, "D")}. Use ` +
                             `${cmd("leave extend", interaction.guildId)} to move the return ` +
                             "date, or wait for a decision on it."
                     )
@@ -86,13 +86,22 @@ export const leaveCommand: Command = {
                 );
                 return;
             }
+            if (extendable.pendingExtension) {
+                await respond(
+                    interaction,
+                    errorCard(
+                        "You already asked to extend this leave to " +
+                            `${ts(extendable.pendingExtension.endDate, "f")}. An Executive ` +
+                            "decides that first, and you hear back either way."
+                    )
+                );
+                return;
+            }
             await interaction.showModal(
                 leaveExtendModal(
                     extendable._id.toHexString(),
                     zone,
-                    extendable.endDate
-                        ? formatForInput(extendable.endDate, zone)
-                        : formatForInput(now, zone),
+                    formatForInput(extendable.endDate, zone),
                     inputExample(now, zone)
                 )
             );
@@ -151,7 +160,10 @@ export const leaveCommand: Command = {
                 lines.push(
                     `<@${subject?.discordId ?? "unknown"}>, **${record.status}**, ` +
                         `${ts(record.startDate, "f")} to ` +
-                        `${record.endDate ? ts(record.endDate, "f") : "open ended"}${reason}`
+                        `${ts(record.endDate, "f")}${reason}` +
+                        (record.pendingExtension
+                            ? `, extension to ${ts(record.pendingExtension.endDate, "D")} waiting`
+                            : "")
                 );
             }
             container.addTextDisplayComponents(text(lines.join("\n")));

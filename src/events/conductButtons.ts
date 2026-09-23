@@ -13,8 +13,10 @@ import { tryDm } from "../discord/roles.js";
 import {
     deliverConductWarning,
     issueConductWarning,
+    pingUndelivered,
     upsertWarningCard
 } from "../services/conductService.js";
+import { pingKey, resolvePing } from "../services/pings.js";
 import { errorCard, noticeCard } from "../render/cards.js";
 import {
     CONDUCT_WITHDRAW_MODAL,
@@ -94,6 +96,7 @@ export async function handleConductWarnModal(
 
     const delivered = await deliverConductWarning(client, config, warning, subject);
     await upsertWarningCard(client, config, warning._id);
+    if (!delivered) await pingUndelivered(client, config, warning._id);
 
     const name = await staffDisplayName(
         client,
@@ -219,6 +222,8 @@ export async function handleConductWithdrawModal(
         : false;
 
     await upsertWarningCard(client, config, warning._id);
+    // Withdrawn, so whatever it was pinging about is settled.
+    await resolvePing(client, pingKey.warning(warning._id));
 
     await respond(
         interaction,

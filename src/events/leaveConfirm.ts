@@ -2,14 +2,26 @@ import { randomBytes } from "node:crypto";
 import type { ButtonInteraction, Client } from "discord.js";
 import { ObjectId } from "mongodb";
 import type { StaffBotConfig } from "../config/guildConfig.js";
-import { createLeaveRequest, extendLeave, findLeave, pendingOrApprovedLeaveFor } from "../domain/leave.js";
+import {
+    createLeaveRequest,
+    findLeave,
+    pendingOrApprovedLeaveFor,
+    requestExtension
+} from "../domain/leave.js";
 import { audit } from "../domain/audit.js";
-import { rememberLeaveCard, staffChannel, updateLeaveCard } from "../services/leaveService.js";
-import { errorCard, leaveRequestCard, noticeCard } from "../render/cards.js";
+import {
+    leaveCardFor,
+    rememberLeaveCard,
+    staffChannel,
+    updateLeaveCard
+} from "../services/leaveService.js";
+import { pingExecutives, pingKey } from "../services/pings.js";
+import { errorCard, noticeCard } from "../render/cards.js";
 import { respond, sendOptions } from "../discord/respond.js";
 import { ts } from "../time/format.js";
 import { cmd } from "../discord/commandMentions.js";
 import { COLOUR } from "../render/theme.js";
+import { EMOJI } from "../render/emoji.js";
 import { log } from "../log.js";
 
 /**
@@ -165,22 +177,17 @@ async function commitRequest(
         // so rather than letting them wait for a decision nobody will ever see.
         log.warn("No leaveChannelId configured; the request has nowhere to post.");
     } else {
-        const posted = await channel.send(
-            sendOptions(
-                leaveRequestCard({
-                    leaveId: leave._id.toHexString(),
-                    displayName: `${draft.displayName} (<@${draft.discordId}>)`,
-                    startDate: draft.startDate as Date,
-                    endDate: draft.endDate,
-                    reason: draft.reason,
-                    status: "pending",
-                    decided: null
-                })
-            )
-        );
+        const posted = await channel.send(sendOptions(await leaveCardFor(client, config, leave)));
         // Everything that happens to this leave later edits this one message,
         // so the record has to know where it is.
         await rememberLeaveCard(leave._id, posted.channelId, posted.id);
+        await pingExecutives(
+            client,
+            config,
+            pingKey.leave(leave._id),
+            { channelId: posted.channelId, messageId: posted.id },
+            `<@${draft.discordId}> has requested leave. Approve or decline it above.`
+        );
     }
 
     await audit("leave.request", {
@@ -202,7 +209,7 @@ async function commitRequest(
                     "they are until the leave is approved and starts, and they come back on " +
                     "their own when it ends.\n\n" +
                     `-# Need longer once it has started? ${cmd("leave extend", interaction.guildId)}.`,
-                { colour: COLOUR.pending }
+                { colour: COLOUR.pending, emoji: EMOJI.leave }
             )
         ) as never
     );
@@ -224,57 +231,52 @@ async function commitExtension(
         return;
     }
 
-    const updated = await extendLeave(leave._id, draft.endDate, draft.reason);
+    const updated = await requestExtension(leave._id, draft.endDate, draft.reason);
     if (!updated) {
         await interaction.editReply(
             sendOptions(
                 errorCard(
-                    `That leave could no longer be extended. Check ` +
-                        `${cmd("leave list", interaction.guildId)}.`
+                    "That leave could not be extended. It may have ended, or an extension is " +
+                        `already waiting on an Executive. Check ${cmd("leave list", interaction.guildId)}.`
                 )
             ) as never
         );
         return;
     }
 
-    await audit("leave.extend", {
+    await audit("leave.extensionRequested", {
         actorId: draft.discordId,
         targetStaffId: draft.staffId,
         detail: {
             leaveId: updated._id.toHexString(),
-            endDate: draft.endDate,
+            from: leave.endDate,
+            to: draft.endDate,
             note: draft.reason
         }
     });
 
-    // The request card carries the dates, and one of them just moved, so it is
-    // redrawn before anyone is told anything. A card still showing last week's
-    // return date is worse than no card.
+    // The card carries the request and its two buttons, and the ping points
+    // at it, because an edit alone would notify nobody.
     await updateLeaveCard(client, config, updated);
-
-    // Executives approved a window, and the window just changed. They are told,
-    // rather than finding out when someone does not come back.
-    const channel = await staffChannel(client, config, config.leaveChannelId);
-    await channel?.send(
-        sendOptions(
-            noticeCard(
-                "Leave extended",
-                `<@${draft.discordId}> pushed their return from ` +
-                    `${leave.endDate ? ts(leave.endDate, "f") : "an open ended date"} to ` +
-                    `${ts(draft.endDate, "f")}.\n\nReason given: ${draft.reason}`,
-                { colour: COLOUR.pending }
-            )
-        )
-    );
+    if (updated.logChannelId && updated.logMessageId) {
+        await pingExecutives(
+            client,
+            config,
+            pingKey.extension(updated._id),
+            { channelId: updated.logChannelId, messageId: updated.logMessageId },
+            `<@${draft.discordId}> has asked to extend their leave to ${ts(draft.endDate, "f")}. ` +
+                "Approve or decline it above."
+        );
+    }
 
     await interaction.editReply(
         sendOptions(
             noticeCard(
-                "Leave extended",
-                `You are now due back ${ts(draft.endDate, "f")}, ${ts(draft.endDate, "R")}.\n\n` +
-                    "Your leave closes itself then and your staff roles come back. The Executives " +
-                    "have been told.",
-                { colour: COLOUR.approved }
+                "Extension requested",
+                `You asked to come back ${ts(draft.endDate, "f")} instead of ` +
+                    `${ts(leave.endDate, "f")}.\n\nAn Executive decides, and you hear back ` +
+                    "either way. Until then your leave still ends on its current date.",
+                { colour: COLOUR.pending, emoji: EMOJI.leave }
             )
         ) as never
     );

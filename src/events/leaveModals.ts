@@ -16,6 +16,8 @@ import { parseInstant } from "../time/input.js";
 import { ts } from "../time/format.js";
 import { cmd } from "../discord/commandMentions.js";
 import { stage } from "./leaveConfirm.js";
+import { leaveLength } from "../domain/leaveDays.js";
+import { describeLeaveChange } from "../services/leaveService.js";
 
 /**
  * Leave form submissions.
@@ -30,7 +32,10 @@ import { stage } from "./leaveConfirm.js";
  *    about the future and back-dating it would silently rewrite a fortnight
  *    that has already been assessed;
  *  - the end has to be after the start, and an extension has to be after the
- *    end it replaces, or it is not an extension.
+ *    end it replaces, or it is not an extension;
+ *  - a request has to be at least `minimumLeaveDays` long, counted the way a
+ *    week's leave is counted: hours divided by 24, rounded. An extension only
+ *    makes a leave longer, so it never needs checking against it.
  *
  * Nothing here writes to the database. A valid submission is staged and shown
  * back to the member as a sentence they can check, and leaveConfirm.ts commits
@@ -132,6 +137,20 @@ export async function handleLeaveModal(
             return;
         }
 
+        const length = leaveLength({ startDate: start.at, endDate: end.at });
+        if (length < config.minimumLeaveDays) {
+            await respond(
+                interaction,
+                errorCard(
+                    `Leave: ${ts(start.at, "f")} to ${ts(end.at, "f")} ` +
+                        `(${length} ${length === 1 ? "day" : "days"}).\n\n` +
+                        `Leave must be at least ${config.minimumLeaveDays} days. This is ` +
+                        `${length}.\n\nNothing was recorded.`
+                )
+            );
+            return;
+        }
+
         // Re-checked here as well as in the command: a member can open the form,
         // leave it sitting, and submit it after a request has already landed.
         const existing = await pendingOrApprovedLeaveFor(staff._id);
@@ -166,7 +185,12 @@ export async function handleLeaveModal(
                 reason,
                 reasonLabel: "Reason",
                 timeZone: zone,
-                typed: [typedStart, typedEnd]
+                typed: [typedStart, typedEnd],
+                effectLines: await describeLeaveChange(config, staff._id, {
+                    kind: "request",
+                    startDate: start.at,
+                    endDate: end.at
+                })
             })
         );
         return;
@@ -186,6 +210,17 @@ export async function handleLeaveModal(
         await respond(interaction, errorCard("That is not your leave."));
         return;
     }
+    if (leave.pendingExtension) {
+        await respond(
+            interaction,
+            errorCard(
+                `You already asked to extend this leave to ` +
+                    `${ts(leave.pendingExtension.endDate, "f")}, and an Executive has not ` +
+                    "decided yet. Wait for that decision before asking again."
+            )
+        );
+        return;
+    }
 
     const typedEnd = interaction.fields.getTextInputValue(FIELD_END).trim();
     const end = readInstant(typedEnd, "New return", zone, now, example);
@@ -203,7 +238,7 @@ export async function handleLeaveModal(
         );
         return;
     }
-    if (leave.endDate && end.at <= leave.endDate) {
+    if (end.at <= leave.endDate) {
         await respond(
             interaction,
             errorCard(
@@ -235,7 +270,16 @@ export async function handleLeaveModal(
             reason: note,
             reasonLabel: "Why the extension",
             timeZone: zone,
-            typed: [typedEnd]
+            typed: [typedEnd],
+            effectLines: [
+                ...(await describeLeaveChange(config, staff._id, {
+                    kind: "extension",
+                    leave,
+                    endDate: end.at
+                })),
+                "An Executive decides the extension. Until then your leave still ends " +
+                    `${ts(leave.endDate, "f")}.`
+            ]
         })
     );
 }

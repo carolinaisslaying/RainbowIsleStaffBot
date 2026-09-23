@@ -14,8 +14,8 @@ import { spreadSvg, trendSvg } from "../src/render/trend.js";
 /** Only the data marks: the panel draws rects of its own that are not bars. */
 const BAR = /<rect[^>]*height="([\d.]+)"[^>]*fill="(?:#2e9fb8|#5ed0e6|rgba\(255,255,255,0\.13\))"/g;
 
-/** The requirement line, which is the only dashed line either chart draws. */
-const RULE = /<line[^>]*y1="([\d.]+)"[^>]*stroke-dasharray/;
+/** The requirement line. The only other dashed line is a reduced fortnight's own mark. */
+const RULE = /<line(?![^>]*own-requirement)[^>]*y1="([\d.]+)"[^>]*stroke-dasharray/;
 
 const points = [
     { label: "9 Jun", minutes: 310, exempt: false, current: false },
@@ -43,6 +43,15 @@ describe("a member's recent fortnights", () => {
         // Still inside the plot rather than flattened onto the baseline.
         expect(y).toBeGreaterThan(0);
         expect(y).toBeLessThan(200);
+    });
+
+    it("marks a fortnight leave reduced at its own requirement", () => {
+        const reduced = [
+            { label: "a", minutes: 130, exempt: false, current: false, requiredMinutes: 120 },
+            { label: "b", minutes: 250, exempt: false, current: true, requiredMinutes: 240 }
+        ];
+        const svg = trendSvg({ points: reduced, requiredMinutes: 240, title: "x" });
+        expect(svg.match(/own-requirement/g)).toHaveLength(1);
     });
 
     it("draws leave as an absence, never as a zero", () => {

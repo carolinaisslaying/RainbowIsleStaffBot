@@ -68,16 +68,16 @@ edited with `/config set`. Everything the spec calls configurable is a key on `S
 
 **Configuration says what a setting will do, and never refuses it.** `config/configGuards.ts` holds
 that as pure functions, so `/config set` and `/config view` reach the same answer and a document
-already in a bad state is flagged without anybody setting the key again. Three of them.
+already in a bad state is flagged without anybody setting the key again. Two of them.
 `anchorStatus` catches the case a fresh install is actually in: the default `fortnightAnchor` ships
 in the future, `fortnightIndexFor` floors an unbounded division, and `isAssessableFortnight`
 correctly rejects every negative index — so the deployment assesses nobody, warns nobody, and says so
-only in a debug log. The guard was right; its silence was the bug. `requirementIsReachable` and
-`autoEndIsGenerous` catch a `fortnightRequiredMinutes` above twice the weekly target (a member who
-closes both weekly rings still lands in the review queue, so the rings and the assessment disagree
-and neither is wrong) and an auto-end shorter than the away threshold. All three report with the
-arithmetic rather than as a refusal: policy belongs to the Executive, and a bot that argues with its
-owner gets worked around.
+only in a debug log. The guard was right; its silence was the bug. `autoEndIsGenerous` catches an
+auto-end shorter than the away threshold. Both report with the arithmetic rather than as a refusal:
+policy belongs to the Executive, and a bot that argues with its owner gets worked around. There used
+to be a third, for a `fortnightRequiredMinutes` nobody could reach by closing both weekly rings; the
+key is gone, because the fortnight now asks for one `weeklyTargetMinutes` per week that counts and
+the rings and the assessment cannot disagree by construction.
 
 **`weekStartDay` and `accountingTimezone` take a second click.** They are the only two keys that
 reach backwards — they move where every week and fortnight begins for every record ever written, so
@@ -300,7 +300,8 @@ Names say what a view answers, not what it draws: `/coverage server` and `/cover
 which splits `customId` on `:` into `namespace:first:second`. Namespaces in use: `config`
 (`export`/`import`/`apply`/`discard`/`setConfirm`/`setCancel`), `review`, `warning`
 (`ack` on the member's DM), `conduct` (`withdraw` on the log card), `leave`
-(`approve`/`decline`/`end`/`endConfirm`/`endCancel`), `leaveConfirm`, `leavePurge`, `tz`,
+(`approve`/`decline`/`extApprove`/`extDecline`/`end`/`endConfirm`/`endCancel`), `leaveConfirm`,
+`leavePurge`, `tz`,
 `leaderboard`. A pressed button edits its own message in place
 (`interaction.update` / `deferUpdate` + `editReply`) rather than replying beneath it.
 
@@ -414,6 +415,59 @@ filter puts a rehearsal warning on somebody's real record. A rehearsal exercises
 path, because one that skips the writes tests nothing; notifications go only to members holding the
 Executive role, and the card says when somebody was skipped.
 
+**Leave exempts weeks, and a fortnight asks for one weekly target per week that counts.**
+`domain/leaveDays.ts` is the whole rule, as pure functions. Leave is measured per accounting week, on
+its own: the hours of leave inside the week, divided by 24 and rounded to the nearest whole number.
+A week holding at least `minimumLeaveDays` (default 3) of those is **exempt**: its rings go grey and
+it drops out of its fortnight. The fortnight then requires `weeklyTargetMinutes` for each week that
+still counts: two, pooled, so a slow week can be made up in the next; one when a week is exempt,
+with minutes from both weeks counting towards it; none when both are exempt, which is the only
+waiver. There is no separate "seven days" rule and no proportional scaling. `fortnightRequiredMinutes`
+is gone. `minimumLeaveDays` is also the shortest leave anybody may book, refused on the modal with
+the figures before anything is staged, so a leave that meets the minimum can always exempt a week if
+it sits inside one. Split across a week boundary it may exempt neither, and the confirmation card
+says so before the member commits (`describeLeaveEffect`). `test/leaveDays.test.ts` holds the ten
+confirmation-card scenarios the rules were agreed against.
+
+An assessment snapshots `weeklyTargetMinutes` and `minimumLeaveDays` on first write
+(`$setOnInsert`) and is always recomputed against those, so changing a target never rewrites a past
+verdict. What leave decides (each week's leave days, exemption, `requiredMinutes`, `status`,
+`heldForLeave`) is `$set` on every run, because leave is meant to move it.
+
+**Every leave record has an end date, and ending early moves it.** `LeaveDoc.endDate` is required;
+the open-ended paths are gone. `markLeaveEnded` sets `endDate` to the moment the leave actually
+ended (`actualEnd`, clamped to never precede the start, so a cancelled leave covers nothing) and
+keeps the booked date in `plannedEndDate`. Exemption follows the leave somebody took. Booking two
+weeks and coming back on day two used to exempt the whole fortnight.
+
+**A leave change reassesses the closed fortnights it touches** (`services/leaveReassess.ts`):
+approving, declining, deciding an extension, ending early and purging all call
+`reassessAfterLeaveChange`, which rebuilds the touched weeks' rollups and recomputes every closed,
+real assessment in the span against its own snapshot. Nobody is DMed; the fortnight was announced
+once. The review channel is kept truthful instead: a row that newly falls below is posted and
+pinged; an undecided row leave takes off the queue is redrawn with no buttons; a decided one keeps
+Reopen and says leave has since moved it. A live warning on a fortnight leave took off the queue gets
+`coveredByLeaveAt`, a line on its log card and a ping. **It is never withdrawn automatically**:
+that is an Executive's judgement, and the flag clears itself if a later change puts the row back below.
+
+**Pending leave holds a row; it never changes a verdict.** `assessmentVerdict`
+(`domain/assessments.ts`) judges with counting leave only, then again with pending requests and
+pending extensions added. A row that is below, and would not be if the pending leave were approved,
+is `heldForLeave`: no Warn button (`rowButtons`, `decisionPermitted`), left out of both bulk paths,
+counted apart in the header (`queueCounts().held`), and pinged. Deciding the leave reassesses and
+releases it.
+
+**Pings are replies, and they tidy themselves.** Discord never pings on an edit, and every card here
+is edited in place, so `services/pings.ts` replies to the card with the `staffExecutivePingRole`
+(a required key, a role in the staff server) and deletes the reply once the card no longer needs
+anyone. One outstanding ping per subject, keyed in the `pings` collection (`leave:`, `extension:`,
+`row:`, `warning:`, `review:`, `restore:`), and a newer ping replaces the older. That is how the
+review reminder replaces the "ready for review" ping on the header rather than stacking under it.
+They fire for: a new leave request, an extension request, a held row, a row that newly needs a
+decision, a new review, the review reminder, a warning DM that failed, a warning leave has since
+covered, and roles not restored after leave. Without the role set a ping still posts, unmentioned,
+because a reminder nobody is pinged for beats no reminder.
+
 **One leave record, one card.** A request's card in the leave channel is edited in place through
 its whole life, from pending through approved or declined, active, back and purged. It is never
 replaced, and never followed by a second message. `logChannelId`/`logMessageId` on the record are what make that possible, and
@@ -424,6 +478,11 @@ declined record offers no way to end anything. An Executive can end active leave
 leave) from that card; it confirms first, because ending leave restores ranks, restarts assessment
 and tells somebody who is not in the room that they are back. `endLeave` takes a `LeaveEndReason`
 and returns the card it sent, so `/leave end` shows the member exactly what it DMed them.
+**An extension is a pending amendment on the same card**, never an instant write: `/leave extend`
+stores `pendingExtension`, the leave keeps running on its current end, and the card gains the
+request, what it would change, and **Approve extension** / **Decline extension**. The member is
+DMed either way. One extension waits at a time. A pending request's card shows what approving it
+would change, from the same `describeLeaveChange` the member's confirmation card uses.
 
 **Leave input is parsed, not read.** `src/time/naturalDate.ts` turns a phrase into constraints
 (`{weekday?, day?, month?, year?, hour, minute}`); `src/time/input.ts` resolves them by walking
@@ -433,8 +492,9 @@ Because the parser interprets, a modal submission is **staged in memory** (`even
 
 **Rollups are derived, never authoritative.** `weeklyStats` and `fortnightAssessments` are
 recomputed from `activityDays`/`shifts`/`leave` by `/admin recompute`. Consequence: deleting raw
-data silently changes historical verdicts: a purged leave record removes the exemption that made
-a past fortnight `exempt` (`domain/assessments.ts` + `domain/leavePurge.ts`).
+data changes historical verdicts. A purged leave record removes the exemption it provided, so the
+purge confirmation names every verdict it would move (`verdictsChangedByPurging`,
+`domain/leavePurge.ts`) and the purge reassesses those fortnights straight after the delete.
 
 **Deletion.** `purgeLeaveRecord` is the only delete in the codebase, reachable only from the
 **Purge this record** button on a decided leave card. It writes the audit row *before* deleting and
@@ -580,8 +640,9 @@ go to find out why.
 
 **Collections** (`src/db/client.ts`): `staff`, `activityDays`, `shifts`, `weeklyStats`,
 `fortnightAssessments`, `warnings`, `leave`, `demandBuckets`, `guildConfig`, `auditLog`,
-`deliveries`, `uptimeHours`. Indexes are created in the same file. `demandBuckets` and `uptimeHours`
-hold no user id and are never in scope for a deletion request.
+`deliveries`, `uptimeHours`, `fortnightReviews`, `pings`. Indexes are created in the same file.
+`demandBuckets` and `uptimeHours` hold no user id and are never in scope for a deletion request.
+`pings` holds message references keyed by record id, never a user id.
 
 ## Tests
 
