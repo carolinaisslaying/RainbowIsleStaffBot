@@ -90,11 +90,22 @@ export const coverageCommand: Command = {
     tier: "executive",
     data: new SlashCommandBuilder()
         .setName("coverage")
-        .setDescription("Coverage against demand (Executive)")
+        .setDescription("When the server is busy, and whether staff cover it (Executive)")
         .addSubcommand((sub) =>
             sub
-                .setName("heatmap")
-                .setDescription("7 by 24 grid of demand per available moderator")
+                .setName("server")
+                .setDescription("How active the server is, hour by hour")
+                .addChannelOption((option) =>
+                    option
+                        .setName("channel")
+                        .setDescription("One tracked channel. Defaults to all of them.")
+                        .addChannelTypes(
+                            ChannelType.GuildText,
+                            ChannelType.GuildAnnouncement,
+                            ChannelType.GuildForum
+                        )
+                        .setRequired(false)
+                )
                 .addStringOption((option) =>
                     option
                         .setName("tz")
@@ -113,30 +124,9 @@ export const coverageCommand: Command = {
         )
         .addSubcommand((sub) =>
             sub
-                .setName("gaps")
-                .setDescription("The hours most short of moderators, to guide recruiting")
-                .addStringOption((option) =>
-                    option
-                        .setName("tz")
-                        .setDescription("Rank in this timezone. Defaults to yours.")
-                        .setAutocomplete(true)
-                        .setRequired(false)
-                )
-        )
-        .addSubcommand((sub) =>
-            sub
-                .setName("activity")
-                .setDescription("7 by 24 grid of server activity, messages per hour")
-                .addChannelOption((option) =>
-                    option
-                        .setName("channel")
-                        .setDescription("One tracked channel. Defaults to all of them.")
-                        .addChannelTypes(
-                            ChannelType.GuildText,
-                            ChannelType.GuildAnnouncement,
-                            ChannelType.GuildForum
-                        )
-                        .setRequired(false)
+                .setName("staff")
+                .setDescription(
+                    "Server activity against moderators on shift, and where to recruit"
                 )
                 .addStringOption((option) =>
                     option
@@ -178,7 +168,7 @@ export const coverageCommand: Command = {
             interaction.options.getInteger("weeks") ?? config.heatmapLookbackWeeks;
         const days = weekdayLabels(config.weekStartDay);
 
-        if (sub === "activity") {
+        if (sub === "server") {
             const channel = interaction.options.getChannel("channel");
             // Refused before the defer, so the refusal is the only reply.
             if (channel && !config.trackedChannels.includes(channel.id)) {
@@ -261,79 +251,47 @@ export const coverageCommand: Command = {
         const grid = await buildCoverageGrid(config, zone, weeks);
         const worst = worstCells(grid, 5);
 
-        if (sub === "gaps") {
-            const container = new ContainerBuilder()
-                .setAccentColor(COLOUR.pending)
-                .addTextDisplayComponents(
-                    text(headline("Coverage gaps", grid, config.accountingTimezone))
-                )
-                .addSeparatorComponents(separator());
-
-            if (worst.length === 0) {
-                container.addTextDisplayComponents(
-                    text("_No demand recorded in this window. Check which channels are tracked._")
-                );
-            } else {
-                const blocks = worst.map((cell, index) => {
-                    const zones = zonesInEveningDuring(
-                        grid.from,
-                        cell.weekday,
-                        cell.hour,
-                        zone,
-                        config.weekStartDay
-                    );
-                    return (
-                        `**${index + 1}. ${days[cell.weekday]} ${hourLabel(cell.hour)}**\n` +
-                        `${cell.demand.toFixed(1)} messages per hour against ` +
-                        `${cell.coverage.toFixed(2)} moderators available ` +
-                        `(**${cell.ratio.toFixed(1)}** per moderator)\n` +
-                        `-# Evening, 18:00 to 23:00 local, in: ` +
-                        (zones.length > 0 ? zones.join(", ") : "no zone at a sociable hour")
-                    );
-                });
-                container.addTextDisplayComponents(text(blocks.join("\n\n")));
-                container.addSeparatorComponents(separator());
-                container.addTextDisplayComponents(
-                    text(
-                        "-# Someone recruited in one of those zones covers this hour during " +
-                            "their own evening, not at 3am." +
-                            footnote(grid)
-                    )
-                );
-            }
-
-            await respond(interaction, containersMessage([container]));
-            return;
-        }
-
         const { gallery, attachment } = heatmapGallery(
             grid,
             "coverage",
             `A 7 by 24 grid of messages per available moderator, rendered in ${zone}.`
         );
 
+        // Each hour carries the zones where it falls in the evening: somebody
+        // recruited there covers it at a sociable hour, not at 3am. This used to
+        // be a subcommand of its own printing these same five hours.
         const worstText =
             worst.length === 0
-                ? "_No demand recorded in the window._"
+                ? "_No demand recorded in the window. Check which channels are tracked._"
                 : worst
-                      .map(
-                          (cell, index) =>
+                      .map((cell, index) => {
+                          const zones = zonesInEveningDuring(
+                              grid.from,
+                              cell.weekday,
+                              cell.hour,
+                              zone,
+                              config.weekStartDay
+                          );
+                          return (
                               `${index + 1}. **${days[cell.weekday]} ${hourLabel(cell.hour)}** ` +
                               `${cell.demand.toFixed(1)} msg/h against ${cell.coverage.toFixed(2)} ` +
-                              `moderators = **${cell.ratio.toFixed(1)}** per moderator`
-                      )
+                              `moderators = **${cell.ratio.toFixed(1)}** per moderator\n` +
+                              "-# Evening, 18:00 to 23:00 local, in: " +
+                              (zones.length > 0 ? zones.join(", ") : "no zone at a sociable hour")
+                          );
+                      })
                       .join("\n");
 
         const container = new ContainerBuilder()
             .setAccentColor(COLOUR.report)
             .addTextDisplayComponents(
-                text(headline("Coverage heatmap", grid, config.accountingTimezone))
+                text(headline("Server activity against staff", grid, config.accountingTimezone))
             )
             .addMediaGalleryComponents(gallery)
             .addSeparatorComponents(separator())
             .addTextDisplayComponents(
                 text(
-                    `**Five worst buckets**\n${worstText}\n\n` +
+                    `**Five hours most short of moderators**\n${worstText}\n\n` +
                         "-# Colour plots demand divided by coverage, never either alone. A quiet " +
                         "hour with one moderator is fine; a peak hour with one moderator is the gap." +
                         footnote(grid)

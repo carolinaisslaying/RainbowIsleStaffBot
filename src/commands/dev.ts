@@ -50,7 +50,7 @@ export const devCommand: Command = {
         .setDescription("Rehearsals and cleanup (deployment administrators)")
         .addSubcommand((sub) =>
             sub
-                .setName("assess")
+                .setName("rehearse")
                 .setDescription("Rehearse a fortnight review. Nobody is told.")
                 .addIntegerOption((option) =>
                     option
@@ -154,7 +154,7 @@ export const devCommand: Command = {
             return;
         }
 
-        if (sub === "assess") {
+        if (sub === "rehearse") {
             await defer(interaction, true);
 
             const requested = interaction.options.getInteger("fortnight");

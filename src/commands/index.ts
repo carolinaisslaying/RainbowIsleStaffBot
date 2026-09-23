@@ -6,16 +6,14 @@ import {
     Routes
 } from "discord.js";
 import type { Command } from "./types.js";
-import { timezoneCommand } from "./timezone.js";
 import { shiftCommand } from "./shift.js";
-import { ringsCommand } from "./rings.js";
-import { leaderboardCommand } from "./leaderboard.js";
 import { leaveCommand } from "./leave.js";
-import { configCommand } from "./config.js";
+import { statsCommand } from "./stats.js";
+import { warningsCommand } from "./warnings.js";
+import { settingsCommand } from "./settings.js";
 import { coverageCommand } from "./coverage.js";
-import { staffCommand } from "./staff.js";
-import { mydataCommand } from "./mydata.js";
 import { adminCommand } from "./admin.js";
+import { configCommand } from "./config.js";
 import { devCommand } from "./dev.js";
 import { env } from "../config/env.js";
 import type { StaffBotConfig } from "../config/guildConfig.js";
@@ -26,17 +24,20 @@ import {
 } from "../discord/commandMentions.js";
 import { log } from "../log.js";
 
+/**
+ * One command per subject. Permission varies inside a command where it has to
+ * (`Command.subcommands`), rather than deciding which command a feature lives
+ * in, so everything about warnings is under /warnings whoever is asking.
+ */
 export const commands: Command[] = [
-    timezoneCommand,
     shiftCommand,
-    ringsCommand,
-    leaderboardCommand,
     leaveCommand,
-    staffCommand,
-    mydataCommand,
-    configCommand,
+    statsCommand,
+    warningsCommand,
+    settingsCommand,
     coverageCommand,
     adminCommand,
+    configCommand,
     devCommand
 ];
 
@@ -74,7 +75,7 @@ export const commandsByName = new Map(
  *
  * These are gates, not grants: they decide whose picker lists the command, and
  * nothing more. Staff tier carries none, because every department member is
- * meant to see /shift and /rings.
+ * meant to see /shift and /stats.
  */
 export function permissionGateFor(command: Command): string | null {
     if (command.tier === "executive") return String(PermissionFlagsBits.ManageGuild);

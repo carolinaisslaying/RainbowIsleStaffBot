@@ -1,9 +1,13 @@
-import { SlashCommandBuilder } from "discord.js";
-import type { Command } from "./types.js";
-import { getOpenShift, openPauseOf, stateOf } from "../domain/shifts.js";
+import { ContainerBuilder, SlashCommandBuilder } from "discord.js";
+import type { Command, CommandContext } from "./types.js";
+import { getOpenShift, openPauseOf, shiftHistory, stateOf } from "../domain/shifts.js";
+import { findStaffByDiscordId } from "../domain/staff.js";
+import { currentWeekStats } from "../domain/weekly.js";
+import { isLeadOrAbove } from "../domain/permissions.js";
 import { beginShift, finishShift } from "../services/shiftService.js";
 import { EMOJI } from "../render/emoji.js";
-import { noticeCard } from "../render/cards.js";
+import { containersMessage, errorCard, noticeCard, text } from "../render/cards.js";
+import { COLOUR } from "../render/theme.js";
 import { defer, respond } from "../discord/respond.js";
 import { formatDuration, ts } from "../time/format.js";
 import { publicGuildName } from "../discord/guildNames.js";
@@ -24,10 +28,28 @@ export const shiftCommand: Command = {
         .addSubcommand((sub) => sub.setName("end").setDescription("End your shift"))
         .addSubcommand((sub) =>
             sub.setName("status").setDescription("Check your current shift")
+        )
+        .addSubcommand((sub) =>
+            sub
+                .setName("history")
+                .setDescription("Recent shifts. Yours, or a member's (Lead and Executive)")
+                .addUserOption((option) =>
+                    option
+                        .setName("user")
+                        .setDescription("Whose history. Defaults to you.")
+                        .setRequired(false)
+                )
         ),
 
-    async execute({ client, config, interaction, staff }) {
+    async execute(context) {
+        const { client, config, interaction, staff } = context;
         const sub = interaction.options.getSubcommand();
+
+        if (sub === "history") {
+            await showHistory(context);
+            return;
+        }
+
         const displayName = await staffDisplayName(
             client,
             config,
@@ -98,3 +120,58 @@ export const shiftCommand: Command = {
         );
     }
 };
+
+async function showHistory({ config, interaction, staff, tier }: CommandContext): Promise<void> {
+    const target = interaction.options.getUser("user");
+    const isSelf = !target || target.id === interaction.user.id;
+
+    // Your own is always yours to read. Anyone else's is Lead and above.
+    if (!isSelf && !isLeadOrAbove(tier)) {
+        await respond(
+            interaction,
+            errorCard("Viewing another member's shift history requires Lead or Executive.")
+        );
+        return;
+    }
+
+    await defer(interaction, true);
+
+    const subject = isSelf ? staff : await findStaffByDiscordId(target.id);
+    if (!subject) {
+        await respond(interaction, errorCard(`<@${target?.id}> has no staff record.`));
+        return;
+    }
+
+    const shifts = await shiftHistory(subject._id, 15);
+    const stats = await currentWeekStats(subject._id, config);
+
+    const lines =
+        shifts.length === 0
+            ? ["_No shifts on record._"]
+            : shifts.map((shift) => {
+                  const duration = shift.endedAt
+                      ? formatDuration(shift.endedAt.getTime() - shift.startedAt.getTime())
+                      : "open";
+                  return (
+                      `${ts(shift.startedAt, "f")}, ${duration}, ` +
+                      `${formatDuration(shift.availableMs)} available, ` +
+                      `${shift.activityMinutes} min earned` +
+                      (shift.endReason ? `, ${shift.endReason}` : "")
+                  );
+              });
+
+    const container = new ContainerBuilder()
+        .setAccentColor(COLOUR.report)
+        .addTextDisplayComponents(
+            text(
+                `## Shift history\n<@${subject.discordId}>\n\n` +
+                    `This week: **${stats.activityMinutes}** activity minutes across ` +
+                    `${formatDuration(stats.shiftMs)} of availability on ${stats.activeDays} ` +
+                    `day(s).\n\n${lines.join("\n")}\n\n` +
+                    "-# Availability and activity minutes measure different things. Only " +
+                    "activity minutes count toward the fortnight minimum."
+            )
+        );
+
+    await respond(interaction, containersMessage([container]));
+}

@@ -21,6 +21,16 @@ export interface CommandContext {
     tier: Tier;
 }
 
+export interface SubcommandRule {
+    /** Minimum tier for this subcommand. Stricter than the command's wins. */
+    tier?: Tier;
+    /**
+     * Whether an un-onboarded member may run this. Only /settings timezone
+     * may, for obvious reasons.
+     */
+    bypassOnboarding?: boolean;
+}
+
 export interface Command {
     data:
         | SlashCommandOptionsOnlyBuilder
@@ -50,9 +60,15 @@ export interface Command {
      */
     seededOnly?: boolean;
     /**
-     * Whether an un-onboarded member may run this. Only /timezone set may.
+     * Rules for individual subcommands, keyed by subcommand name. Read through
+     * `requirementsFor`, never directly.
+     *
+     * A subcommand's tier can only raise the command's own, because `tier`
+     * above is what Discord's picker filters on and it cannot filter a single
+     * subcommand. So `/warnings` is listed for every Moderator and `issue` is
+     * refused in the handler.
      */
-    bypassTimezoneGate?: boolean;
+    subcommands?: Record<string, SubcommandRule>;
     /**
      * Also registered in the community server, hidden behind a permission gate
      * of zero, and runnable there only by an ID in BOOTSTRAP_ADMIN_IDS.

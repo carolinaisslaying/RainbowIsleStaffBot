@@ -1,27 +1,11 @@
-import { SlashCommandBuilder, ContainerBuilder } from "discord.js";
+import { SlashCommandBuilder } from "discord.js";
 import type { Command } from "./types.js";
-import {
-    fetchPublicMember,
-    isExecutive,
-    isLeadOrAbove,
-    resolveTier
-} from "../domain/permissions.js";
-import { conductWarningPermitted } from "../domain/conduct.js";
-import { CONDUCT_TIERS, type ConductTier } from "../db/types.js";
-import type { StaffBotConfig } from "../config/guildConfig.js";
-import { conductWarnModal } from "../render/modals.js";
-import { TIER_STYLE } from "../render/tiers.js";
-import { staffDisplayName } from "../discord/displayName.js";
 import { EMOJI } from "../render/emoji.js";
-import {
-    containersMessage,
-    errorCard,
-    noticeCard,
-    text
-} from "../render/cards.js";
+import { errorCard, noticeCard } from "../render/cards.js";
 import { defer, respond } from "../discord/respond.js";
-import { ensureStaff, listActiveStaff, findStaffByDiscordId } from "../domain/staff.js";
-import { rebuildWeek, weekWindowFor, currentWeekStats } from "../domain/weekly.js";
+import { fetchMember } from "../discord/roles.js";
+import { listActiveStaff, relinkStaff } from "../domain/staff.js";
+import { rebuildWeek, weekWindowFor } from "../domain/weekly.js";
 import { recomputeCounts } from "../domain/activity.js";
 import {
     currentFortnightIndex,
@@ -30,12 +14,9 @@ import {
     windowForIndex
 } from "../domain/assessments.js";
 import { runFortnightAssessment, fortnightSummary } from "../services/assessmentService.js";
-import { shiftHistory } from "../domain/shifts.js";
 import { audit } from "../domain/audit.js";
-import { cmd } from "../discord/commandMentions.js";
 import { weekStartFor, nextWeekStart, DAY_MS } from "../time/calendar.js";
-import { formatDuration, labelWindow, ts } from "../time/format.js";
-import { COLOUR } from "../render/theme.js";
+import { labelWindow } from "../time/format.js";
 
 export const adminCommand: Command = {
     tier: "executive",
@@ -68,92 +49,18 @@ export const adminCommand: Command = {
         )
         .addSubcommand((sub) =>
             sub
-                .setName("warn")
-                .setDescription("Warn a member for conduct (Executive)")
+                .setName("relink")
+                .setDescription("Move a staff record to a new Discord account")
                 .addUserOption((option) =>
-                    option
-                        .setName("user")
-                        .setDescription("Who is being warned")
-                        .setRequired(true)
+                    option.setName("old").setDescription("The old account").setRequired(true)
                 )
-        )
-        .addSubcommand((sub) =>
-            sub
-                .setName("shifts")
-                .setDescription("Shift history for a member (Lead and Executive)")
                 .addUserOption((option) =>
-                    option.setName("user").setDescription("Whose history").setRequired(true)
+                    option.setName("new").setDescription("The new account").setRequired(true)
                 )
         ),
 
-    async execute({ client, config, interaction, staff, tier }) {
+    async execute({ client, config, interaction, staff }) {
         const sub = interaction.options.getSubcommand();
-
-        // A conduct warning goes on somebody's permanent record on one person's
-        // say-so, so every rule about who may issue and who may receive one is
-        // checked before the modal opens. `showModal` cannot follow a defer, so
-        // this branch must not respond or defer on the way to it.
-        if (sub === "warn") {
-            if (!isExecutive(tier)) {
-                await respond(
-                    interaction,
-                    errorCard(
-                        "Issuing a warning is Executive only. Leads can view the record and " +
-                            "warning history."
-                    )
-                );
-                return;
-            }
-
-            const target = interaction.options.getUser("user", true);
-            const subjectMember = await fetchPublicMember(client, config, target.id);
-            const subjectTier = resolveTier(target.id, subjectMember, config);
-            const subject = await ensureStaff(target.id);
-
-            const permitted = conductWarningPermitted({
-                issuerTier: tier,
-                subjectTier,
-                issuerStaffId: staff._id,
-                subjectStaffId: subject._id,
-                subjectDeparted: subject.active === false || subjectMember === null
-            });
-            if (!permitted.ok) {
-                await respond(interaction, errorCard(permitted.reason));
-                return;
-            }
-
-            // The rung descriptions name what separates them rather than
-            // trying to define the conduct: the Executive knows what
-            // happened, and what they are choosing is how serious it was.
-            await interaction.showModal(
-                conductWarnModal({
-                    subjectDiscordId: target.id,
-                    displayName: await staffDisplayName(
-                        client,
-                        config,
-                        target.id,
-                        target.username
-                    ),
-                    tiers: CONDUCT_TIERS.map((value) => ({
-                        value,
-                        label: TIER_STYLE[value].label,
-                        description: describeTier(value)
-                    }))
-                })
-            );
-            return;
-        }
-
-        // Shift history is Lead and above; everything else is Executive only.
-        if (sub === "shifts") {
-            if (!isLeadOrAbove(tier)) {
-                await respond(interaction, errorCard("Shift history requires Lead or Executive."));
-                return;
-            }
-        } else if (!isExecutive(tier)) {
-            await respond(interaction, errorCard("That operation is Executive only."));
-            return;
-        }
 
         if (sub === "recompute") {
             const weeks = interaction.options.getInteger("weeks", true);
@@ -264,59 +171,62 @@ export const adminCommand: Command = {
             return;
         }
 
-        // shifts
-        const target = interaction.options.getUser("user", true);
-        await defer(interaction, true);
+        // relink
+        const oldUser = interaction.options.getUser("old", true);
+        const newUser = interaction.options.getUser("new", true);
 
-        const subject = await findStaffByDiscordId(target.id);
-        if (!subject) {
-            await respond(interaction, errorCard(`<@${target.id}> has no staff record.`));
+        if (oldUser.id === newUser.id) {
+            await respond(interaction, errorCard("Those are the same account."));
             return;
         }
 
-        const shifts = await shiftHistory(subject._id, 15);
-        const stats = await currentWeekStats(subject._id, config);
+        await defer(interaction, true);
 
-        const lines =
-            shifts.length === 0
-                ? ["_No shifts on record._"]
-                : shifts.map((shift) => {
-                      const duration = shift.endedAt
-                          ? formatDuration(
-                                shift.endedAt.getTime() - shift.startedAt.getTime()
-                            )
-                          : "open";
-                      return (
-                          `${ts(shift.startedAt, "f")}, ${duration}, ` +
-                          `${formatDuration(shift.availableMs)} available, ` +
-                          `${shift.activityMinutes} min earned` +
-                          (shift.endReason ? `, ${shift.endReason}` : "")
-                      );
-                  });
+        const result = await relinkStaff(oldUser.id, newUser.id, interaction.user.id);
+        if (!result.ok || !result.staff) {
+            await respond(interaction, errorCard(result.error ?? "Relink failed."));
+            return;
+        }
 
-        const container = new ContainerBuilder()
-            .setAccentColor(COLOUR.report)
-            .addTextDisplayComponents(
-                text(
-                    `## Shift history\n<@${subject.discordId}>\n\n` +
-                        `This week: **${stats.activityMinutes}** activity minutes across ` +
-                        `${formatDuration(stats.shiftMs)} of availability on ${stats.activeDays} ` +
-                        `day(s).\n\n${lines.join("\n")}\n\n` +
-                        "-# Availability and activity minutes measure different things. Only " +
-                        "activity minutes count toward the fortnight minimum."
-                )
-            );
+        // Re-apply the current roles to the new account.
+        const oldMember = await fetchMember(client, config.publicGuildId, oldUser.id);
+        const newMember = await fetchMember(client, config.publicGuildId, newUser.id);
+        const reapplied: string[] = [];
 
-        await respond(interaction, containersMessage([container]));
+        if (oldMember && newMember) {
+            const managed = [
+                config.moderationDepartmentRole,
+                ...config.staffRankRoles,
+                ...config.leadRoles,
+                ...config.executiveRoles
+            ].filter(Boolean);
+            for (const roleId of managed) {
+                if (oldMember.roles.cache.has(roleId) && !newMember.roles.cache.has(roleId)) {
+                    try {
+                        await newMember.roles.add(roleId, "Staff record relinked");
+                        reapplied.push(roleId);
+                    } catch {
+                        // Hierarchy or a deleted role. Reported below rather than thrown.
+                    }
+                }
+            }
+        }
+
+        await respond(
+            interaction,
+            noticeCard(
+                "Staff record relinked",
+                `<@${oldUser.id}> to <@${newUser.id}>\n\n` +
+                    "Their history moves with them.\n" +
+                    (reapplied.length > 0
+                        ? `Re-applied ${reapplied.length} role(s) to the new account.`
+                        : "No roles needed re-applying.") +
+                    (newMember ? "" : "\n\n**The new account is not in the public guild.**"),
+                { ephemeral: true }
+            )
+        );
     }
 };
 
 export { fortnightIndexForWeek };
 
-
-/** What separates the two rungs: gravity, judged case by case, not a clock. */
-function describeTier(tier: ConductTier): string {
-    return tier === "caution"
-        ? "The lower rung. Stays on the record permanently."
-        : "The higher rung. Stays on the record permanently.";
-}

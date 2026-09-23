@@ -102,7 +102,7 @@ Nothing else in the bot deletes anything.
 ## Before you start
 
 - Deletion is irreversible. Take a dump first: `mongodump --db staffbot`.
-- Work out whether you actually need deletion. `/mydata export` answers an
+- Work out whether you actually need deletion. `/settings export` answers an
   access request under IPP 6 of the Privacy Act 2020 without removing anything,
   and a member leaving the team is handled by setting `active: false`, which
   retains the record.

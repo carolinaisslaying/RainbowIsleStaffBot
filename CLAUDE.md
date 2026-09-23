@@ -148,7 +148,7 @@ something is merely unset, green when there is nothing to say. It is the second 
 an environment variable, for the same reason `/dev purge` is: `seededOnly` means the only reader is
 the person who would go and change it.
 
-**`/dev` is rehearsals and cleanup; `/admin` is the real thing.** `/dev assess` is *always* a
+**`/dev` is rehearsals and cleanup; `/admin` is the real thing.** `/dev rehearse` is *always* a
 rehearsal, so there is no flag to leave in the wrong position — a `rehearse:` option on the real
 command is how a dry run once wrote real warnings. `/dev recap` previews either recap without
 claiming a receipt. `/dev purge` deletes a fortnight's assessments, the warnings they issued **and
@@ -282,6 +282,20 @@ recovery hatch. They also carry **both** of the command's gates — Executive *a
 so an Executive who could change the configuration could name themselves in it, and a rule that holds
 on the command while the buttons check less is the same defect this codebase keeps re-finding.
 
+**One command per subject.** `/shift`, `/leave`, `/stats`, `/warnings`, `/settings`, `/coverage`,
+`/admin`, `/config`, `/dev`. A feature lives under the thing it is about, never under the tier that
+may use it: `/warnings view` and `/warnings issue` sit together although one is for everybody and the
+other is Executive only. That is what `Command.subcommands` is for — a per-subcommand `tier` and
+`bypassOnboarding`, folded with the command's own by `requirementsFor` (`commands/requirements.ts`),
+where the stricter tier wins. A rule can raise the bar and never lower it, because `Command.tier` is
+also the staff-server permission gate and the DM filter, and Discord cannot hide one subcommand. So
+`/warnings issue` is in every Moderator's picker and refused by the dispatcher.
+`test/commandRequirements.test.ts` fails if a rule is keyed by a subcommand that does not exist: a
+misspelt `issue` would open the warning modal to everyone. "Yours, or somebody else's if you are a
+Lead" is a check inside the handler, because it turns on an option value, not on the subcommand.
+Names say what a view answers, not what it draws: `/coverage server` and `/coverage staff`, not
+`heatmap` and `activity`, which were both heatmaps.
+
 **Interaction routing.** All buttons go through `routeButton` in `src/events/interactionCreate.ts`,
 which splits `customId` on `:` into `namespace:first:second`. Namespaces in use: `config`
 (`export`/`import`/`apply`/`discard`/`setConfirm`/`setCancel`), `review`, `warning`
@@ -362,7 +376,7 @@ Reopen used to delete, leaving the audit log as the only trace; `DELETION.md` is
 warned, reopened and warned again therefore carries two documents, so `reviewRowFor` takes the one
 that still stands — the acknowledgement line belongs to the live warning.
 
-**`/admin warn user:`** opens a modal carrying the rung and the reason. Executives issue; staff and
+**`/warnings issue user:`** opens a modal carrying the rung and the reason. Executives issue; staff and
 Leads receive. **An Executive cannot be warned through this bot at all** — a warning here is one
 person's decision with no second signature, and it would land on a peer's permanent record.
 `conductWarningPermitted` (`domain/conduct.ts`) is pure and orders its refusals so the caller is told
@@ -389,7 +403,7 @@ themselves, and a departed member can be cleared but not warned.
 **A rehearsal writes, and only Executives hear about it.** `assessmentDryRun` flags the records it
 creates with `rehearsal: true`. **A real run promotes; a rehearsal never demotes** (`rehearsalUpdate`
 in `domain/assessments.ts`): the flag was in `$setOnInsert` alone, which handed realness to whichever
-run created the document — and `/dev assess` is always a rehearsal, so reading a fortnight's card
+run created the document — and `/dev rehearse` is always a rehearsal, so reading a fortnight's card
 before it closed branded every row of it for ever. The real run afterwards refreshed the figures,
 claimed the announcement and DMed the roster over documents that still said they were not real, so
 every warning it issued counted against nobody, reached nobody but Executives, and the fortnight was
@@ -442,7 +456,7 @@ which reproduces the original hand-picked values to within a couple of values pe
 until your minute count happens to move.
 
 **Onboarding is two gates,** both in `interactionCreate.ts`: timezone (functional) then ring face
-(not). `/timezone set` bypasses both. The timezone confirm button leads straight into the face
+(not). `/settings timezone` bypasses both, through `bypassOnboarding` on its subcommand rule. The timezone confirm button leads straight into the face
 picker rather than saying "saved", so it reads as two choices instead of two refusals. Adding
 `ringFace` means every existing member is asked once on their next command.
 
@@ -510,7 +524,7 @@ is a card that looks a few pixels off-centre and no one can say why. Preview aga
 (0%, 8%, an all-zero heatmap), not busy data. Every failure in this area has been an empty or
 near-empty state.
 
-**Heatmaps average over what was heard.** `/coverage heatmap`, `gaps` and `activity` run from the
+**Heatmaps average over what was heard.** `/coverage server` and `/coverage staff` run from the
 first demand bucket (or the lookback, whichever is later) to the start of the current hour, and every
 cell is divided by how many times *that cell* was observed (`observe` in `domain/observation.ts`),
 never by the weeks asked for. Dividing by the lookback read eight weeks into a deployment that had

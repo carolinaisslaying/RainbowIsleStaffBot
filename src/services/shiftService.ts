@@ -371,7 +371,7 @@ function plainShiftEndCard(reason: ShiftEndReason, at: Date): RenderedMessage {
         "Your shift has ended",
         `${REASON_LABEL[reason]}, ${ts(at, "R")}.\n\n` +
             "Your minutes for it are counted. The summary card could not be drawn this time, " +
-            `so use ${cmd("rings")} to see where the week stands.`,
+            `so use ${cmd("stats rings")} to see where the week stands.`,
         { colour: COLOUR.settled }
     );
 }

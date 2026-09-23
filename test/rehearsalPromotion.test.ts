@@ -5,7 +5,7 @@ import { rehearsalUpdate } from "../src/domain/assessments.js";
  * The asymmetry that stops a rehearsal branding a fortnight for ever.
  *
  * `rehearsal` used to live in `$setOnInsert` alone, which handed realness to
- * whichever run created the document. `/dev assess` is always a rehearsal, so
+ * whichever run created the document. `/dev rehearse` is always a rehearsal, so
  * reading a fortnight's card before it went out for real created every row of
  * it flagged — and the real run afterwards refreshed the figures, claimed the
  * announcement and DMed the roster over documents that still said they were not

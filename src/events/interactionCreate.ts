@@ -9,6 +9,7 @@ import { ObjectId } from "mongodb";
 import { loadConfig, type StaffBotConfig } from "../config/guildConfig.js";
 import { commandsByName } from "../commands/index.js";
 import type { Command } from "../commands/types.js";
+import { requirementsFor } from "../commands/requirements.js";
 import {
     ensureStaff,
     findStaffByDiscordId,
@@ -121,10 +122,11 @@ export function registerInteractionHandler(client: Client): void {
                 return;
             }
 
-            if (!atLeast(tier, command.tier)) {
+            const required = requirementsFor(command, interaction.options.getSubcommand(false));
+            if (!atLeast(tier, required.tier)) {
                 await respond(
                     interaction,
-                    errorCard(`**/${command.data.name}** is for ${command.tier} and above.`)
+                    errorCard(`**/${required.path}** is for ${required.tier} and above.`)
                 );
                 return;
             }
@@ -159,12 +161,12 @@ export function registerInteractionHandler(client: Client): void {
             // functional and everything else reads wrong without it; the ring
             // face second because it is not, and because the point of asking is
             // that the first card they see is one they chose.
-            if (needsTimezone(staff) && !command.bypassTimezoneGate) {
+            if (needsTimezone(staff) && !required.bypassOnboarding) {
                 await respond(interaction, timezoneSetupCard(interaction.guildId));
                 return;
             }
 
-            if (needsRingFace(staff) && !command.bypassTimezoneGate) {
+            if (needsRingFace(staff) && !required.bypassOnboarding) {
                 await respond(interaction, faceSetupCard(FACES, interaction.guildId));
                 return;
             }
@@ -412,7 +414,7 @@ async function routeButton(client: Client, interaction: import("discord.js").But
                 sendOptions(
                     noticeCard(
                         "Choose again",
-                        `Run ${cmd("timezone set", interaction.guildId)} and pick another zone.`
+                        `Run ${cmd("settings timezone", interaction.guildId)} and pick another zone.`
                     )
                 ) as never
             );
@@ -466,7 +468,7 @@ async function routeButton(client: Client, interaction: import("discord.js").But
                     `${face.name} it is`,
                     `Your rings are ${face.blurb.charAt(0).toLowerCase()}${face.blurb.slice(1)}\n\n` +
                         "Run the command you were after and you will see them. Change your " +
-                        `mind whenever you like with ${cmd("staff face", interaction.guildId)}.`,
+                        `mind whenever you like with ${cmd("settings face", interaction.guildId)}.`,
                     { colour: COLOUR.approved }
                 )
             ) as never

@@ -1,5 +1,4 @@
-import { SlashCommandBuilder } from "discord.js";
-import type { Command } from "./types.js";
+import type { CommandContext } from "./types.js";
 import type { StaffDoc } from "../db/types.js";
 import { collections } from "../db/client.js";
 import { countHiddenStaff, listActiveStaff } from "../domain/staff.js";
@@ -86,47 +85,33 @@ export async function buildLeaderboard(
     };
 }
 
-export const leaderboardCommand: Command = {
-    tier: "staff",
-    data: new SlashCommandBuilder()
-        .setName("leaderboard")
-        .setDescription("Activity minutes leaderboard")
-        .addStringOption((option) =>
-            option
-                .setName("scope")
-                .setDescription("Which window. Defaults to this week.")
-                .addChoices(
-                    { name: "week", value: "week" },
-                    { name: "fortnight", value: "fortnight" },
-                    { name: "alltime", value: "alltime" }
-                )
-                .setRequired(false)
-        )
-        .addIntegerOption((option) =>
-            option.setName("page").setDescription("Page number").setMinValue(1).setRequired(false)
-        ),
+/** `/stats leaderboard`. The drawing is `renderLeaderboard`, which paging reuses. */
+export async function showLeaderboard({
+    client,
+    config,
+    interaction,
+    staff,
+    tier
+}: CommandContext): Promise<void> {
+    // Decided before the defer, because ephemerality is fixed at defer time
+    // and cannot be changed on the edit. One count is cheap enough to run
+    // inside the three seconds Discord allows; building the leaderboard is
+    // not, which is why this cannot simply be read off the finished card.
+    const visibility = leaderboardVisibility({
+        privileged: isLeadOrAbove(tier),
+        viewerHidden: staff.leaderboardOptOut,
+        hiddenCount: await countHiddenStaff()
+    });
+    await defer(interaction, visibility.ephemeral);
 
-    async execute({ client, config, interaction, staff, tier }) {
-        // Decided before the defer, because ephemerality is fixed at defer time
-        // and cannot be changed on the edit. One count is cheap enough to run
-        // inside the three seconds Discord allows; building the leaderboard is
-        // not, which is why this cannot simply be read off the finished card.
-        const visibility = leaderboardVisibility({
-            privileged: isLeadOrAbove(tier),
-            viewerHidden: staff.leaderboardOptOut,
-            hiddenCount: await countHiddenStaff()
-        });
-        await defer(interaction, visibility.ephemeral);
+    const scope = (interaction.options.getString("scope") ?? "week") as LeaderboardScope;
+    const page = interaction.options.getInteger("page") ?? 1;
 
-        const scope = (interaction.options.getString("scope") ?? "week") as LeaderboardScope;
-        const page = interaction.options.getInteger("page") ?? 1;
-
-        await respond(
-            interaction,
-            await renderLeaderboard(client, config, staff, tier, scope, page)
-        );
-    }
-};
+    await respond(
+        interaction,
+        await renderLeaderboard(client, config, staff, tier, scope, page)
+    );
+}
 
 export async function renderLeaderboard(
     client: import("discord.js").Client,
@@ -150,7 +135,7 @@ export async function renderLeaderboard(
 ) {
     const { entries, label, target } = await buildLeaderboard(scope, config);
 
-    // Opt-out is a display preference only, set with /staff privacy. Tracking
+    // Opt-out is a display preference only, set with /settings privacy. Tracking
     // and assessment remain mandatory, and Lead and Executive views still show
     // everybody: a hidden row is marked rather than removed for them, so the
     // ranks they read are the real ranks.

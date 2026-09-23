@@ -78,7 +78,7 @@ export function isMentionablePath(path: string): boolean {
 }
 
 /**
- * `cmd("timezone set")` -> `</timezone set:1234>`, or `` **\/timezone set** ``
+ * `cmd("settings timezone")` -> `</settings timezone:1234>`, or `` **\/settings timezone** ``
  * when the id is not known yet.
  *
  * Pass the guild the message will be READ in. Omit it for a DM, which resolves

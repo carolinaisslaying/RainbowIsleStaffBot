@@ -122,7 +122,7 @@ describe("who can see which command", () => {
         for (const name of ["config", "admin", "coverage"]) {
             expect(visibleInDirectMessages(commandsByName.get(name) as never)).toBe(false);
         }
-        for (const name of ["shift", "rings", "leave", "leaderboard", "timezone"]) {
+        for (const name of ["shift", "leave", "stats", "warnings", "settings"]) {
             expect(visibleInDirectMessages(commandsByName.get(name) as never)).toBe(true);
         }
     });

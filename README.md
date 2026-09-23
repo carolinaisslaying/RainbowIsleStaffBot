@@ -165,6 +165,30 @@ decides what counts as participation, it is Rainbow Isle only, and threads count
 when their parent channel is on it. An empty whitelist means a member can work a
 full shift and earn nothing.
 
+### The commands
+
+One command per subject. Where permission varies it varies inside a command, so
+everything about warnings is under `/warnings` whoever is asking.
+
+| Command | Subcommands | Who |
+|---|---|---|
+| `/shift` | `start`, `end`, `status`, `history [user]` | Staff; someone else's history is Lead and above |
+| `/leave` | `request`, `extend`, `end`, `list` | Staff; `list` is Lead and above |
+| `/stats` | `rings [user]`, `leaderboard [scope] [page]` | Staff; someone else's rings is Lead and above |
+| `/warnings` | `view [user]`, `issue user` | Staff reads their own; Lead reads anyone's; `issue` is Executive |
+| `/settings` | `timezone`, `face`, `privacy`, `export` | Staff |
+| `/coverage` | `server`, `staff` | Executive |
+| `/admin` | `recompute`, `assess`, `relink` | Executive |
+| `/config` | `view`, `set`, `add`, `remove`, `reset` | Deployment administrators |
+| `/dev` | `rehearse`, `recap`, `purge`, `status` | Deployment administrators |
+
+`/coverage server` is how active the server is, hour by hour. `/coverage staff`
+is that activity divided by moderators on shift, with the five hours most short
+of cover and the timezones where each falls in the evening, for recruiting.
+
+Discord cannot hide a single subcommand, so `/warnings issue` appears in every
+Moderator's picker and is refused unless the caller is an Executive.
+
 ### Where each command appears
 
 | Surface | What is registered |
@@ -183,7 +207,7 @@ there. So the DM surface carries the Staff tier alone. Lead and Executive work
 happens in the staff server, where the gate is real, or through the recovery
 hatch below.
 
-Moderators run `/shift start` and `/rings` either in the staff server or in a
+Moderators run `/shift start` and `/stats rings` either in the staff server or in a
 direct message with the bot. The community server never sees a command, and the
 bot refuses one typed there even if an old registration lingers: a moderator's
 shift figures, warnings and leave are not the business of a 110,000 member
@@ -205,7 +229,7 @@ the bot was never added to the staff server, every other surface is unreachable
 and nothing could correct the setting that caused it. Each use logs a warning
 naming the user, so it is visible rather than quiet.
 
-The hatch covers configuration alone. `/shift`, `/rings`, `/leave` and the rest
+The hatch covers configuration alone. `/shift`, `/stats`, `/leave` and the rest
 stay out of the community server whoever is asking.
 
 ### Visibility versus permission
@@ -261,7 +285,7 @@ both keep these apart deliberately; do not let them merge.
   the accounting needs.
 - `demandBuckets` records a channel, a UTC hour and a count. No user IDs, no
   content, nothing attributable to a person.
-- `/mydata export` returns everything held about the requester as JSON. That
+- `/settings export` returns everything held about the requester as JSON. That
   answers an IPP 6 access request under the Privacy Act 2020 without anyone
   needing to think about it. It ships whole warning documents, so the reason a
   warning was issued comes back with it.
@@ -278,7 +302,7 @@ they never received — and the review row now says which, because the bot recor
 whether the DM actually arrived rather than assuming it did.
 
 An Executive can also issue a warning for conduct rather than for a shortfall,
-with `/admin warn`. Three rungs, differing by the gravity of what happened and
+with `/warnings issue`. Three rungs, differing by the gravity of what happened and
 not by how formal they are — everything issued through this bot is a formal
 written warning, and informal correction happens in a DM and never reaches the
 record:
@@ -330,7 +354,7 @@ is the decision and, if it is taken back, the withdrawal and its reason.
 Accounting is UTC by default and identical for everyone: weeks run Monday
 00:00:00 to Sunday 23:59:59, fortnights pair consecutive weeks from the anchor.
 
-Members set their zone with `/timezone set`, which searches on the timezone
+Members set their zone with `/settings timezone`, which searches on the timezone
 code (`NZST`, `EDT`), a UTC offset (`+12`), a region (`Pacific`) or a place
 name, and shows each candidate's current local time so they can pick the one
 whose clock matches theirs. The abbreviation is a search and display aid only:

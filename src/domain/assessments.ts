@@ -107,13 +107,13 @@ export async function computeAssessment(
  *
  * A real run **promotes**; a rehearsal never demotes. The flag used to live in
  * `$setOnInsert` alone, which handed realness to whoever created the document —
- * and `/dev assess` is always a rehearsal, so reading a fortnight's card before
+ * and `/dev rehearse` is always a rehearsal, so reading a fortnight's card before
  * it went out for real branded every row of it a rehearsal for ever. The real
  * run afterwards refreshed the figures, claimed the announcement and DMed the
  * roster, over documents that still said they were not real: the warnings it
  * issued counted against nobody, went to no one but Executives, and the whole
  * fortnight was filtered out of `assessmentHistory`, `warningsFor` and
- * `/mydata export`. Nothing said so.
+ * `/settings export`. Nothing said so.
  *
  * Pure, and separate, because the asymmetry is the rule and it is worth being
  * able to state it without a database.

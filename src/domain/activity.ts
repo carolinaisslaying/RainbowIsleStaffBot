@@ -193,7 +193,7 @@ export async function countActiveDaysBetween(
     return active;
 }
 
-/** Per day totals for a window. Feeds /mydata export and recap cards. */
+/** Per day totals for a window. Feeds /settings export and recap cards. */
 export async function dailyTotalsBetween(
     staffId: ObjectId,
     from: Date,

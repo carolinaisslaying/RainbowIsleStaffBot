@@ -668,7 +668,7 @@ export function warningDmCard(input: {
                     `**Why**\n> ${input.reason}\n\n` +
                     "If you think this is wrong, or something was going on that we should " +
                     "know about, contact an Executive.\n\n" +
-                    `-# You can see everything held about you with ${cmd("mydata export")}.`
+                    `-# You can see everything held about you with ${cmd("settings export")}.`
             )
         )
         .addActionRowComponents(
@@ -1395,7 +1395,7 @@ export function faceSetupCard(
             )
         )
         .addTextDisplayComponents(
-            text(`-# You can change it whenever you like with ${cmd("staff face", guildId)}.`)
+            text(`-# You can change it whenever you like with ${cmd("settings face", guildId)}.`)
         );
 
     return {
@@ -1425,7 +1425,7 @@ export function timezoneSetupCard(guildId?: string | null): RenderedMessage {
                     "your reports render in, and it holds your weekly recap until 09:00 where " +
                     "you are. Your totals, rings, leaderboard position and fortnight review run " +
                     "on the same weeks as the rest of the team.\n\n" +
-                    `Run ${cmd("timezone set", guildId)} and type what you know: a code like ` +
+                    `Run ${cmd("settings timezone", guildId)} and type what you know: a code like ` +
                     "**NZST**, or a region like **Pacific**. Each suggestion shows its current " +
                     "local time, so pick the one whose clock matches yours."
             )
@@ -1619,7 +1619,7 @@ export function conductWarnDmCard(input: {
                     `${input.consequence}\n\n` +
                     `**What happened**\n> ${input.reason.split("\n").join("\n> ")}\n\n` +
                     "If you disagree, contact an Executive.\n\n" +
-                    `-# ${cmd("mydata export")} shows you everything this bot holds about you.`
+                    `-# ${cmd("settings export")} shows you everything this bot holds about you.`
             )
         )
         .addActionRowComponents(
