@@ -138,7 +138,7 @@ async function askForConfirmation(
             errorCard(
                 `That member is on leave right now, and this record holds the only list of ` +
                     `the **${leave.removedRoles.length}** role` +
-                    `${leave.removedRoles.length === 1 ? "" : "s"} the bot set aside for them. ` +
+                    `${leave.removedRoles.length === 1 ? "" : "s"} the bot removed for them. ` +
                     "Purging it would lose track of which roles to give back.\n\n" +
                     `End the leave first with ${cmd("leave end", interaction.guildId)}, ` +
                     `or wait for it to close on ${ts(leave.endDate, "D")}. ` +

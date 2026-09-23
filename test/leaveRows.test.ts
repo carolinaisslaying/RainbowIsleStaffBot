@@ -22,14 +22,14 @@ describe("what a review row says about leave", () => {
         expect(
             leaveLinesFor({ ...none, week1LeaveDays: 4, week1Exempt: true, requiredMinutes: 120 })
         ).toEqual([
-            "Week one: 4 days of leave, set aside.",
+            "Week one: 4 days of leave, exempt.",
             "One week counts, so this fortnight asks for 120 minutes."
         ]);
     });
 
-    it("explains leave that fell short of setting a week aside", () => {
+    it("explains leave that fell short of exempting a week", () => {
         expect(leaveLinesFor({ ...none, week2LeaveDays: 2 })).toEqual([
-            "Week two: 2 days of leave, under the 3 it takes to set a week aside."
+            "Week two: 2 days of leave, under the 3 it takes to exempt a week."
         ]);
     });
 

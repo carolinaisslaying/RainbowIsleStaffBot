@@ -242,7 +242,7 @@ export interface WarningDoc {
 /**
  * `cancelled` is approved leave an Executive called off before it started. It
  * is its own state rather than an `ended` leave with no length, because the two
- * read differently to everybody: nobody was away, nothing was set aside, and
+ * read differently to everybody: nobody was away, no roles were removed, and
  * there is nobody to welcome back.
  */
 export type LeaveStatus = "pending" | "approved" | "declined" | "active" | "ended" | "cancelled";

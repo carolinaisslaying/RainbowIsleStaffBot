@@ -448,10 +448,17 @@ is gone. `minimumLeaveDays` is also the shortest leave anybody may book, refused
 the figures before anything is staged, so a leave that meets the minimum can always exempt a week if
 it sits inside one. Split across a week boundary it may exempt neither, and the confirmation card
 says so before the member commits (`describeLeaveEffect`). It prints one bold heading per fortnight
-with what it now asks for, and both of its weeks beneath as bullets — 📅 set aside, 💼 still
+with what it now asks for, and both of its weeks beneath as bullets — 📅 exempt, 💼 still
 counts, the state repeated in words — then the minimum as a footnote. It used to list every week and
 then every fortnight, which left the reader to pair them and read as a wall on a long leave. The
-lines carry their own markdown, so the cards print them at full size rather than as `-#` subtext. `test/leaveDays.test.ts` holds the ten
+lines carry their own markdown, so the cards print them at full size rather than as `-#` subtext.
+
+**Two words, never swapped.** Staff roles are **removed** when leave starts and **given back** when it
+ends, by the dates alone. A week is **exempt** when enough leave falls in it, which changes only
+what the fortnight asks for. Every leave message used to say "set aside" for both, which read as if
+a week with too little leave kept somebody's roles from them. `render/leaveTerms.ts` holds the
+paragraph the approval and start DMs share. There is no "streak" in user-facing copy: it is
+"weeks in a row meeting the target", as the stats card already said. `test/leaveDays.test.ts` holds the ten
 confirmation-card scenarios the rules were agreed against.
 
 An assessment snapshots `weeklyTargetMinutes` and `minimumLeaveDays` on first write

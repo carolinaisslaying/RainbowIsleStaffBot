@@ -79,7 +79,7 @@ export function bootstrapAdminsConfigured(): boolean {
 }
 
 /**
- * Someone whose department role is currently set aside by approved leave.
+ * Someone whose department role is currently removed by approved leave.
  *
  * Leave activation removes the Moderation Department role, which is exactly the
  * role `tierOf` reads. Left alone, that locks a member out of the very commands

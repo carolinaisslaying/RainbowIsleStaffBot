@@ -228,8 +228,8 @@ function spansWeek(span: LeaveSpan, week: WeekEffect): boolean {
     return span.startDate.getTime() < weekEnd && span.endDate.getTime() > week.weekStart.getTime();
 }
 
-/** Marks a week the leave sets aside. The calendar: it is a week of leave. */
-export const WEEK_SET_ASIDE = "📅";
+/** Marks a week the leave exempts. The calendar: it is a week of leave. */
+export const WEEK_EXEMPT = "📅";
 /** Marks a week that still counts: a working week. */
 export const WEEK_COUNTS = "💼";
 
@@ -266,8 +266,8 @@ export function describeLeaveEffect(
     if (!extension && effect.exemptsNothing) {
         lines.push(
             effect.split
-                ? "❗ This leave doesn't set aside either week, because it's split across two."
-                : "❗ This leave doesn't set aside its week.",
+                ? "❗ This leave doesn't exempt either week, because it's split across two."
+                : "❗ This leave doesn't exempt its week.",
             ""
         );
     }
@@ -290,15 +290,15 @@ export function describeLeaveEffect(
                   : `${days(week.daysAfter)} of leave`;
             const state = !moved
                 ? week.exemptAfter
-                    ? "set aside"
+                    ? "exempt"
                     : "still counts"
                 : week.exemptAfter && !week.exemptBefore
-                  ? "would be set aside"
+                  ? "would be exempt"
                   : week.exemptAfter
-                    ? "stays set aside"
+                    ? "stays exempt"
                     : "would still count";
             lines.push(
-                `- ${week.exemptAfter ? WEEK_SET_ASIDE : WEEK_COUNTS} ` +
+                `- ${week.exemptAfter ? WEEK_EXEMPT : WEEK_COUNTS} ` +
                     `Week of ${options.label(week.weekStart)} · ${leave} · ${state}`
             );
         }
@@ -307,7 +307,7 @@ export function describeLeaveEffect(
     if (fortnights.length > 0) {
         lines.push(
             "",
-            `-# A week needs ${days(options.minimumLeaveDays)} of leave to be set aside.`
+            `-# A week needs ${days(options.minimumLeaveDays)} of leave to be exempt.`
         );
     }
     return lines;

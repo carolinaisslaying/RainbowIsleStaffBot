@@ -1291,7 +1291,7 @@ export function leaveEndConfirmCard(options: {
                           `${ts(options.endDate, "R")}. Ending it now restores their staff roles ` +
                           "and tells them they are back."
                         : "has not started this leave yet. Cancelling it means their staff roles " +
-                          "are never set aside and they are told it is off.") +
+                          "are never removed and they are told it is off.") +
                     (options.active
                         ? "\n\nExemptions follow the leave they actually took, so a week this " +
                           "cuts short can stop being exempt, and any closed fortnight it changes " +
@@ -1321,7 +1321,7 @@ export function leaveEndConfirmCard(options: {
  * What a member is told when an Executive calls off their leave before it
  * started.
  *
- * Not the welcome-back card. Nobody was away and nothing was set aside, so
+ * Not the welcome-back card. Nobody was away and nothing was removed, so
  * there is no stretch of absence to report, no roles to list as restored and
  * nothing that "starts again". Drawn from that card, it quoted an away period
  * that ran backwards and restored a role they had never lost.
@@ -1338,7 +1338,7 @@ export function leaveCancelledCard(options: {
         `**Your leave has been cancelled** by <@${options.cancelledBy}> before it started. ` +
             `It was booked from ${ts(options.startDate, "D")} to ${ts(options.endDate, "D")}.\n\n` +
             `**Why:** ${options.reason}\n\n` +
-            "Your staff roles were never set aside, so nothing changes: your activity keeps " +
+            "Your staff roles were never removed, so nothing changes: your activity keeps " +
             "counting as usual.\n\n" +
             `If you still need the time, ask again with ${cmd("leave request", options.guildId)}, ` +
             "or talk to the Executive team.",

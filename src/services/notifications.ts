@@ -57,8 +57,8 @@ async function claim(key: string): Promise<boolean> {
 
 export const MILESTONES = {
     firstRing: "first ring closed",
-    streak4: "4 week streak",
-    streak12: "12 week streak"
+    streak4: "4 weeks in a row meeting the target",
+    streak12: "12 weeks in a row meeting the target"
 } as const;
 
 /**

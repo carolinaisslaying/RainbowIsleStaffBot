@@ -23,7 +23,7 @@ function leave(overrides: Partial<LeaveDoc> = {}): LeaveDoc {
 }
 
 describe("the guard that stops a purge stranding someone", () => {
-    it("refuses while leave is running and the roles are still set aside", () => {
+    it("refuses while leave is running and the roles are still removed", () => {
         // The record is the only list of what to give back. Destroy it and the
         // member is left stripped with nothing anywhere saying what they held.
         expect(

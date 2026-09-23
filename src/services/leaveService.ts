@@ -26,6 +26,7 @@ import {
     noticeCard,
     type RenderedMessage
 } from "../render/cards.js";
+import { leaveTermsText } from "../render/leaveTerms.js";
 import { log } from "../log.js";
 import { formatDays, labelDate, ts } from "../time/format.js";
 import { EMOJI } from "../render/emoji.js";
@@ -111,12 +112,9 @@ export async function activateLeave(
     await tryDm(client, staff.discordId, {
         ...noticeCard(
             `Your leave has started`,
-            "Your staff roles are set aside until you get back.\n" +
-                `You are due back ${ts(leave.endDate, "D")}, ${ts(leave.endDate, "R")}. ` +
-                `Use ${cmd("leave end")} if you are back sooner.` +
-                `\n\nA week holding ${config.minimumLeaveDays} or more days of this leave is ` +
-                "set aside: its rings go grey and your fortnight asks one weekly target less " +
-                "for it. Your streak freezes where it stands.",
+            `You are due back ${ts(leave.endDate, "D")}, ${ts(leave.endDate, "R")}. ` +
+                `Use ${cmd("leave end")} if you are back sooner.\n\n` +
+                leaveTermsText(config.minimumLeaveDays),
             { colour: COLOUR.settled }
         )
     });
@@ -221,13 +219,13 @@ export async function leaveCardFor(
 
     let outcome: string | null = null;
     if (leave.status === "active") {
-        outcome = `-# Away since ${ts(leave.startDate, "R")}. Staff roles are set aside.`;
+        outcome = `-# Away since ${ts(leave.startDate, "R")}. Staff roles are removed.`;
     } else if (leave.status === "cancelled" && leave.cancelledAt) {
         const by = leave.cancelledBy ? await findStaffById(leave.cancelledBy) : null;
         outcome =
             `-# Cancelled ${ts(leave.cancelledAt, "R")}` +
             (by ? ` by <@${by.discordId}>` : "") +
-            ", before it started. Their staff roles were never set aside." +
+            ", before it started. Their staff roles were never removed." +
             (leave.cancellationReason ? `\n**Why:** ${leave.cancellationReason}` : "");
     } else if (leave.status === "ended" && leave.rolesRestoredAt) {
         const early = leave.endedEarlyBy ? await findStaffById(leave.endedEarlyBy) : null;
@@ -382,7 +380,8 @@ export async function endLeave(
         endedBy,
         restored: restored.map((roleId) => roleNames.get(roleId) ?? "a staff role that no longer exists"),
         missing: errors.map((roleId) => roleNames.get(roleId) ?? roleId),
-        inGuild: member !== null
+        inGuild: member !== null,
+        minimumLeaveDays: config.minimumLeaveDays
     };
     await tryDm(client, staff.discordId, { ...welcomeBackCard(summary) });
 
@@ -436,7 +435,7 @@ export async function endLeave(
  * Call off approved leave before it starts.
  *
  * Separate from `endLeave` because nothing has happened yet that needs
- * undoing: no roles were set aside, nobody was away, and the member is told the
+ * undoing: no roles were removed, nobody was away, and the member is told the
  * leave is off rather than welcomed back from it. Returns false when the sweep
  * activated the leave first, so the caller can end it instead.
  */
@@ -509,6 +508,7 @@ function welcomeBackCard(options: {
     restored: string[];
     missing: string[];
     inGuild: boolean;
+    minimumLeaveDays: number;
     guildId?: string | null;
 }): RenderedMessage {
     const { leave, endedBy } = options;
@@ -544,7 +544,7 @@ function welcomeBackCard(options: {
             `**Staff roles restored:** ${options.restored.map((name) => `**${name}**`).join(", ")}.`
         );
     } else {
-        lines.push("**No staff roles needed restoring.** Nothing was set aside when you left.");
+        lines.push("**No staff roles needed restoring.** None were removed when you left.");
     }
 
     if (options.missing.length > 0) {
@@ -558,13 +558,14 @@ function welcomeBackCard(options: {
     lines.push(
         "",
         "**What starts again now**",
-        "- Your activity counts again from today. Weeks holding enough of your leave stay set " +
-            "aside" +
+        "- Your activity counts again from today. Weeks with at least " +
+            `${options.minimumLeaveDays} days of your leave in them stay exempt` +
             (cutShort(leave, now)
-                ? ", measured on the leave you took rather than the leave you booked."
+                ? ", counted on the leave you took rather than the leave you booked."
                 : "."),
-        "- Your streak picks up where it froze rather than starting over.",
-        "- Your rings and your leaderboard row come back out of grey.",
+        "- Your run of weeks in a row meeting the target carries on where it was. Exempt " +
+            "weeks didn't break it.",
+        "- Your rings and your leaderboard row are no longer greyed out.",
         "",
         `Run ${cmd("shift start", options.guildId)} when you are ready to go on shift.`
     );

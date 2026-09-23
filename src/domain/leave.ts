@@ -175,7 +175,7 @@ export async function decideLeave(
 
 /**
  * Move approved leave to active. False when it is no longer approved, which
- * means an Executive cancelled it while the roles were being set aside: the
+ * means an Executive cancelled it while the roles were being removed: the
  * cancellation stands and the caller has to put the roles back.
  */
 export async function markLeaveActive(

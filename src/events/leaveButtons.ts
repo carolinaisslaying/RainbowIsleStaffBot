@@ -27,6 +27,7 @@ import { FIELD_REASON, LEAVE_CANCEL_MODAL, leaveCancelModal } from "../render/mo
 import { audit } from "../domain/audit.js";
 import { ts } from "../time/format.js";
 import { COLOUR } from "../render/theme.js";
+import { leaveTermsText } from "../render/leaveTerms.js";
 
 /**
  * Every button on a leave card. Executive only, all of them.
@@ -191,11 +192,8 @@ export async function handleLeaveButton(
                 approved ? "Leave approved" : "Leave declined",
                 approved
                     ? `Your leave from ${ts(leave.startDate, "f")} to ` +
-                          `${ts(leave.endDate, "f")} has been approved.\n\nYour staff roles are ` +
-                          "set aside when it starts and come back on their own when it ends. A " +
-                          `week holding ${config.minimumLeaveDays} or more days of it is set ` +
-                          "aside too, and your fortnight asks one weekly target less for it. " +
-                          "Your streak freezes where it stands."
+                          `${ts(leave.endDate, "f")} has been approved.\n\n` +
+                          leaveTermsText(config.minimumLeaveDays)
                     : "An Executive declined your leave request. Speak to them if you want to " +
                           "discuss it.",
                 { colour: approved ? COLOUR.approved : COLOUR.adverse }
@@ -343,7 +341,7 @@ export async function handleLeaveCancelModal(
             interaction,
             noticeCard(
                 "Leave cancelled",
-                "The leave will not start. Their staff roles were never set aside, and they " +
+                "The leave will not start. Their staff roles were never removed, and they " +
                     `have been told it is off.\n\n**Why:** ${reason}\n\n` +
                     "The request card in this channel now shows the outcome.",
                 { colour: COLOUR.settled }

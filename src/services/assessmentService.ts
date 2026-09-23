@@ -436,8 +436,8 @@ export function leaveLinesFor(assessment: {
         lines.push(
             `${week.name}: ${week.days} ${week.days === 1 ? "day" : "days"} of leave, ` +
                 (week.exempt
-                    ? "set aside."
-                    : `under the ${assessment.minimumLeaveDays} it takes to set a week aside.`)
+                    ? "exempt."
+                    : `under the ${assessment.minimumLeaveDays} it takes to exempt a week.`)
         );
     }
     if (assessment.week1Exempt !== assessment.week2Exempt) {

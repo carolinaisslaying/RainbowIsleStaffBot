@@ -135,7 +135,7 @@ export const CONFIG_KEYS: Record<keyof StaffBotConfig, KeySpec> = {
     },
     staffRankRoles: {
         kind: "stringArray",
-        description: "Individual staff roles, set aside during leave",
+        description: "Individual staff roles, removed during leave",
         target: "role",
         importance: "recommended",
         group: "roles",

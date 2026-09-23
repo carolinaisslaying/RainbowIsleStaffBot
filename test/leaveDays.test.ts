@@ -3,7 +3,7 @@ import { EMOJI, EMOJI_FOR_COLOUR } from "../src/render/emoji.js";
 import {
     describeLeaveEffect,
     WEEK_COUNTS,
-    WEEK_SET_ASIDE,
+    WEEK_EXEMPT,
     fortnightRequirement,
     fortnightStatus,
     leaveDaysIn,
@@ -163,52 +163,52 @@ describe("the confirmation card, scenario by scenario", () => {
     it("2. a leave inside one week exempts it and halves the fortnight", () => {
         expect(request(span("2026-10-06T00:00:00Z", "2026-10-09T00:00:00Z"))).toEqual([
             "**Fortnight of 5 Oct** · 120 min required, down from 240",
-            "- 📅 Week of 5 Oct · 3 days of leave · set aside",
+            "- 📅 Week of 5 Oct · 3 days of leave · exempt",
             "- 💼 Week of 12 Oct · no leave · still counts",
             "",
-            "-# A week needs 3 days of leave to be set aside."
+            "-# A week needs 3 days of leave to be exempt."
         ]);
     });
 
     it("3. a full week is exempt, and the fortnight is not waived", () => {
         expect(request(span("2026-10-05T00:00:00Z", "2026-10-12T00:00:00Z"))).toEqual([
             "**Fortnight of 5 Oct** · 120 min required, down from 240",
-            "- 📅 Week of 5 Oct · 7 days of leave · set aside",
+            "- 📅 Week of 5 Oct · 7 days of leave · exempt",
             "- 💼 Week of 12 Oct · no leave · still counts",
             "",
-            "-# A week needs 3 days of leave to be set aside."
+            "-# A week needs 3 days of leave to be exempt."
         ]);
     });
 
     it("4. a leave split 2 and 2 exempts nothing, and says so first", () => {
         expect(request(span("2026-10-10T00:00:00Z", "2026-10-14T00:00:00Z"))).toEqual([
-            "❗ This leave doesn't set aside either week, because it's split across two.",
+            "❗ This leave doesn't exempt either week, because it's split across two.",
             "",
             "**Fortnight of 5 Oct** · 240 min required, unchanged",
             "- 💼 Week of 5 Oct · 2 days of leave · still counts",
             "- 💼 Week of 12 Oct · 2 days of leave · still counts",
             "",
-            "-# A week needs 3 days of leave to be set aside."
+            "-# A week needs 3 days of leave to be exempt."
         ]);
     });
 
     it("5. a leave split 3 and 2 exempts one week", () => {
         expect(request(span("2026-10-09T00:00:00Z", "2026-10-14T00:00:00Z"))).toEqual([
             "**Fortnight of 5 Oct** · 120 min required, down from 240",
-            "- 📅 Week of 5 Oct · 3 days of leave · set aside",
+            "- 📅 Week of 5 Oct · 3 days of leave · exempt",
             "- 💼 Week of 12 Oct · 2 days of leave · still counts",
             "",
-            "-# A week needs 3 days of leave to be set aside."
+            "-# A week needs 3 days of leave to be exempt."
         ]);
     });
 
     it("6. a leave exempting both weeks waives the fortnight", () => {
         expect(request(span("2026-10-08T00:00:00Z", "2026-10-15T00:00:00Z"))).toEqual([
             "**Fortnight of 5 Oct** · nothing required",
-            "- 📅 Week of 5 Oct · 4 days of leave · set aside",
-            "- 📅 Week of 12 Oct · 3 days of leave · set aside",
+            "- 📅 Week of 5 Oct · 4 days of leave · exempt",
+            "- 📅 Week of 12 Oct · 3 days of leave · exempt",
             "",
-            "-# A week needs 3 days of leave to be set aside."
+            "-# A week needs 3 days of leave to be exempt."
         ]);
     });
 
@@ -216,37 +216,37 @@ describe("the confirmation card, scenario by scenario", () => {
         expect(request(span("2026-10-15T00:00:00Z", "2026-10-22T00:00:00Z"))).toEqual([
             "**Fortnight of 5 Oct** · 120 min required, down from 240",
             "- 💼 Week of 5 Oct · no leave · still counts",
-            "- 📅 Week of 12 Oct · 4 days of leave · set aside",
+            "- 📅 Week of 12 Oct · 4 days of leave · exempt",
             "",
             "**Fortnight of 19 Oct** · 120 min required, down from 240",
-            "- 📅 Week of 19 Oct · 3 days of leave · set aside",
+            "- 📅 Week of 19 Oct · 3 days of leave · exempt",
             "- 💼 Week of 26 Oct · no leave · still counts",
             "",
-            "-# A week needs 3 days of leave to be set aside."
+            "-# A week needs 3 days of leave to be exempt."
         ]);
     });
 
     it("8. a long leave waives one fortnight and reduces the next", () => {
         expect(request(span("2026-10-05T00:00:00Z", "2026-10-26T00:00:00Z"))).toEqual([
             "**Fortnight of 5 Oct** · nothing required",
-            "- 📅 Week of 5 Oct · 7 days of leave · set aside",
-            "- 📅 Week of 12 Oct · 7 days of leave · set aside",
+            "- 📅 Week of 5 Oct · 7 days of leave · exempt",
+            "- 📅 Week of 12 Oct · 7 days of leave · exempt",
             "",
             "**Fortnight of 19 Oct** · 120 min required, down from 240",
-            "- 📅 Week of 19 Oct · 7 days of leave · set aside",
+            "- 📅 Week of 19 Oct · 7 days of leave · exempt",
             "- 💼 Week of 26 Oct · no leave · still counts",
             "",
-            "-# A week needs 3 days of leave to be set aside."
+            "-# A week needs 3 days of leave to be exempt."
         ]);
     });
 
     it("9. partial days add up: 68 hours rounds to 3", () => {
         expect(request(span("2026-10-07T14:00:00Z", "2026-10-10T10:00:00Z"))).toEqual([
             "**Fortnight of 5 Oct** · 120 min required, down from 240",
-            "- 📅 Week of 5 Oct · 3 days of leave · set aside",
+            "- 📅 Week of 5 Oct · 3 days of leave · exempt",
             "- 💼 Week of 12 Oct · no leave · still counts",
             "",
-            "-# A week needs 3 days of leave to be set aside."
+            "-# A week needs 3 days of leave to be exempt."
         ]);
     });
 
@@ -257,10 +257,10 @@ describe("the confirmation card, scenario by scenario", () => {
             effectOf([booked], [extended], span("2026-10-14T00:00:00Z", "2026-10-16T00:00:00Z"), "extension")
         ).toEqual([
             "**Fortnight of 5 Oct** · would need nothing, instead of 120 min",
-            "- 📅 Week of 5 Oct · 3 days of leave · set aside",
-            "- 📅 Week of 12 Oct · was 2 days, now 4 days · would be set aside",
+            "- 📅 Week of 5 Oct · 3 days of leave · exempt",
+            "- 📅 Week of 12 Oct · was 2 days, now 4 days · would be exempt",
             "",
-            "-# A week needs 3 days of leave to be set aside."
+            "-# A week needs 3 days of leave to be exempt."
         ]);
     });
 
@@ -269,10 +269,10 @@ describe("the confirmation card, scenario by scenario", () => {
         const added = span("2026-10-08T00:00:00Z", "2026-10-09T00:00:00Z");
         expect(effectOf([earlier], [earlier, added], added, "request")).toEqual([
             "**Fortnight of 5 Oct** · 120 min required, down from 240",
-            "- 📅 Week of 5 Oct · 3 days of leave · set aside",
+            "- 📅 Week of 5 Oct · 3 days of leave · exempt",
             "- 💼 Week of 12 Oct · no leave · still counts",
             "",
-            "-# A week needs 3 days of leave to be set aside."
+            "-# A week needs 3 days of leave to be exempt."
         ]);
     });
 });
@@ -290,17 +290,17 @@ describe("the confirmation card groups weeks under their fortnight", () => {
         for (const line of request(span("2026-10-10T00:00:00Z", "2026-10-26T00:00:00Z"))) {
             if (!line.startsWith("- ")) continue;
             expect(
-                (line.includes(WEEK_SET_ASIDE) && line.endsWith("set aside")) ||
+                (line.includes(WEEK_EXEMPT) && line.endsWith("exempt")) ||
                     (line.includes(WEEK_COUNTS) && line.endsWith("still counts"))
             ).toBe(true);
         }
     });
 
     it("uses marks nothing else in the bot uses", () => {
-        expect(WEEK_SET_ASIDE).not.toBe(WEEK_COUNTS);
-        expect(Object.values(EMOJI_FOR_COLOUR)).not.toContain(WEEK_SET_ASIDE);
+        expect(WEEK_EXEMPT).not.toBe(WEEK_COUNTS);
+        expect(Object.values(EMOJI_FOR_COLOUR)).not.toContain(WEEK_EXEMPT);
         expect(Object.values(EMOJI_FOR_COLOUR)).not.toContain(WEEK_COUNTS);
-        expect(Object.values(EMOJI)).not.toContain(WEEK_SET_ASIDE);
+        expect(Object.values(EMOJI)).not.toContain(WEEK_EXEMPT);
         expect(Object.values(EMOJI)).not.toContain(WEEK_COUNTS);
     });
 });

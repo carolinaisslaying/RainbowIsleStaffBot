@@ -108,7 +108,7 @@ export function leaveRequestModal(timeZone: string, example: string): ModalBuild
             dateField(
                 FIELD_START,
                 "Leave starts",
-                "When your staff roles are set aside and your assessment pauses.",
+                "When your staff roles are removed. Weeks with enough leave become exempt.",
                 example
             ),
             dateField(
@@ -480,7 +480,7 @@ export function leaveCancelModal(leaveId: string, displayName: string): ModalBui
         .addTextDisplayComponents(
             new TextDisplayBuilder().setContent(
                 `-# **${displayName}** is told it is off, with this reason. Their staff roles ` +
-                    "were never set aside, so nothing else changes."
+                    "were never removed, so nothing else changes."
             )
         )
         .addLabelComponents(
