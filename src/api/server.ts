@@ -148,9 +148,13 @@ export function parsePaging(
 }
 
 export function startApiServer(): ReturnType<typeof createServer> | null {
+    // Started whether or not a token is set, because the container's
+    // healthcheck calls /health, and a server that never started left every
+    // deployment without a token reading unhealthy for ever while working
+    // normally. Without a token only /health answers: `authorised` refuses
+    // everything else, so unset still means closed.
     if (!env.apiBearerToken) {
-        log.warn("API_BEARER_TOKEN is unset; the internal API will not be started.");
-        return null;
+        log.info("API_BEARER_TOKEN is unset; only /health will answer on the internal API.");
     }
 
     const server = createServer((request, response) => {

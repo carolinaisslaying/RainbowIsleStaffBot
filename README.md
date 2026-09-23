@@ -43,7 +43,8 @@ cp .env.example .env
 ```
 
 Fill in `DISCORD_TOKEN`, `DISCORD_APPLICATION_ID`, `PUBLIC_GUILD_ID`,
-`STAFF_GUILD_ID`, `API_BEARER_TOKEN`, and, for the first setup only,
+`STAFF_GUILD_ID`, `API_BEARER_TOKEN` if anything will read the internal API
+(the healthcheck does not need it), and, for the first setup only,
 **`BOOTSTRAP_ADMIN_IDS` with your own Discord user ID**.
 
 That last one matters. Executive tier is resolved from the `executiveRoles`
