@@ -1077,11 +1077,12 @@ function progressBar(done: number, total: number): string {
  * left to do.
  */
 const LEAVE_STATUS_COLOUR: Record<LeaveStatus, number> = {
-    pending: COLOUR.pending,
+    pending: COLOUR.leave,
     approved: COLOUR.approved,
     declined: COLOUR.adverse,
     active: COLOUR.inProgress,
-    ended: COLOUR.settled
+    ended: COLOUR.settled,
+    cancelled: COLOUR.settled
 };
 
 const LEAVE_STATUS_LABEL: Record<LeaveStatus, string> = {
@@ -1089,7 +1090,8 @@ const LEAVE_STATUS_LABEL: Record<LeaveStatus, string> = {
     approved: "Approved, not started yet",
     declined: "Declined",
     active: "On leave now",
-    ended: "Back"
+    ended: "Back",
+    cancelled: "Cancelled before it started"
 };
 
 export function leaveRequestCard(options: {
@@ -1114,9 +1116,7 @@ export function leaveRequestCard(options: {
     // follows the colour the card is actually drawn in rather than the status
     // it still reports.
     const colour = options.purged ? COLOUR.settled : LEAVE_STATUS_COLOUR[options.status];
-    // Waiting leave is amber like a waiting review, so it carries its own mark
-    // rather than the review's ⏳. Every other state keeps its colour's emoji.
-    const leaveMark = colour === COLOUR.pending ? EMOJI.leave : emojiForColour(colour);
+    const leaveMark = emojiForColour(colour);
 
     const container = new ContainerBuilder()
         .setAccentColor(colour)
@@ -1126,7 +1126,9 @@ export function leaveRequestCard(options: {
                     `**${options.displayName}**\n` +
                     `-# ${LEAVE_STATUS_LABEL[options.status]}\n` +
                     `From ${ts(options.startDate, "f")} to ${ts(options.endDate, "f")}` +
-                    (options.status !== "ended" ? `, ending ${ts(options.endDate, "R")}` : "") +
+                    (options.status !== "ended" && options.status !== "cancelled"
+                        ? `, ending ${ts(options.endDate, "R")}`
+                        : "") +
                     (options.plannedEndDate
                         ? `\n-# Booked until ${ts(options.plannedEndDate, "f")}`
                         : "") +
@@ -1144,17 +1146,22 @@ export function leaveRequestCard(options: {
         options.status === "approved" || options.status === "active"
             ? options.pendingExtension
             : null;
+    // An extension is a request waiting on an Executive, so it is drawn in the
+    // leave colour in its own block beneath the card. Inside the card it took
+    // the green or blue of the leave it amends, and read as settled.
+    let extensionBlock: ContainerBuilder | null = null;
     if (extension && !options.purged) {
-        container.addSeparatorComponents(separator());
-        container.addTextDisplayComponents(
+        extensionBlock = new ContainerBuilder().setAccentColor(COLOUR.leave);
+        extensionBlock.addTextDisplayComponents(
             text(
-                `**Extension requested** to ${ts(extension.endDate, "f")}\n` +
+                `### ${emojiForColour(COLOUR.leave)} Extension requested\n` +
+                    `To ${ts(extension.endDate, "f")}\n` +
                     `> ${extension.reason}\n` +
                     extension.effectLines.map((line) => `-# ${line}`).join("\n") +
                     "\n-# The leave still ends on its current date until this is decided."
             )
         );
-        container.addActionRowComponents(
+        extensionBlock.addActionRowComponents(
             new ActionRowBuilder<ButtonBuilder>().addComponents(
                 new ButtonBuilder()
                     .setCustomId(`leave:${options.leaveId}:extApprove`)
@@ -1235,7 +1242,11 @@ export function leaveRequestCard(options: {
         );
     }
 
-    return { components: [container], files: [], flags: V2_FLAGS };
+    return {
+        components: extensionBlock ? [container, extensionBlock] : [container],
+        files: [],
+        flags: V2_FLAGS
+    };
 }
 
 /**
@@ -1264,9 +1275,13 @@ export function leaveEndConfirmCard(options: {
                           "and tells them they are back."
                         : "has not started this leave yet. Cancelling it means their staff roles " +
                           "are never set aside and they are told it is off.") +
-                    "\n\nExemptions follow the leave they actually took, so a week this cuts " +
-                    "short can stop being exempt, and any closed fortnight it changes is " +
-                    "reassessed. They can request leave again at any time."
+                    (options.active
+                        ? "\n\nExemptions follow the leave they actually took, so a week this " +
+                          "cuts short can stop being exempt, and any closed fortnight it changes " +
+                          "is reassessed."
+                        : "\n\nA cancelled leave exempts nothing, and the record stays on the " +
+                          "card marked as cancelled. You are asked why next, and they are told.") +
+                    " They can request leave again at any time."
             )
         )
         .addActionRowComponents(
@@ -1283,6 +1298,35 @@ export function leaveEndConfirmCard(options: {
         );
 
     return { components: [container], files: [], flags: V2_FLAGS | MessageFlags.Ephemeral };
+}
+
+/**
+ * What a member is told when an Executive calls off their leave before it
+ * started.
+ *
+ * Not the welcome-back card. Nobody was away and nothing was set aside, so
+ * there is no stretch of absence to report, no roles to list as restored and
+ * nothing that "starts again". Drawn from that card, it quoted an away period
+ * that ran backwards and restored a role they had never lost.
+ */
+export function leaveCancelledCard(options: {
+    startDate: Date;
+    endDate: Date;
+    cancelledBy: string;
+    reason: string;
+    guildId?: string | null;
+}): RenderedMessage {
+    return noticeCard(
+        "Leave cancelled",
+        `**Your leave has been cancelled** by <@${options.cancelledBy}> before it started. ` +
+            `It was booked from ${ts(options.startDate, "D")} to ${ts(options.endDate, "D")}.\n\n` +
+            `**Why:** ${options.reason}\n\n` +
+            "Your staff roles were never set aside, so nothing changes: your activity keeps " +
+            "counting as usual.\n\n" +
+            `If you still need the time, ask again with ${cmd("leave request", options.guildId)}, ` +
+            "or talk to the Executive team.",
+        { colour: COLOUR.settled }
+    );
 }
 
 /**
@@ -1313,7 +1357,7 @@ export function leaveInterpretationCard(options: {
         : `**New return**\n${ts(options.endDate, "F")}\n-# ${ts(options.endDate, "R")}`;
 
     const container = new ContainerBuilder()
-        .setAccentColor(COLOUR.pending)
+        .setAccentColor(COLOUR.leave)
         .addTextDisplayComponents(
             text(
                 "### Is this right?\n" +

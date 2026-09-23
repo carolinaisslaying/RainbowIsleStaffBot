@@ -21,7 +21,6 @@ import { respond, sendOptions } from "../discord/respond.js";
 import { ts } from "../time/format.js";
 import { cmd } from "../discord/commandMentions.js";
 import { COLOUR } from "../render/theme.js";
-import { EMOJI } from "../render/emoji.js";
 import { log } from "../log.js";
 
 /**
@@ -209,7 +208,7 @@ async function commitRequest(
                     "they are until the leave is approved and starts, and they come back on " +
                     "their own when it ends.\n\n" +
                     `-# Need longer once it has started? ${cmd("leave extend", interaction.guildId)}.`,
-                { colour: COLOUR.pending, emoji: EMOJI.leave }
+                { colour: COLOUR.leave }
             )
         ) as never
     );
@@ -276,7 +275,7 @@ async function commitExtension(
                 `You asked to come back ${ts(draft.endDate, "f")} instead of ` +
                     `${ts(leave.endDate, "f")}.\n\nAn Executive decides, and you hear back ` +
                     "either way. Until then your leave still ends on its current date.",
-                { colour: COLOUR.pending, emoji: EMOJI.leave }
+                { colour: COLOUR.leave }
             )
         ) as never
     );

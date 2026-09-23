@@ -22,6 +22,7 @@ import {
 
 export const LEAVE_REQUEST_MODAL = "leaveRequest";
 export const LEAVE_EXTEND_MODAL = "leaveExtend";
+export const LEAVE_CANCEL_MODAL = "leaveCancel";
 
 export const CONFIG_IMPORT_MODAL = "configImport";
 export const REVIEW_DECISION_MODAL = "reviewDecision";
@@ -456,6 +457,36 @@ export function conductWithdrawModal(warningId: string, displayName: string): Mo
             new LabelBuilder()
                 .setLabel("Why is it being withdrawn?")
                 .setDescription("Issued in error, wrong person, or the facts turned out otherwise.")
+                .setTextInputComponent(
+                    new TextInputBuilder()
+                        .setCustomId(FIELD_REASON)
+                        .setStyle(TextInputStyle.Paragraph)
+                        .setRequired(true)
+                        .setMinLength(4)
+                        .setMaxLength(1000)
+                )
+        );
+}
+
+/**
+ * Why approved leave is being called off before it starts. The member is told
+ * the reason, because being told a booked absence is off with no reason given
+ * reads as a rebuke, and the card and the audit log keep it too.
+ */
+export function leaveCancelModal(leaveId: string, displayName: string): ModalBuilder {
+    return new ModalBuilder()
+        .setCustomId(`${LEAVE_CANCEL_MODAL}:${leaveId}`)
+        .setTitle("Cancel this leave")
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(
+                `-# **${displayName}** is told it is off, with this reason. Their staff roles ` +
+                    "were never set aside, so nothing else changes."
+            )
+        )
+        .addLabelComponents(
+            new LabelBuilder()
+                .setLabel("Why is it being cancelled?")
+                .setDescription("They read this. The leave card and the audit log keep it too.")
                 .setTextInputComponent(
                     new TextInputBuilder()
                         .setCustomId(FIELD_REASON)

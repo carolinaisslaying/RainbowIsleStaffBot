@@ -6,8 +6,10 @@ import { addRole, fetchMember, guildRoleNames, removeRole, tryDm } from "../disc
 import { planLeaveRoleRemoval, planRoleRestore } from "../domain/reconcile.js";
 import {
     leaveDueToActivate,
+    actualEnd,
     leaveDueToEnd,
     markLeaveActive,
+    markLeaveCancelled,
     markLeaveEnded,
     otherCountingLeave,
     recordLeaveCard
@@ -18,7 +20,12 @@ import { findStaffById } from "../domain/staff.js";
 import { getOpenShift } from "../domain/shifts.js";
 import { finishShift } from "./shiftService.js";
 import { audit } from "../domain/audit.js";
-import { leaveRequestCard, noticeCard, type RenderedMessage } from "../render/cards.js";
+import {
+    leaveCancelledCard,
+    leaveRequestCard,
+    noticeCard,
+    type RenderedMessage
+} from "../render/cards.js";
 import { log } from "../log.js";
 import { formatDays, labelDate, ts } from "../time/format.js";
 import { EMOJI } from "../render/emoji.js";
@@ -83,7 +90,19 @@ export async function activateLeave(
         );
     }
 
-    await markLeaveActive(leave._id, removed);
+    if (!(await markLeaveActive(leave._id, removed))) {
+        // Cancelled between the sweep reading it and now. The roles just taken
+        // go straight back, and the member is not told a leave started that
+        // they have already been told is off.
+        if (member) {
+            for (const roleId of removed) {
+                await addRole(member, roleId, "Leave cancelled", staff._id);
+            }
+            await removeRole(member, config.onLeaveRole, "Leave cancelled", staff._id);
+        }
+        log.warn(`Leave ${leave._id.toHexString()} was cancelled while activating; roles put back`);
+        return;
+    }
     await audit("leave.activate", {
         targetStaffId: staff._id,
         detail: { leaveId: leave._id.toHexString(), removedRoles: removed }
@@ -202,6 +221,13 @@ export async function leaveCardFor(
     let outcome: string | null = null;
     if (leave.status === "active") {
         outcome = `-# Away since ${ts(leave.startDate, "R")}. Staff roles are set aside.`;
+    } else if (leave.status === "cancelled" && leave.cancelledAt) {
+        const by = leave.cancelledBy ? await findStaffById(leave.cancelledBy) : null;
+        outcome =
+            `-# Cancelled ${ts(leave.cancelledAt, "R")}` +
+            (by ? ` by <@${by.discordId}>` : "") +
+            ", before it started. Their staff roles were never set aside." +
+            (leave.cancellationReason ? `\n**Why:** ${leave.cancellationReason}` : "");
     } else if (leave.status === "ended" && leave.rolesRestoredAt) {
         const early = leave.endedEarlyBy ? await findStaffById(leave.endedEarlyBy) : null;
         outcome =
@@ -405,6 +431,63 @@ export async function endLeave(
     return welcomeBackCard({ ...summary, guildId: readIn });
 }
 
+/**
+ * Call off approved leave before it starts.
+ *
+ * Separate from `endLeave` because nothing has happened yet that needs
+ * undoing: no roles were set aside, nobody was away, and the member is told the
+ * leave is off rather than welcomed back from it. Returns false when the sweep
+ * activated the leave first, so the caller can end it instead.
+ */
+export async function cancelLeave(
+    client: Client,
+    config: StaffBotConfig,
+    leave: LeaveDoc,
+    by: { discordId: string; staffId: ObjectId },
+    reason: string
+): Promise<boolean> {
+    const cancelled = await markLeaveCancelled(leave, by.staffId, reason);
+    if (!cancelled) return false;
+
+    const staff = await findStaffById(leave.staffId);
+    await audit("leave.cancel", {
+        actorId: by.discordId,
+        targetStaffId: leave.staffId,
+        detail: {
+            leaveId: leave._id.toHexString(),
+            start: leave.startDate,
+            end: leave.endDate,
+            reason
+        }
+    });
+
+    if (staff) {
+        await tryDm(client, staff.discordId, {
+            ...leaveCancelledCard({
+                startDate: leave.startDate,
+                endDate: leave.endDate,
+                cancelledBy: by.discordId,
+                reason
+            })
+        });
+    }
+
+    await updateLeaveCard(client, config, cancelled);
+    await resolvePing(client, pingKey.extension(leave._id));
+
+    // Approved leave counts towards exemptions from the moment it is approved,
+    // so a leave whose start had already passed when it was called off can
+    // have exempted a week that is now closed.
+    await reassessAfterLeaveChange(
+        client,
+        config,
+        leave.staffId,
+        [{ startDate: leave.startDate, endDate: leave.endDate }],
+        "leave cancelled"
+    );
+    return true;
+}
+
 /** Whether the leave stopped before the date it was booked to. */
 function cutShort(leave: LeaveDoc, at = new Date()): boolean {
     return leave.endDate.getTime() > at.getTime();
@@ -429,7 +512,11 @@ function welcomeBackCard(options: {
 }): RenderedMessage {
     const { leave, endedBy } = options;
     const now = new Date();
-    const away = formatDays(now.getTime() - leave.startDate.getTime());
+    // Never before the start, so the range cannot run backwards however this
+    // is reached. Cancelling leave that has not started goes to
+    // `cancelLeave` instead; this is the floor under that.
+    const back = actualEnd(leave, now);
+    const away = formatDays(back.getTime() - leave.startDate.getTime());
 
     const opening =
         endedBy.kind === "executive"
@@ -442,8 +529,7 @@ function welcomeBackCard(options: {
 
     const lines = [
         opening,
-        `You were away ${away}, from ${ts(leave.startDate, "D")} to ` +
-            `${ts(cutShort(leave, now) ? now : leave.endDate, "D")}.`,
+        `You were away ${away}, from ${ts(leave.startDate, "D")} to ${ts(back, "D")}.`,
         ""
     ];
 

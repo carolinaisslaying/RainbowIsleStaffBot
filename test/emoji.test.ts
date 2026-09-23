@@ -41,8 +41,14 @@ describe("the mark a card leads with", () => {
         );
     });
 
+    it("marks a leave request with the calendar, from its colour alone", () => {
+        expect(body(noticeCard("Leave requested", ".", { colour: COLOUR.leave }))).toContain(
+            "### 📆 Leave requested"
+        );
+    });
+
     it("waits in amber", () => {
-        expect(body(noticeCard("Leave requested", ".", { colour: COLOUR.pending }))).toContain(
+        expect(body(noticeCard("Review waiting", ".", { colour: COLOUR.pending }))).toContain(
             "⏳"
         );
     });
@@ -84,14 +90,15 @@ describe("the leave card's mark", () => {
         );
 
     it("matches the colour the card is drawn in, for every state", () => {
-        // Waiting leave has its own mark: ⏳ belongs to the fortnight review,
-        // which is amber for the same reason.
+        // Waiting leave has its own colour and so its own mark: ⏳ belongs to
+        // the fortnight review.
         expect(heading("pending")).toContain("📆 Leave request");
         expect(heading("pending")).not.toContain("⏳");
         expect(heading("approved")).toContain("✅ Leave request");
         expect(heading("declined")).toContain("❌ Leave request");
         expect(heading("active")).toContain("🌙 Leave request");
         expect(heading("ended")).toContain("📁 Leave request");
+        expect(heading("cancelled")).toContain("📁 Leave request");
     });
 
     it("follows the grey of a purged record rather than the status it reports", () => {

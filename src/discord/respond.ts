@@ -60,6 +60,27 @@ export async function defer(
     );
 }
 
+/**
+ * Answer on the card the modal was opened from.
+ *
+ * A modal submitted from a button is its own interaction, so deferring a *reply*
+ * opens a second ephemeral message and leaves the card that asked sitting above
+ * it — with its buttons still live, so the same run could be started again over
+ * rows the first had just decided. Deferring an *update* edits that card
+ * instead, which is the rule every other card here follows.
+ *
+ * Guarded rather than assumed: a modal that arrived without a message, or from a
+ * public one, must not have that message overwritten with somebody's ephemeral
+ * progress card.
+ */
+export async function deferOntoOwnCard(interaction: ModalSubmitInteraction): Promise<void> {
+    if (interaction.isFromMessage() && interaction.message.flags.has(MessageFlags.Ephemeral)) {
+        await interaction.deferUpdate();
+        return;
+    }
+    await defer(interaction, true);
+}
+
 export async function followUp(
     interaction: Repliable,
     message: RenderedMessage

@@ -32,6 +32,14 @@ export const COLOUR = {
      * in. Blue rather than another amber so it cannot be mistaken for pending.
      */
     inProgress: 0x0a84ff,
+    /**
+     * Leave being asked for: a request waiting on an Executive, and the
+     * member's own request and confirmation cards. Its own colour rather than
+     * amber, because amber is the fortnight review's and a leave request is a
+     * different kind of waiting. Pink so it sits apart from declined red,
+     * active-leave blue and the violet on personal cards.
+     */
+    leave: 0xfa89e2,
     /** Reports and analysis. */
     report: 0x40c8e0,
     /** Configuration and administration. */

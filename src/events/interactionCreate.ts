@@ -43,7 +43,7 @@ import {
     handleConductWithdrawModal
 } from "./conductButtons.js";
 import { handleScrubButton } from "./scrubButtons.js";
-import { handleLeaveButton } from "./leaveButtons.js";
+import { handleLeaveButton, handleLeaveCancelModal } from "./leaveButtons.js";
 import { handleLeaveModal } from "./leaveModals.js";
 import { handleLeaveConfirmButton } from "./leaveConfirm.js";
 import { handleLeavePurgeButton } from "./leavePurge.js";
@@ -55,6 +55,7 @@ import {
     CONDUCT_WARN_MODAL,
     CONDUCT_WITHDRAW_MODAL,
     CONFIG_IMPORT_MODAL,
+    LEAVE_CANCEL_MODAL,
     REVIEW_BULK_MODAL,
     REVIEW_DECISION_MODAL,
     REVIEW_SUBSET_MODAL
@@ -332,6 +333,11 @@ async function routeModal(
         interaction.customId.startsWith(`${REVIEW_SUBSET_MODAL}:`)
     ) {
         await handleReviewModal(client, config, interaction);
+        return;
+    }
+
+    if (interaction.customId.startsWith(`${LEAVE_CANCEL_MODAL}:`)) {
+        await handleLeaveCancelModal(client, config, interaction);
         return;
     }
 

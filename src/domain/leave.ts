@@ -173,13 +173,46 @@ export async function decideLeave(
     );
 }
 
+/**
+ * Move approved leave to active. False when it is no longer approved, which
+ * means an Executive cancelled it while the roles were being set aside: the
+ * cancellation stands and the caller has to put the roles back.
+ */
 export async function markLeaveActive(
     leaveId: ObjectId,
     removedRoles: string[]
-): Promise<void> {
-    await collections
+): Promise<boolean> {
+    const result = await collections
         .leave()
-        .updateOne({ _id: leaveId }, { $set: { status: "active", removedRoles } });
+        .updateOne({ _id: leaveId, status: "approved" }, { $set: { status: "active", removedRoles } });
+    return result.matchedCount > 0;
+}
+
+/**
+ * Call off approved leave before it starts. Conditional on the status so it
+ * cannot race the sweep: a leave that activated first comes back null, and the
+ * caller ends it instead, because by then there are roles to restore.
+ */
+export async function markLeaveCancelled(
+    leave: LeaveDoc,
+    cancelledBy: ObjectId,
+    reason: string,
+    at = new Date()
+): Promise<LeaveDoc | null> {
+    return collections.leave().findOneAndUpdate(
+        { _id: leave._id, status: "approved" },
+        {
+            $set: {
+                status: "cancelled",
+                cancelledBy,
+                cancelledAt: at,
+                cancellationReason: reason,
+                // An extension on a leave that never started has nothing to extend.
+                pendingExtension: null
+            }
+        },
+        { returnDocument: "after" }
+    );
 }
 
 /**

@@ -472,15 +472,25 @@ because a reminder nobody is pinged for beats no reminder.
 its whole life, from pending through approved or declined, active, back and purged. It is never
 replaced, and never followed by a second message. `logChannelId`/`logMessageId` on the record are what make that possible, and
 `leaveCardFor` in `services/leaveService.ts` is the only thing that draws it, so colour, buttons and
-status cannot disagree. Colour is the state: amber waiting on a human, green approved, red declined,
-blue running, grey finished. Buttons are the actions that state actually has, which is why a
+status cannot disagree. Colour is the state: pink (`COLOUR.leave`, 📆) waiting on a human, green
+approved, red declined, blue running, grey finished. Leave has its own waiting colour because amber
+and ⏳ belong to the fortnight review; the member's request and confirmation cards use it too. Buttons are the actions that state actually has, which is why a
 declined record offers no way to end anything. An Executive can end active leave (or cancel approved
 leave) from that card; it confirms first, because ending leave restores ranks, restarts assessment
-and tells somebody who is not in the room that they are back. `endLeave` takes a `LeaveEndReason`
+and tells somebody who is not in the room that they are back. **Cancelling approved leave that has
+not started is not ending it**: `cancelLeave` moves it to `cancelled` (its own status, never counting,
+booked dates kept), touches no roles and DMs a "Leave cancelled" card rather than a welcome back,
+carrying the reason the Executive gave in the `leaveCancel` modal (`cancellationReason`, also on the card
+and the audit row). Ending active leave asks for none; cancelling does, because it withdraws something
+the member was told they had. The welcome back it replaces used to quote an away period running backwards and restore a role never taken. It is
+conditional on `status: "approved"`, and `markLeaveActive` on the same, so the sweep and the button
+cannot both win: activation that loses puts the roles back, and a cancel that loses ends the leave. `endLeave` takes a `LeaveEndReason`
 and returns the card it sent, so `/leave end` shows the member exactly what it DMed them.
 **An extension is a pending amendment on the same card**, never an instant write: `/leave extend`
 stores `pendingExtension`, the leave keeps running on its current end, and the card gains the
-request, what it would change, and **Approve extension** / **Decline extension**. The member is
+request, what it would change, and **Approve extension** / **Decline extension** — drawn as a second
+container in `COLOUR.leave` beneath the card, because a container has one accent and inside the card
+the request wore the green or blue of the leave it amends. The member is
 DMed either way. One extension waits at a time. A pending request's card shows what approving it
 would change, from the same `describeLeaveChange` the member's confirmation card uses.
 

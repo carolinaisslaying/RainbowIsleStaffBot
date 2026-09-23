@@ -239,7 +239,13 @@ export interface WarningDoc {
     coveredByLeaveAt?: Date | null;
 }
 
-export type LeaveStatus = "pending" | "approved" | "declined" | "active" | "ended";
+/**
+ * `cancelled` is approved leave an Executive called off before it started. It
+ * is its own state rather than an `ended` leave with no length, because the two
+ * read differently to everybody: nobody was away, nothing was set aside, and
+ * there is nobody to welcome back.
+ */
+export type LeaveStatus = "pending" | "approved" | "declined" | "active" | "ended" | "cancelled";
 
 export interface LeaveDoc {
     _id: ObjectId;
@@ -282,6 +288,15 @@ export interface LeaveDoc {
      * three cases can be told apart on the record and in the wording.
      */
     endedEarlyBy?: ObjectId | null;
+    /**
+     * Who called approved leave off before it started, and when. The booked
+     * dates stay as they were: a cancelled leave covers nothing because its
+     * status never counts, not because its dates were moved.
+     */
+    cancelledBy?: ObjectId | null;
+    cancelledAt?: Date | null;
+    /** What the Executive gave as the reason. The member is told it. */
+    cancellationReason?: string | null;
 }
 
 export interface PendingExtension {
