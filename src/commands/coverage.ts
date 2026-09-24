@@ -51,10 +51,14 @@ function perHour(value: number): string {
     return value >= 10 ? String(Math.round(value)) : value.toFixed(1);
 }
 
-/** Zone, how much data, and the dates it spans, once there is any. */
+/**
+ * Zone, how much data, and the dates the window spans, whenever it spans any.
+ * Keyed on the window rather than on hours heard: a member on leave for all of
+ * it has none heard, and "the whole of this window" needs its dates beside it.
+ */
 function headline(title: string, grid: CoverageGrid, accountingTimezone: string): string {
     const span =
-        grid.observedHours > 0 ? `, ${labelWindow(grid.from, grid.to, accountingTimezone)}` : "";
+        grid.to > grid.from ? `, ${labelWindow(grid.from, grid.to, accountingTimezone)}` : "";
     return `## ${title}\n${grid.timeZone}, ${sampleLabel(grid.observedHours)}${span}`;
 }
 
