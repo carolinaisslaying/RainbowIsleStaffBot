@@ -67,6 +67,40 @@ const UNSEEN_STROKE = "rgba(255,255,255,0.16)";
 const CELL_INK = "rgba(0,0,0,0.82)";
 
 /**
+ * A member's ramp: one hue, dim to bright, never the status palette above.
+ * A card about one person is read as a verdict on them, and on the cool-to-hot
+ * ramp their busiest hour was red, which everywhere else in this bot means
+ * something went wrong. So it takes the review charts' teal (`render/trend.ts`)
+ * stepped in OKLCH lightness at a fixed hue: more minutes is brighter, and
+ * nothing about the colour says good or bad.
+ *
+ * Validated as an ordinal ramp against the panel ground: lightness rises
+ * monotonically, and the dimmest step clears the panel at 2.2:1.
+ */
+const MEMBER_RAMP = ["#035160", "#0b758a", "#169cb7", "#4ec2de", "#8fe7fe"];
+
+/**
+ * A one-hue ramp spans dark to light, so a single ink cannot read on all of it
+ * the way it does on the ramp above. Light ink on the two dim steps (8.9:1 and
+ * 5.4:1), dark on the three bright ones (6.5:1 and up).
+ */
+const MEMBER_INK = ["#ffffff", "#ffffff", CELL_INK, CELL_INK, CELL_INK];
+
+interface Palette {
+    ramp: readonly string[];
+    /** Ink for the figure printed on each band, index for index. */
+    ink: readonly string[];
+}
+
+const HEAT: Palette = { ramp: RAMP, ink: RAMP.map(() => CELL_INK) };
+
+const PALETTE: Record<HeatmapKind, Palette> = {
+    coverage: HEAT,
+    activity: HEAT,
+    member: { ramp: MEMBER_RAMP, ink: MEMBER_INK }
+};
+
+/**
  * The value the top of the ramp stands for: the 95th percentile of the readings,
  * not the largest. On a thin grid one event hour would otherwise take the top
  * band alone and wash every other cell down into the bottom two. Anything above
@@ -94,9 +128,9 @@ function bandFor(value: number, top: number): number {
     return Math.min(RAMP.length - 1, Math.floor(normalised * RAMP.length));
 }
 
-function colourFor(value: number, top: number): string {
+function colourFor(value: number, top: number, palette: Palette): string {
     const band = bandFor(value, top);
-    return band < 0 ? EMPTY : RAMP[band];
+    return band < 0 ? EMPTY : palette.ramp[band];
 }
 
 function figure(value: number): string {
@@ -123,7 +157,7 @@ const WORDING: Record<
     member: {
         empty: "No activity recorded",
         legend: "Average activity minutes per hour, out of 60.",
-        ends: "0 to 60 minutes",
+        ends: "1 to 60 minutes",
         unseen: "Dashed hours were on leave or not heard."
     }
 };
@@ -157,6 +191,7 @@ function emptyGrid(grid: CoverageGrid, kind: HeatmapKind): string {
 export function heatmapSvg(grid: CoverageGrid, kind: HeatmapKind = "coverage"): string {
     const values = kind === "coverage" ? grid.ratio : grid.demand;
     const top = topFor(values.flat(), kind);
+    const palette = PALETTE[kind];
     if (top <= 0) return emptyGrid(grid, kind);
     let unseen = 0;
 
@@ -199,7 +234,7 @@ export function heatmapSvg(grid: CoverageGrid, kind: HeatmapKind = "coverage"): 
             }
             parts.push(
                 `<rect x="${round(x + 1.5)}" y="${round(y + 1.5)}" width="${CELL - 3}" ` +
-                    `height="${CELL - 3}" rx="7" fill="${colourFor(value, top)}" />`
+                    `height="${CELL - 3}" rx="7" fill="${colourFor(value, top, palette)}" />`
             );
 
             // The number is in the cell as well as in the colour, because
@@ -209,7 +244,8 @@ export function heatmapSvg(grid: CoverageGrid, kind: HeatmapKind = "coverage"): 
                 const label = figure(value);
                 parts.push(
                     `<text x="${round(x + CELL / 2)}" y="${round(y + CELL / 2 + 3.5)}" ` +
-                        `fill="${CELL_INK}" font-size="9.5" font-family="${FONT_STACK}" ` +
+                        `fill="${palette.ink[bandFor(value, top)]}" font-size="9.5" ` +
+                        `font-family="${FONT_STACK}" ` +
                         `font-weight="bold" text-anchor="middle">${escapeXml(label)}</text>`
                 );
             }
@@ -224,13 +260,24 @@ export function heatmapSvg(grid: CoverageGrid, kind: HeatmapKind = "coverage"): 
             `</text>`
     );
 
+    // Zero gets a swatch of its own before the bar. Empty cells are drawn in
+    // the panel's own grey and carry no figure, and a bar starting at the
+    // ramp's first colour beside "0 to …" said a zero was that colour.
+    const zeroX = LEFT_GUTTER;
+    const barY = round(legendY + 12);
+    parts.push(
+        `<rect x="${zeroX}" y="${barY}" width="18" height="9" rx="4.5" fill="${EMPTY}" ` +
+            `stroke="url(#panelRim)" stroke-width="1" />`,
+        `<text x="${zeroX + 24}" y="${round(barY + 8)}" fill="${SURFACE.textMuted}" ` +
+            `font-size="10.5" font-family="${FONT_STACK}">0</text>`
+    );
+
     // One continuous bar rather than separate chips: the scale is continuous,
     // and five detached lozenges implied five discrete bands.
-    const barX = LEFT_GUTTER;
-    const barY = round(legendY + 12);
+    const barX = zeroX + 42;
     const barWidth = 168;
-    const segments = RAMP.map((colour, index) => {
-        const segment = barWidth / RAMP.length;
+    const segments = palette.ramp.map((colour, index) => {
+        const segment = barWidth / palette.ramp.length;
         return (
             `<rect x="${round(barX + index * segment)}" y="${barY}" ` +
             `width="${round(segment) + 0.5}" height="9" fill="${colour}" />`

@@ -668,7 +668,11 @@ nothing and lose the unflushed counts on every crash.
 `/coverage member` is the same grid over one member's activity minutes, fed through the same
 `observe`, with two differences. Hours the member was on leave are passed as `excludedHours` and
 drop out of both sides of the average exactly as an unheard hour does. And the scale is fixed at 60
-minutes rather than the 95th percentile, so the same figure is the same colour on everybody's card.
+minutes rather than the 95th percentile, so the same figure is the same colour on everybody's card. Its
+colours are one hue, the trend charts' teal stepped in lightness (`MEMBER_RAMP`), never the
+cool-to-hot ramp: on a card about one person the busiest hour was red, which reads as a verdict. A
+one-hue ramp runs dark to light, so the cell figure's ink flips per band (`MEMBER_INK`). Every
+heatmap's legend gives zero its own grey swatch, because empty cells carry no figure.
 Its window starts at the first whole hour after `joinedTeamAt` when that is later than the
 lookback (`memberWindowStart`): the hour somebody joined partway through is dropped, as a leave's
 part hours are, rather than counted as a quiet sample.

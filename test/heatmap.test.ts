@@ -146,6 +146,13 @@ describe("the activity reading", () => {
     });
 });
 
+/** One member reading in each of the five bands of the 0 to 60 minute scale. */
+function memberBanded(): CoverageGrid {
+    const minutes = zeros();
+    [6, 18, 30, 42, 54].forEach((value, hour) => (minutes[0][hour] = value));
+    return grid(minutes);
+}
+
 describe("the member reading", () => {
     it("scales to the whole hour, so the same minutes are the same colour on every card", () => {
         const light = grid(zeros());
@@ -156,13 +163,36 @@ describe("the member reading", () => {
         const filled = [...svg.matchAll(/height="27" rx="7" fill="(#[0-9a-f]{6})"/g)].map(
             (match) => match[1]
         );
-        expect(filled).toEqual(["#0a84ff"]);
+        expect(filled).toEqual(["#035160"]);
     });
 
     it("labels itself in minutes out of sixty", () => {
         const svg = heatmapSvg(banded(), "member");
         expect(svg).toContain("Average activity minutes per hour, out of 60.");
-        expect(svg).toContain("0 to 60 minutes");
+        expect(svg).toContain("1 to 60 minutes");
+    });
+
+    it("is one hue, dim to bright, and never the status colours the server cards use", () => {
+        const svg = heatmapSvg(memberBanded(), "member");
+        const filled = [...svg.matchAll(/height="27" rx="7" fill="(#[0-9a-f]{6})"/g)].map(
+            (match) => match[1]
+        );
+        expect(filled).toEqual(["#035160", "#0b758a", "#169cb7", "#4ec2de", "#8fe7fe"]);
+        for (const status of ["#0a84ff", "#2bb1a8", "#c3c33a", "#ff9f0a", "#ff453a"]) {
+            expect(svg).not.toContain(status);
+        }
+    });
+
+    it("prints light figures on the dim steps and dark ones on the bright", () => {
+        const svg = heatmapSvg(memberBanded(), "member");
+        const inks = [...svg.matchAll(/fill="([^"]+)" font-size="9.5"/g)].map((match) => match[1]);
+        expect(inks).toEqual([
+            "#ffffff",
+            "#ffffff",
+            "rgba(0,0,0,0.82)",
+            "rgba(0,0,0,0.82)",
+            "rgba(0,0,0,0.82)"
+        ]);
     });
 
     it("says dashed hours may be leave", () => {
@@ -202,6 +232,21 @@ describe("a member's card with nothing to plot", () => {
     it("leaves the server cards' wording alone", () => {
         expect(reliabilityNote(5)).toContain("have not come round yet");
         expect(reliabilityNote(5, "member")).toContain("were on leave or not heard");
+    });
+});
+
+describe("the legend", () => {
+    it("gives zero a grey swatch of its own on every kind, before the ramp", () => {
+        for (const kind of ["coverage", "activity", "member"] as const) {
+            const svg = heatmapSvg(banded(), kind);
+            const swatch = svg.match(
+                /<rect x="(\d+)" y="[\d.]+" width="18" height="9" rx="4.5" fill="rgba\(255,255,255,0.045\)"/
+            );
+            expect(swatch, kind).not.toBeNull();
+            expect(svg).toMatch(/font-size="10.5" font-family="[^"]+">0<\/text>/);
+            const barX = Number(svg.match(/<clipPath id="rampClip"><rect x="(\d+)"/)?.[1]);
+            expect(barX).toBeGreaterThan(Number(swatch?.[1]));
+        }
     });
 });
 
