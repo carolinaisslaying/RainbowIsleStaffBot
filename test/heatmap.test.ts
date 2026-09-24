@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { heatmapSvg, scaleTop } from "../src/render/heatmap.js";
+import {
+    heatmapSvg,
+    memberEmptyNote,
+    reliabilityNote,
+    scaleTop
+} from "../src/render/heatmap.js";
 import type { CoverageGrid } from "../src/services/coverageService.js";
 
 /**
@@ -138,6 +143,65 @@ describe("the activity reading", () => {
     it("says no messages rather than no demand when empty", () => {
         const svg = heatmapSvg(grid(zeros()), "activity");
         expect(svg).toContain("No messages recorded");
+    });
+});
+
+describe("the member reading", () => {
+    it("scales to the whole hour, so the same minutes are the same colour on every card", () => {
+        const light = grid(zeros());
+        light.demand[0][0] = 6; // a tenth of the hour, and this member's busiest
+        // Against 60 minutes that is the bottom band; scaled to their own
+        // busiest cell it would have been the top one.
+        const svg = heatmapSvg(light, "member");
+        const filled = [...svg.matchAll(/height="27" rx="7" fill="(#[0-9a-f]{6})"/g)].map(
+            (match) => match[1]
+        );
+        expect(filled).toEqual(["#0a84ff"]);
+    });
+
+    it("labels itself in minutes out of sixty", () => {
+        const svg = heatmapSvg(banded(), "member");
+        expect(svg).toContain("Average activity minutes per hour, out of 60.");
+        expect(svg).toContain("0 to 60 minutes");
+    });
+
+    it("says dashed hours may be leave", () => {
+        const input = banded();
+        input.observed[6] = input.observed[6].map(() => 0);
+        expect(heatmapSvg(input, "member")).toContain("Dashed hours were on leave or not heard.");
+    });
+
+    it("says no activity when empty", () => {
+        expect(heatmapSvg(grid(zeros()), "member")).toContain("No activity recorded");
+    });
+});
+
+describe("a member's card with nothing to plot", () => {
+    it("says a window that was all leave was leave, not that they did nothing", () => {
+        const note = memberEmptyNote("Sam", 0, 1344, 1344);
+        expect(note).toBe(
+            "_Sam was on leave for the whole of this window, so there is nothing to average._"
+        );
+        expect(note).not.toContain("No activity");
+        expect(note).not.toContain("come round");
+    });
+
+    it("says what the rest was when leave and an outage covered the window between them", () => {
+        const note = memberEmptyNote("Sam", 0, 100, 168);
+        expect(note).toContain("on leave for 100 hours of this window");
+        expect(note).toContain("not listening for the rest");
+    });
+
+    it("says no activity when the hours were heard, with the leave and the caveat beneath", () => {
+        const note = memberEmptyNote("Sam", 5, 3, 8);
+        expect(note).toContain("_No activity minutes recorded for Sam in this window._");
+        expect(note).toContain("-# 3 hours on leave left out of the averages.");
+        expect(note).toContain("dashed ones were on leave or not heard");
+    });
+
+    it("leaves the server cards' wording alone", () => {
+        expect(reliabilityNote(5)).toContain("have not come round yet");
+        expect(reliabilityNote(5, "member")).toContain("were on leave or not heard");
     });
 });
 

@@ -3,13 +3,17 @@ import {
     busiestRun,
     dailyProfile,
     hourWeight,
+    hoursTouchedBy,
     listeningOver,
+    memberWindowStart,
+    minutesByUtcHour,
     observe,
     quietestHour,
     spreadByHour,
     type ObservationInput
 } from "../src/domain/observation.js";
 import { reliabilityNote, sampleLabel } from "../src/render/heatmap.js";
+import { emptyBitmap, setMinute } from "../src/domain/bitmap.js";
 
 /**
  * The heatmaps average each cell over the hours the bot actually heard, so a
@@ -268,5 +272,112 @@ describe("minutes listening", () => {
         const since = now.getTime() - 90 * 60_000;
         expect(listeningOver([], since, dayAgo, now)).toEqual({ online: 0, possible: 90 });
         expect(listeningOver([], null, dayAgo, now)).toEqual({ online: 0, possible: 0 });
+    });
+});
+
+describe("a member's hours on leave", () => {
+    it("leaves them out of the average, like an hour the bot missed", () => {
+        const first = Date.parse("2026-08-03T00:00:00Z");
+        const second = first + 7 * 24 * HOUR;
+        const result = observe(
+            input({
+                from: new Date(first),
+                to: new Date(second + HOUR),
+                messagesByHour: new Map([[first, 40]]),
+                excludedHours: new Set([second])
+            })
+        );
+        // The second Monday 12:00 was leave, so it is not a zero halving the first.
+        expect(result.observed[0][12]).toBe(1);
+        expect(result.demand[0][12]).toBe(40);
+    });
+
+    it("drops a cell to unheard when every time it came round was leave", () => {
+        const first = Date.parse("2026-08-03T00:00:00Z");
+        const result = observe(
+            input({
+                from: new Date(first),
+                to: new Date(first + HOUR),
+                excludedHours: new Set([first])
+            })
+        );
+        expect(result.observed[0][12]).toBe(0);
+        expect(result.observedHours).toBe(0);
+    });
+
+    it("counts every hour a leave touches, the part hours at either end included", () => {
+        const from = new Date("2026-08-03T00:00:00Z");
+        const to = new Date("2026-08-04T00:00:00Z");
+        const hours = hoursTouchedBy(
+            [
+                {
+                    startDate: new Date("2026-08-03T09:30:00Z"),
+                    endDate: new Date("2026-08-03T11:15:00Z")
+                }
+            ],
+            from,
+            to
+        );
+        expect([...hours].map((hour) => new Date(hour).toISOString())).toEqual([
+            "2026-08-03T09:00:00.000Z",
+            "2026-08-03T10:00:00.000Z",
+            "2026-08-03T11:00:00.000Z"
+        ]);
+    });
+
+    it("clips a leave to the window", () => {
+        const from = new Date("2026-08-03T00:00:00Z");
+        const to = new Date("2026-08-03T02:00:00Z");
+        const hours = hoursTouchedBy(
+            [
+                {
+                    startDate: new Date("2026-07-01T00:00:00Z"),
+                    endDate: new Date("2026-09-01T00:00:00Z")
+                }
+            ],
+            from,
+            to
+        );
+        expect(hours.size).toBe(2);
+    });
+});
+
+describe("a member's minutes by hour", () => {
+    it("keys each hour's set minutes by its UTC start, and skips empty hours", () => {
+        const bitmap = emptyBitmap();
+        setMinute(bitmap, 0);
+        setMinute(bitmap, 59);
+        setMinute(bitmap, 23 * 60 + 30);
+        const totals = minutesByUtcHour(new Map([["2026-08-03", bitmap]]));
+        expect(totals).toEqual(
+            new Map([
+                [Date.parse("2026-08-03T00:00:00Z"), 2],
+                [Date.parse("2026-08-03T23:00:00Z"), 1]
+            ])
+        );
+    });
+});
+
+describe("where a member's grid begins", () => {
+    const to = new Date("2026-08-10T00:00:00Z");
+
+    it("starts at the first whole hour after joining, not the hour they joined in", () => {
+        const joined = new Date("2026-08-05T10:45:00Z");
+        expect(memberWindowStart(to, 8, joined).toISOString()).toBe("2026-08-05T11:00:00.000Z");
+    });
+
+    it("keeps a join exactly on the hour", () => {
+        const joined = new Date("2026-08-05T10:00:00Z");
+        expect(memberWindowStart(to, 8, joined).toISOString()).toBe("2026-08-05T10:00:00.000Z");
+    });
+
+    it("uses the lookback for somebody who joined before it", () => {
+        const joined = new Date("2025-01-01T10:45:00Z");
+        expect(memberWindowStart(to, 1, joined).toISOString()).toBe("2026-08-03T00:00:00.000Z");
+    });
+
+    it("never starts after the window ends", () => {
+        const joined = new Date("2026-08-09T23:30:00Z");
+        expect(memberWindowStart(to, 8, joined)).toEqual(to);
     });
 });

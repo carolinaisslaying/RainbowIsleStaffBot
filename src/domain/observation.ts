@@ -1,4 +1,6 @@
-import { HOUR_MS, wallClockIn } from "../time/calendar.js";
+import { HOUR_MS, WEEK_MS, dayKeyToDate, wallClockIn } from "../time/calendar.js";
+import { hourHistogram } from "./bitmap.js";
+import type { LeaveSpan } from "./leaveDays.js";
 
 /**
  * Which hours the bot actually saw, and what each one is worth.
@@ -78,6 +80,12 @@ export interface ObservationInput {
     /** Distinct minutes online per UTC hour start. */
     uptime: ReadonlyMap<number, number>;
     measuredSince: number | null;
+    /**
+     * UTC hour starts that are no reading at all, whatever the bot heard: a
+     * member's hours on leave. Left out of every average, the same way an hour
+     * the bot missed is, rather than read as a quiet hour.
+     */
+    excludedHours?: ReadonlySet<number>;
 }
 
 export interface Observation {
@@ -108,6 +116,7 @@ export function observe(input: ObservationInput): Observation {
     let observedHours = 0;
 
     for (let hour = input.from.getTime(); hour < input.to.getTime(); hour += HOUR_MS) {
+        if (input.excludedHours?.has(hour)) continue;
         const weight = hourWeight(hour, input.uptime, input.measuredSince);
         if (weight === null) continue;
 
@@ -144,6 +153,51 @@ export function spreadByHour(into: Map<number, number>, from: Date, to: Date): v
         into.set(hourStart, (into.get(hourStart) ?? 0) + (sliceEnd - cursor));
         cursor = sliceEnd;
     }
+}
+
+/**
+ * Activity minutes per UTC hour start, from a member's day bitmaps keyed by
+ * UTC day. An hour with no minutes is absent, as a demand bucket is.
+ */
+export function minutesByUtcHour(days: ReadonlyMap<string, Buffer>): Map<number, number> {
+    const totals = new Map<number, number>();
+    for (const [date, bitmap] of days) {
+        const dayStart = dayKeyToDate(date).getTime();
+        hourHistogram(bitmap).forEach((minutes, hour) => {
+            if (minutes > 0) totals.set(dayStart + hour * HOUR_MS, minutes);
+        });
+    }
+    return totals;
+}
+
+/**
+ * Where a member's grid begins: the lookback, or the first whole hour after
+ * they joined, whichever is later. Rounded up, not down: the hour somebody
+ * joined partway through is not an hour they could fill, and counting it read
+ * as a quiet sample, which in a first week is the only sample that cell has.
+ * The same rule as leave, whose part hours are dropped rather than weighed.
+ */
+export function memberWindowStart(to: Date, lookbackWeeks: number, joinedTeamAt: Date): Date {
+    const lookbackFrom = to.getTime() - lookbackWeeks * WEEK_MS;
+    const joined = Math.ceil(joinedTeamAt.getTime() / HOUR_MS) * HOUR_MS;
+    return new Date(Math.min(to.getTime(), Math.max(lookbackFrom, joined)));
+}
+
+/**
+ * Every UTC hour start in [from, to) that any span touches, however briefly.
+ * An hour half on leave is no fairer a reading than one wholly on it, and the
+ * cost is at most an hour either end of a leave.
+ */
+export function hoursTouchedBy(spans: readonly LeaveSpan[], from: Date, to: Date): Set<number> {
+    const hours = new Set<number>();
+    for (const span of spans) {
+        const start = Math.max(from.getTime(), span.startDate.getTime());
+        const end = Math.min(to.getTime(), span.endDate.getTime());
+        for (let hour = Math.floor(start / HOUR_MS) * HOUR_MS; hour < end; hour += HOUR_MS) {
+            hours.add(hour);
+        }
+    }
+    return hours;
 }
 
 export interface DailyProfile {

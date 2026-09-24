@@ -10,6 +10,7 @@ import type { Command } from "./types.js";
 import {
     buildActivityGrid,
     buildCoverageGrid,
+    buildMemberActivityGrid,
     busiestCells,
     weekdayLabels,
     worstCells,
@@ -18,17 +19,29 @@ import {
 } from "../services/coverageService.js";
 import { busiestRun, dailyProfile, quietestHour } from "../domain/observation.js";
 import {
+    leaveHoursNote,
+    memberEmptyNote,
     reliabilityNote,
     renderHeatmap,
     sampleLabel,
     type HeatmapKind
 } from "../render/heatmap.js";
 import { isExecutive } from "../domain/permissions.js";
-import { V2_FLAGS, containersMessage, errorCard, separator, text } from "../render/cards.js";
+import { findStaffByDiscordId } from "../domain/staff.js";
+import {
+    V2_FLAGS,
+    containersMessage,
+    errorCard,
+    noticeCard,
+    separator,
+    text
+} from "../render/cards.js";
+import { staffDisplayName } from "../discord/displayName.js";
 import { defer, respond } from "../discord/respond.js";
 import { isValidTimezone, searchTimezones } from "../time/timezones.js";
 import { labelWindow } from "../time/format.js";
 import { COLOUR } from "../render/theme.js";
+import { HOUR_MS } from "../time/calendar.js";
 
 function hourLabel(hour: number): string {
     return `${String(hour).padStart(2, "0")}:00`;
@@ -38,16 +51,20 @@ function perHour(value: number): string {
     return value >= 10 ? String(Math.round(value)) : value.toFixed(1);
 }
 
-/** Zone, how much data, and the dates it spans, once there is any. */
+/**
+ * Zone, how much data, and the dates the window spans, whenever it spans any.
+ * Keyed on the window rather than on hours heard: a member on leave for all of
+ * it has none heard, and "the whole of this window" needs its dates beside it.
+ */
 function headline(title: string, grid: CoverageGrid, accountingTimezone: string): string {
     const span =
-        grid.observedHours > 0 ? `, ${labelWindow(grid.from, grid.to, accountingTimezone)}` : "";
+        grid.to > grid.from ? `, ${labelWindow(grid.from, grid.to, accountingTimezone)}` : "";
     return `## ${title}\n${grid.timeZone}, ${sampleLabel(grid.observedHours)}${span}`;
 }
 
 /** The reliability note as a footnote, or nothing once there is enough data. */
-function footnote(grid: CoverageGrid): string {
-    const note = reliabilityNote(grid.observedHours);
+function footnote(grid: CoverageGrid, kind: HeatmapKind = "coverage"): string {
+    const note = reliabilityNote(grid.observedHours, kind);
     return note === null ? "" : `\n-# ${note}`;
 }
 
@@ -143,6 +160,32 @@ export const coverageCommand: Command = {
                         .setMaxValue(52)
                         .setRequired(false)
                 )
+        )
+        .addSubcommand((sub) =>
+            sub
+                .setName("member")
+                .setDescription("When one staff member is active, hour by hour")
+                .addUserOption((option) =>
+                    option
+                        .setName("user")
+                        .setDescription("The staff member")
+                        .setRequired(true)
+                )
+                .addStringOption((option) =>
+                    option
+                        .setName("tz")
+                        .setDescription("Render in this timezone. Defaults to yours.")
+                        .setAutocomplete(true)
+                        .setRequired(false)
+                )
+                .addIntegerOption((option) =>
+                    option
+                        .setName("weeks")
+                        .setDescription("Lookback in weeks")
+                        .setMinValue(1)
+                        .setMaxValue(52)
+                        .setRequired(false)
+                )
         ),
 
     async autocomplete(interaction) {
@@ -150,7 +193,7 @@ export const coverageCommand: Command = {
         await interaction.respond(zones.map((zone) => ({ name: zone, value: zone })));
     },
 
-    async execute({ config, interaction, staff, tier }) {
+    async execute({ client, config, interaction, staff, tier }) {
         if (!isExecutive(tier)) {
             await respond(interaction, errorCard("Coverage reporting is Executive only."));
             return;
@@ -235,6 +278,79 @@ export const coverageCommand: Command = {
                         (summary ? `${summary}\n\n` : "") +
                             `**Five busiest hours**\n${busiest}` +
                             footnote(grid)
+                    )
+                );
+
+            await respond(interaction, {
+                components: [container],
+                files: [attachment],
+                flags: V2_FLAGS
+            });
+            return;
+        }
+
+        if (sub === "member") {
+            const target = interaction.options.getUser("user", true);
+            await defer(interaction, false);
+
+            const member = await findStaffByDiscordId(target.id);
+            if (!member) {
+                await respond(
+                    interaction,
+                    noticeCard("No staff record", `<@${target.id}> is not tracked as Moderation staff.`)
+                );
+                return;
+            }
+
+            const name = await staffDisplayName(client, config, target.id, target.username);
+            const grid = await buildMemberActivityGrid(config, member, zone, weeks);
+
+            const container = new ContainerBuilder()
+                .setAccentColor(COLOUR.report)
+                .addTextDisplayComponents(
+                    text(headline(`Activity: ${name}`, grid, config.accountingTimezone))
+                );
+
+            if (grid.maxDemand <= 0) {
+                container
+                    .addSeparatorComponents(separator())
+                    .addTextDisplayComponents(
+                        text(
+                            memberEmptyNote(
+                                name,
+                                grid.observedHours,
+                                grid.leaveHours,
+                                (grid.to.getTime() - grid.from.getTime()) / HOUR_MS
+                            )
+                        )
+                    );
+                await respond(interaction, containersMessage([container]));
+                return;
+            }
+
+            const { gallery, attachment } = heatmapGallery(
+                grid,
+                "member",
+                `A 7 by 24 grid of one staff member's average activity minutes per hour, ` +
+                    `rendered in ${zone}.`
+            );
+
+            const busiest = busiestCells(grid, 5)
+                .map(
+                    (cell, index) =>
+                        `${index + 1}. **${days[cell.weekday]} ${hourLabel(cell.hour)}** ` +
+                        `${perHour(cell.demand)} minutes an hour`
+                )
+                .join("\n");
+
+            container
+                .addMediaGalleryComponents(gallery)
+                .addSeparatorComponents(separator())
+                .addTextDisplayComponents(
+                    text(
+                        `**Five most active hours**\n${busiest}` +
+                            leaveHoursNote(grid.leaveHours) +
+                            footnote(grid, "member")
                     )
                 );
 

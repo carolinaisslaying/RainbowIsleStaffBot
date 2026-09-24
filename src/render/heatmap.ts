@@ -14,8 +14,9 @@ import {
  * A 7 by 24 grid rendered as SVG and rasterised through the same pipeline as
  * the rings.
  *
- * Two readings of the same grid. `coverage` plots demand divided by coverage,
- * never either alone; `activity` plots messages per hour. A static image has no
+ * Three readings of the same grid. `coverage` plots demand divided by coverage,
+ * never either alone; `activity` plots messages per hour; `member` plots one
+ * member's activity minutes per hour. A static image has no
  * tooltip, so the legend plus the companion text block listing the top cells is
  * where the raw numbers live.
  *
@@ -31,7 +32,7 @@ import {
  * quiet, it is unknown, and the grid is read very differently depending on which.
  */
 
-export type HeatmapKind = "coverage" | "activity";
+export type HeatmapKind = "coverage" | "activity" | "member";
 
 const CELL = 30;
 /** The same margin on all four sides, as on the ring card. */
@@ -77,6 +78,16 @@ export function scaleTop(values: readonly number[]): number {
     return positive[Math.max(0, Math.ceil(positive.length * 0.95) - 1)];
 }
 
+/**
+ * A member's grid is scaled to the hour itself, not to their own busiest cell:
+ * "30" should be the same colour on everybody's card, or two members read side
+ * by side look alike whatever they did.
+ */
+function topFor(values: readonly number[], kind: HeatmapKind): number {
+    if (kind !== "member") return scaleTop(values);
+    return values.some((value) => value > 0) ? 60 : 0;
+}
+
 function bandFor(value: number, top: number): number {
     if (value <= 0 || top <= 0) return -1;
     const normalised = Math.min(1, value / top);
@@ -93,16 +104,27 @@ function figure(value: number): string {
     return value >= 10 ? String(Math.round(value)) : value.toFixed(1);
 }
 
-const WORDING: Record<HeatmapKind, { empty: string; legend: string; ends: string }> = {
+const WORDING: Record<
+    HeatmapKind,
+    { empty: string; legend: string; ends: string; unseen: string }
+> = {
     coverage: {
         empty: "No demand recorded",
         legend: "Messages per available moderator, per hour. Higher is a worse gap.",
-        ends: "quiet to worst gap"
+        ends: "quiet to worst gap",
+        unseen: "Dashed hours have not been heard yet."
     },
     activity: {
         empty: "No messages recorded",
         legend: "Average messages per hour.",
-        ends: "quiet to busiest"
+        ends: "quiet to busiest",
+        unseen: "Dashed hours have not been heard yet."
+    },
+    member: {
+        empty: "No activity recorded",
+        legend: "Average activity minutes per hour, out of 60.",
+        ends: "0 to 60 minutes",
+        unseen: "Dashed hours were on leave or not heard."
     }
 };
 
@@ -134,7 +156,7 @@ function emptyGrid(grid: CoverageGrid, kind: HeatmapKind): string {
 
 export function heatmapSvg(grid: CoverageGrid, kind: HeatmapKind = "coverage"): string {
     const values = kind === "coverage" ? grid.ratio : grid.demand;
-    const top = scaleTop(values.flat());
+    const top = topFor(values.flat(), kind);
     if (top <= 0) return emptyGrid(grid, kind);
     let unseen = 0;
 
@@ -198,7 +220,7 @@ export function heatmapSvg(grid: CoverageGrid, kind: HeatmapKind = "coverage"): 
     parts.push(
         `<text x="${LEFT_GUTTER}" y="${round(legendY)}" fill="${SURFACE.textMuted}" ` +
             `font-size="11" font-family="${FONT_STACK}">${WORDING[kind].legend}` +
-            (unseen > 0 ? " Dashed hours have not been heard yet." : "") +
+            (unseen > 0 ? ` ${WORDING[kind].unseen}` : "") +
             `</text>`
     );
 
@@ -246,11 +268,17 @@ export function sampleLabel(observedHours: number): string {
  * Two weeks is where it stops: every cell has two readings, which is enough for
  * the shape of a week even if one evening can still move a single cell.
  */
-export function reliabilityNote(observedHours: number): string | null {
+export function reliabilityNote(
+    observedHours: number,
+    kind: HeatmapKind = "coverage"
+): string | null {
     if (observedHours < 24) {
+        // On a member's card a dashed cell is usually leave, not an hour that is
+        // still to come; the chart's own legend already says so.
+        const dashed = kind === "member" ? "were on leave or not heard" : "have not come round yet";
         return (
             `Based on ${observedHours} hour${observedHours === 1 ? "" : "s"}. Each filled cell ` +
-            "is a single hour, and the dashed ones have not come round yet."
+            `is a single hour, and the dashed ones ${dashed}.`
         );
     }
     if (observedHours < 7 * 24) {
@@ -265,6 +293,43 @@ export function reliabilityNote(observedHours: number): string | null {
         return `Based on ${days} days. Cells will settle as the second week comes in.`;
     }
     return null;
+}
+
+function hours(count: number): string {
+    return `${count} hour${count === 1 ? "" : "s"}`;
+}
+
+/** The subtext saying how much leave a member's grid left out, or nothing. */
+export function leaveHoursNote(leaveHours: number): string {
+    return leaveHours > 0 ? `\n-# ${hours(leaveHours)} on leave left out of the averages.` : "";
+}
+
+/**
+ * What a member's card says in place of a grid with nothing on it.
+ *
+ * A window that was all leave is not a member who did nothing, and must not
+ * read like one: it says so and stops, with no reliability note, because
+ * "the dashed ones have not come round yet" is untrue of hours that came
+ * round and were leave.
+ */
+export function memberEmptyNote(
+    name: string,
+    observedHours: number,
+    leaveHours: number,
+    windowHours: number
+): string {
+    if (observedHours === 0 && leaveHours > 0) {
+        return leaveHours >= windowHours
+            ? `_${name} was on leave for the whole of this window, so there is nothing to average._`
+            : `_Nothing to average: ${name} was on leave for ${hours(leaveHours)} of this window, ` +
+                  "and the bot was not listening for the rest._";
+    }
+    const note = reliabilityNote(observedHours, "member");
+    return (
+        `_No activity minutes recorded for ${name} in this window._` +
+        leaveHoursNote(leaveHours) +
+        (note === null ? "" : `\n-# ${note}`)
+    );
 }
 
 export function renderHeatmap(grid: CoverageGrid, kind: HeatmapKind = "coverage"): Buffer {

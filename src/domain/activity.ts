@@ -207,7 +207,16 @@ export async function dailyTotalsBetween(
     }));
 }
 
-/** Per UTC hour totals across a window, length 24. Feeds the coverage heatmap. */
+/** A member's day bitmaps for every UTC day [from, to) touches. Feeds the member heatmap. */
+export function dayBitmapsBetween(
+    staffId: ObjectId,
+    from: Date,
+    to: Date
+): Promise<Map<string, Buffer>> {
+    return fetchDays(staffId, utcDayKeysBetween(from, to));
+}
+
+/** Per UTC hour totals across a window, length 24. */
 export async function hourlyTotalsBetween(
     staffId: ObjectId,
     from: Date,

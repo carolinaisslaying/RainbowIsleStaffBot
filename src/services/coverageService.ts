@@ -1,11 +1,17 @@
 import type { StaffBotConfig } from "../config/guildConfig.js";
+import type { StaffDoc } from "../db/types.js";
 import { allShiftsOverlapping, availableIntervals } from "../domain/shifts.js";
+import { dayBitmapsBetween } from "../domain/activity.js";
+import { leaveOverlapping } from "../domain/leave.js";
 import { demandByHour, firstDemandHour } from "../domain/demand.js";
 import { uptimeByHour, uptimeMeasuredSince } from "../domain/uptime.js";
 import {
     GRID_DAYS,
     GRID_HOURS,
     gridCellFor,
+    hoursTouchedBy,
+    memberWindowStart,
+    minutesByUtcHour,
     observe,
     spreadByHour
 } from "../domain/observation.js";
@@ -146,6 +152,78 @@ export function buildActivityGrid(
     now = new Date()
 ): Promise<CoverageGrid> {
     return buildGrid(config, timeZone, lookbackWeeks, channelIds, false, now);
+}
+
+export interface MemberActivityGrid extends CoverageGrid {
+    /** Hours in the window left out because the member was on leave. */
+    leaveHours: number;
+}
+
+/**
+ * One member's activity minutes, averaged per hour of the week. The grid's
+ * `demand` holds minutes rather than messages, so everything that reads a grid
+ * (the renderer, `busiestCells`) works unchanged.
+ *
+ * The window starts at the lookback or the first whole hour after they joined
+ * the team, whichever is later: weeks before somebody was staff are not weeks
+ * they were quiet. Hours
+ * on leave are no reading at all, like an hour the bot missed.
+ */
+export async function buildMemberActivityGrid(
+    config: StaffBotConfig,
+    member: Pick<StaffDoc, "_id" | "joinedTeamAt">,
+    timeZone: string,
+    lookbackWeeks: number,
+    now = new Date()
+): Promise<MemberActivityGrid> {
+    const to = new Date(Math.floor(now.getTime() / HOUR_MS) * HOUR_MS);
+    const from = memberWindowStart(to, lookbackWeeks, member.joinedTeamAt);
+
+    const [days, leave, uptime, measuredSince] = await Promise.all([
+        dayBitmapsBetween(member._id, from, to),
+        leaveOverlapping(member._id, from, to),
+        uptimeByHour(from, to),
+        uptimeMeasuredSince()
+    ]);
+    const excludedHours = hoursTouchedBy(leave, from, to);
+
+    const observation = observe({
+        from,
+        to,
+        timeZone,
+        weekStartDay: config.weekStartDay,
+        messagesByHour: minutesByUtcHour(days),
+        coverageByHour: new Map(),
+        uptime,
+        measuredSince,
+        excludedHours
+    });
+
+    // Scaling a partly heard hour up to a full one can carry a busy hour past
+    // sixty minutes, which an hour does not have.
+    let maxDemand = 0;
+    const demand = observation.demand.map((row) =>
+        row.map((minutes) => {
+            const capped = Math.min(60, minutes);
+            if (capped > maxDemand) maxDemand = capped;
+            return capped;
+        })
+    );
+
+    return {
+        coverage: observation.coverage,
+        demand,
+        ratio: demand,
+        observed: observation.observed,
+        timeZone,
+        weekStartDay: config.weekStartDay,
+        observedHours: observation.observedHours,
+        from,
+        to,
+        maxRatio: maxDemand,
+        maxDemand,
+        leaveHours: excludedHours.size
+    };
 }
 
 function cellsOf(grid: CoverageGrid): GapCell[] {
