@@ -665,6 +665,12 @@ scale tops out at the 95th percentile so one event hour does not wash out a thin
 counting itself is still one `$inc` per message: at a few hundred an hour, batching would buy
 nothing and lose the unflushed counts on every crash.
 
+`/coverage member` is the same grid over one member's activity minutes, fed through the same
+`observe`, with two differences. Hours the member was on leave are passed as `excludedHours` and
+drop out of both sides of the average exactly as an unheard hour does. And the scale is fixed at 60
+minutes rather than the 95th percentile, so the same figure is the same colour on everybody's card.
+Its window starts at `joinedTeamAt` when that is later than the lookback.
+
 **Jobs** (`src/jobs/index.ts`): `shift-sweep`, `uptime` and `leave-transitions` every minute, `recaps` hourly,
 `week-close` at 00:05 in the accounting timezone. All are date-driven and idempotent, so a missed
 run self-heals.
