@@ -141,6 +141,36 @@ describe("the activity reading", () => {
     });
 });
 
+describe("the member reading", () => {
+    it("scales to the whole hour, so the same minutes are the same colour on every card", () => {
+        const light = grid(zeros());
+        light.demand[0][0] = 6; // a tenth of the hour, and this member's busiest
+        // Against 60 minutes that is the bottom band; scaled to their own
+        // busiest cell it would have been the top one.
+        const svg = heatmapSvg(light, "member");
+        const filled = [...svg.matchAll(/height="27" rx="7" fill="(#[0-9a-f]{6})"/g)].map(
+            (match) => match[1]
+        );
+        expect(filled).toEqual(["#0a84ff"]);
+    });
+
+    it("labels itself in minutes out of sixty", () => {
+        const svg = heatmapSvg(banded(), "member");
+        expect(svg).toContain("Average activity minutes per hour, out of 60.");
+        expect(svg).toContain("0 to 60 minutes");
+    });
+
+    it("says dashed hours may be leave", () => {
+        const input = banded();
+        input.observed[6] = input.observed[6].map(() => 0);
+        expect(heatmapSvg(input, "member")).toContain("Dashed hours were on leave or not heard.");
+    });
+
+    it("says no activity when empty", () => {
+        expect(heatmapSvg(grid(zeros()), "member")).toContain("No activity recorded");
+    });
+});
+
 describe("the colour scale", () => {
     it("tops out at the 95th percentile so one spike does not wash the rest out", () => {
         const values = [...Array.from({ length: 99 }, () => 10), 1000];

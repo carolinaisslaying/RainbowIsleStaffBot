@@ -14,8 +14,9 @@ import {
  * A 7 by 24 grid rendered as SVG and rasterised through the same pipeline as
  * the rings.
  *
- * Two readings of the same grid. `coverage` plots demand divided by coverage,
- * never either alone; `activity` plots messages per hour. A static image has no
+ * Three readings of the same grid. `coverage` plots demand divided by coverage,
+ * never either alone; `activity` plots messages per hour; `member` plots one
+ * member's activity minutes per hour. A static image has no
  * tooltip, so the legend plus the companion text block listing the top cells is
  * where the raw numbers live.
  *
@@ -31,7 +32,7 @@ import {
  * quiet, it is unknown, and the grid is read very differently depending on which.
  */
 
-export type HeatmapKind = "coverage" | "activity";
+export type HeatmapKind = "coverage" | "activity" | "member";
 
 const CELL = 30;
 /** The same margin on all four sides, as on the ring card. */
@@ -77,6 +78,16 @@ export function scaleTop(values: readonly number[]): number {
     return positive[Math.max(0, Math.ceil(positive.length * 0.95) - 1)];
 }
 
+/**
+ * A member's grid is scaled to the hour itself, not to their own busiest cell:
+ * "30" should be the same colour on everybody's card, or two members read side
+ * by side look alike whatever they did.
+ */
+function topFor(values: readonly number[], kind: HeatmapKind): number {
+    if (kind !== "member") return scaleTop(values);
+    return values.some((value) => value > 0) ? 60 : 0;
+}
+
 function bandFor(value: number, top: number): number {
     if (value <= 0 || top <= 0) return -1;
     const normalised = Math.min(1, value / top);
@@ -93,16 +104,27 @@ function figure(value: number): string {
     return value >= 10 ? String(Math.round(value)) : value.toFixed(1);
 }
 
-const WORDING: Record<HeatmapKind, { empty: string; legend: string; ends: string }> = {
+const WORDING: Record<
+    HeatmapKind,
+    { empty: string; legend: string; ends: string; unseen: string }
+> = {
     coverage: {
         empty: "No demand recorded",
         legend: "Messages per available moderator, per hour. Higher is a worse gap.",
-        ends: "quiet to worst gap"
+        ends: "quiet to worst gap",
+        unseen: "Dashed hours have not been heard yet."
     },
     activity: {
         empty: "No messages recorded",
         legend: "Average messages per hour.",
-        ends: "quiet to busiest"
+        ends: "quiet to busiest",
+        unseen: "Dashed hours have not been heard yet."
+    },
+    member: {
+        empty: "No activity recorded",
+        legend: "Average activity minutes per hour, out of 60.",
+        ends: "0 to 60 minutes",
+        unseen: "Dashed hours were on leave or not heard."
     }
 };
 
@@ -134,7 +156,7 @@ function emptyGrid(grid: CoverageGrid, kind: HeatmapKind): string {
 
 export function heatmapSvg(grid: CoverageGrid, kind: HeatmapKind = "coverage"): string {
     const values = kind === "coverage" ? grid.ratio : grid.demand;
-    const top = scaleTop(values.flat());
+    const top = topFor(values.flat(), kind);
     if (top <= 0) return emptyGrid(grid, kind);
     let unseen = 0;
 
@@ -198,7 +220,7 @@ export function heatmapSvg(grid: CoverageGrid, kind: HeatmapKind = "coverage"): 
     parts.push(
         `<text x="${LEFT_GUTTER}" y="${round(legendY)}" fill="${SURFACE.textMuted}" ` +
             `font-size="11" font-family="${FONT_STACK}">${WORDING[kind].legend}` +
-            (unseen > 0 ? " Dashed hours have not been heard yet." : "") +
+            (unseen > 0 ? ` ${WORDING[kind].unseen}` : "") +
             `</text>`
     );
 
