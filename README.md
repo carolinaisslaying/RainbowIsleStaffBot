@@ -186,7 +186,7 @@ everything about warnings is under `/warnings` whoever is asking.
 
 `/coverage server` is how active the server is, hour by hour. `/coverage staff`
 is that activity divided by moderators on shift, with the five hours most short
-of cover and the timezones where each falls in the evening, for recruiting.
+of cover and the regions where each falls in the evening, for recruiting.
 
 Discord cannot hide a single subcommand, so `/warnings issue` appears in every
 Moderator's picker and is refused unless the caller is an Executive.

@@ -14,7 +14,7 @@ import {
     busiestCells,
     weekdayLabels,
     worstCells,
-    zonesInEveningDuring,
+    regionsInEveningDuring,
     type CoverageGrid
 } from "../services/coverageService.js";
 import { busiestRun, dailyProfile, quietestHour } from "../domain/observation.js";
@@ -373,7 +373,7 @@ export const coverageCommand: Command = {
             `A 7 by 24 grid of messages per available moderator, rendered in ${zone}.`
         );
 
-        // Each hour carries the zones where it falls in the evening: somebody
+        // Each hour carries the regions where it falls in the evening: somebody
         // recruited there covers it at a sociable hour, not at 3am. This used to
         // be a subcommand of its own printing these same five hours.
         const worstText =
@@ -381,7 +381,7 @@ export const coverageCommand: Command = {
                 ? "_No demand recorded in the window. Check which channels are tracked._"
                 : worst
                       .map((cell, index) => {
-                          const zones = zonesInEveningDuring(
+                          const regions = regionsInEveningDuring(
                               grid.from,
                               cell.weekday,
                               cell.hour,
@@ -392,8 +392,12 @@ export const coverageCommand: Command = {
                               `${index + 1}. **${days[cell.weekday]} ${hourLabel(cell.hour)}** ` +
                               `${cell.demand.toFixed(1)} msg/h against ${cell.coverage.toFixed(2)} ` +
                               `moderators = **${cell.ratio.toFixed(1)}** per moderator\n` +
-                              "-# Evening, 18:00 to 23:00 local, in: " +
-                              (zones.length > 0 ? zones.join(", ") : "no zone at a sociable hour")
+                              (regions.length > 0
+                                  ? "-# Evening in: " +
+                                    regions
+                                        .map((region) => `${region.label} (${region.localTime})`)
+                                        .join(", ")
+                                  : "-# No listed region is in its evening, 18:00 to 23:00.")
                           );
                       })
                       .join("\n");

@@ -15,8 +15,8 @@ import {
     observe,
     spreadByHour
 } from "../domain/observation.js";
-import { HOUR_MS, WEEK_MS, wallClockIn } from "../time/calendar.js";
-import { supportedTimezones } from "../time/timezones.js";
+import { HOUR_MS, WEEK_MS } from "../time/calendar.js";
+import { regionsInEvening, type EveningRegion } from "../time/regions.js";
 
 export { GRID_DAYS, GRID_HOURS };
 
@@ -256,40 +256,20 @@ export function busiestCells(grid: CoverageGrid, count = 5): GapCell[] {
 }
 
 /**
- * Turn a coverage gap into a recruitment brief: which timezones are having
- * their evening, 18:00 to 23:00 local, during this gap. Someone recruited there
- * covers the hole without being asked to work through their own night.
+ * Turn a coverage gap into a recruitment brief: which regions are having their
+ * evening, 18:00 to 23:00 local, during this gap. The list and its ordering
+ * live in `time/regions.ts`.
  */
-export function zonesInEveningDuring(
+export function regionsInEveningDuring(
     gridFrom: Date,
     weekday: number,
     hour: number,
     displayZone: string,
-    weekStartDay: number,
-    limit = 8
-): string[] {
+    weekStartDay: number
+): EveningRegion[] {
     // Reconstruct a representative UTC instant for this cell.
     const probe = representativeInstant(gridFrom, weekday, hour, displayZone, weekStartDay);
-    if (!probe) return [];
-
-    const matches: string[] = [];
-    for (const zone of supportedTimezones()) {
-        const localHour = wallClockIn(probe, zone).hour;
-        if (localHour >= 18 && localHour <= 23) matches.push(zone);
-    }
-
-    // One per UTC offset is enough for a brief; a list of 90 aliases is not.
-    const seen = new Set<string>();
-    const distinct: string[] = [];
-    for (const zone of matches) {
-        const region = zone.split("/")[0];
-        const key = `${region}:${wallClockIn(probe, zone).hour}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        distinct.push(zone);
-        if (distinct.length >= limit) break;
-    }
-    return distinct;
+    return probe ? regionsInEvening(probe) : [];
 }
 
 function representativeInstant(
