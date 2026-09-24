@@ -14,8 +14,8 @@ import {
  * A 7 by 24 grid rendered as SVG and rasterised through the same pipeline as
  * the rings.
  *
- * Three readings of the same grid. `coverage` plots demand divided by coverage,
- * never either alone; `activity` plots messages per hour; `member` plots one
+ * Three readings of the same grid. `coverage` plots moderators short of what
+ * each hour's messages need; `activity` plots messages per hour; `member` plots one
  * member's activity minutes per hour. A static image has no
  * tooltip, so the legend plus the companion text block listing the top cells is
  * where the raw numbers live.
@@ -115,24 +115,44 @@ export function scaleTop(values: readonly number[]): number {
 }
 
 /**
+ * Where each band above the first begins, in moderators short. Fixed rather
+ * than scaled to the grid, for the member card's reason: one short should be
+ * the same colour on every card, and on a percentile scale one badly covered
+ * hour pushed every empty evening down into the blue.
+ *
+ * Nobody on shift in an hour anybody spoke in is at least one short, so that
+ * is where the warm end begins: an unstaffed hour is never drawn as cool,
+ * however quiet it was. Two short, a busy hour with nobody, is the top.
+ */
+const SHORTFALL_BANDS = [0.25, 0.5, 1, 2];
+
+/**
  * A member's grid is scaled to the hour itself, not to their own busiest cell:
  * "30" should be the same colour on everybody's card, or two members read side
  * by side look alike whatever they did.
  */
 function topFor(values: readonly number[], kind: HeatmapKind): number {
-    if (kind !== "member") return scaleTop(values);
-    return values.some((value) => value > 0) ? 60 : 0;
+    if (kind === "activity") return scaleTop(values);
+    const top = kind === "member" ? 60 : SHORTFALL_BANDS[SHORTFALL_BANDS.length - 1];
+    return values.some((value) => value > 0) ? top : 0;
 }
 
-function bandFor(value: number, top: number): number {
+function bandFor(value: number, top: number, kind: HeatmapKind): number {
     if (value <= 0 || top <= 0) return -1;
+    if (kind === "coverage") {
+        // Banded on the figure the cell prints, to one decimal: 0.975 prints
+        // as 1.0 and must be the colour of 1.0, not of 0.9 beside it.
+        const printed = Math.round(value * 10) / 10;
+        if (printed <= 0) return -1;
+        return SHORTFALL_BANDS.filter((edge) => printed >= edge).length;
+    }
     const normalised = Math.min(1, value / top);
     return Math.min(RAMP.length - 1, Math.floor(normalised * RAMP.length));
 }
 
-function colourFor(value: number, top: number, palette: Palette): string {
-    const band = bandFor(value, top);
-    return band < 0 ? EMPTY : palette.ramp[band];
+function colourFor(value: number, top: number, kind: HeatmapKind): string {
+    const band = bandFor(value, top, kind);
+    return band < 0 ? EMPTY : PALETTE[kind].ramp[band];
 }
 
 function figure(value: number): string {
@@ -146,8 +166,8 @@ const WORDING: Record<
 > = {
     coverage: {
         empty: "No demand recorded",
-        legend: "Messages per available moderator, per hour. Higher is a worse gap.",
-        ends: "quiet to worst gap",
+        legend: "Moderators short of what the hour's messages need.",
+        ends: "¼ to 2 or more short",
         unseen: "Dashed hours have not been heard yet."
     },
     activity: {
@@ -191,10 +211,12 @@ function emptyGrid(grid: CoverageGrid, kind: HeatmapKind): string {
 }
 
 export function heatmapSvg(grid: CoverageGrid, kind: HeatmapKind = "coverage"): string {
-    const values = kind === "coverage" ? grid.ratio : grid.demand;
+    const values = kind === "coverage" ? grid.shortfall : grid.demand;
+    // A coverage grid with every hour covered is good news, not an empty
+    // window, so whether there is anything to draw is asked of the messages.
+    if (!grid.demand.flat().some((value) => value > 0)) return emptyGrid(grid, kind);
     const top = topFor(values.flat(), kind);
     const palette = PALETTE[kind];
-    if (top <= 0) return emptyGrid(grid, kind);
     let unseen = 0;
 
     const days = weekdayLabels(grid.weekStartDay);
@@ -236,17 +258,19 @@ export function heatmapSvg(grid: CoverageGrid, kind: HeatmapKind = "coverage"): 
             }
             parts.push(
                 `<rect x="${round(x + 1.5)}" y="${round(y + 1.5)}" width="${CELL - 3}" ` +
-                    `height="${CELL - 3}" rx="7" fill="${colourFor(value, top, palette)}" />`
+                    `height="${CELL - 3}" rx="7" fill="${colourFor(value, top, kind)}" />`
             );
 
             // The number is in the cell as well as in the colour, because
             // colour never carries meaning alone. An empty hour has no number:
             // a grid of zeroes is noise, and its emptiness is already the point.
-            if (value > 0) {
+            // A shortfall that rounds to nothing is drawn as covered, with no
+            // "0.0" printed on it.
+            if (bandFor(value, top, kind) >= 0) {
                 const label = figure(value);
                 parts.push(
                     `<text x="${round(x + CELL / 2)}" y="${round(y + CELL / 2 + 3.5)}" ` +
-                        `fill="${palette.ink[bandFor(value, top)]}" font-size="9.5" ` +
+                        `fill="${palette.ink[bandFor(value, top, kind)]}" font-size="9.5" ` +
                         `font-family="${FONT_STACK}" ` +
                         `font-weight="bold" text-anchor="middle">${escapeXml(label)}</text>`
                 );

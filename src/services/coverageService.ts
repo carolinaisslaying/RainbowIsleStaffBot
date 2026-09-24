@@ -38,7 +38,12 @@ export interface CoverageGrid {
     /** [weekday][hour], weekday 0 = the configured week start day. */
     coverage: number[][];
     demand: number[][];
-    ratio: number[][];
+    /** Mean moderators each hour's messages called for. Zero off the coverage grid. */
+    needed: number[][];
+    /** Mean moderators short of that. Zero off the coverage grid. */
+    shortfall: number[][];
+    /** Messages in the median hour, which one moderator is taken to cover. */
+    typicalHour: number;
     /** How many times each cell was heard. Zero is "not yet", not "quiet". */
     observed: number[][];
     timeZone: string;
@@ -47,7 +52,7 @@ export interface CoverageGrid {
     observedHours: number;
     from: Date;
     to: Date;
-    maxRatio: number;
+    maxShortfall: number;
     maxDemand: number;
 }
 
@@ -56,7 +61,8 @@ export interface GapCell {
     hour: number;
     coverage: number;
     demand: number;
-    ratio: number;
+    needed: number;
+    shortfall: number;
 }
 
 async function buildGrid(
@@ -99,36 +105,33 @@ async function buildGrid(
         messagesByHour,
         coverageByHour,
         uptime,
-        measuredSince
+        measuredSince,
+        judgeShortfall: withCoverage
     });
-    const { coverage, demand, observed } = observation;
+    const { coverage, demand, needed, shortfall, observed } = observation;
 
-    // Demand divided by coverage, not either alone. A quiet hour with one
-    // moderator is fine. A peak hour with one moderator is the gap.
-    let maxRatio = 0;
-    let maxDemand = 0;
-    const ratio = demand.map((row, weekday) =>
-        row.map((messages, hour) => {
-            if (messages > maxDemand) maxDemand = messages;
-            const staff = coverage[weekday][hour];
-            if (messages === 0) return 0;
-            const value = staff <= 0 ? messages : messages / staff;
-            if (value > maxRatio) maxRatio = value;
-            return value;
-        })
-    );
+    // Moderators short of what the hour's messages call for, never messages
+    // divided by moderators. That ratio read an hour with nobody on shift as
+    // one moderator, so an empty evening scored exactly what a staffed one
+    // would, and it read ninety seconds of shift as a fortieth of a moderator,
+    // so a sliver of cover scored forty times worse than none. The rule for
+    // what an hour needs is `moderatorsNeeded` in `domain/observation.ts`.
+    const maxDemand = Math.max(0, ...demand.flat());
+    const maxShortfall = Math.max(0, ...shortfall.flat());
 
     return {
         coverage,
         demand,
-        ratio,
+        needed,
+        shortfall,
+        typicalHour: observation.typicalHour,
         observed,
         timeZone,
         weekStartDay: config.weekStartDay,
         observedHours: observation.observedHours,
         from,
         to,
-        maxRatio,
+        maxShortfall,
         maxDemand
     };
 }
@@ -213,14 +216,16 @@ export async function buildMemberActivityGrid(
     return {
         coverage: observation.coverage,
         demand,
-        ratio: demand,
+        needed: observation.needed,
+        shortfall: observation.shortfall,
+        typicalHour: 0,
         observed: observation.observed,
         timeZone,
         weekStartDay: config.weekStartDay,
         observedHours: observation.observedHours,
         from,
         to,
-        maxRatio: maxDemand,
+        maxShortfall: 0,
         maxDemand,
         leaveHours: excludedHours.size
     };
@@ -236,16 +241,19 @@ function cellsOf(grid: CoverageGrid): GapCell[] {
                 hour,
                 coverage: grid.coverage[weekday][hour],
                 demand: grid.demand[weekday][hour],
-                ratio: grid.ratio[weekday][hour]
+                needed: grid.needed[weekday][hour],
+                shortfall: grid.shortfall[weekday][hour]
             });
         }
     }
     return cells;
 }
 
+/** The hours most short of moderators. A covered hour is never on the list. */
 export function worstCells(grid: CoverageGrid, count = 5): GapCell[] {
     return cellsOf(grid)
-        .sort((left, right) => right.ratio - left.ratio)
+        .filter((cell) => cell.shortfall > 0)
+        .sort((left, right) => right.shortfall - left.shortfall || right.demand - left.demand)
         .slice(0, count);
 }
 

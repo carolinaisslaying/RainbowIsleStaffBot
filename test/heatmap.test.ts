@@ -17,14 +17,17 @@ function grid(ratio: number[][]): CoverageGrid {
     return {
         coverage: ratio.map((row) => row.map(() => 1)),
         demand: ratio,
-        ratio,
+        // Copies, so a test can set messages and moderators short apart.
+        needed: ratio.map((row) => [...row]),
+        shortfall: ratio.map((row) => [...row]),
+        typicalHour: 0,
         observed: ratio.map((row) => row.map(() => 4)),
         timeZone: "Pacific/Auckland",
         weekStartDay: 1,
         observedHours: 4 * 168,
         from: new Date("2026-08-01T00:00:00Z"),
         to: new Date("2026-08-29T00:00:00Z"),
-        maxRatio: Math.max(0, ...ratio.flat()),
+        maxShortfall: Math.max(0, ...ratio.flat()),
         maxDemand: Math.max(0, ...ratio.flat())
     };
 }
@@ -127,6 +130,71 @@ describe("hours not heard yet", () => {
 
     it("does not mention dashes when every hour has been heard", () => {
         expect(heatmapSvg(banded())).not.toContain("Dashed");
+    });
+});
+
+describe("the coverage reading", () => {
+    const filled = (svg: string) =>
+        [...svg.matchAll(/height="27" rx="7" fill="(#[0-9a-f]{6})"/g)].map((match) => match[1]);
+
+    it("colours moderators short on a fixed scale, so one short is the same colour on every grid", () => {
+        const input = grid(zeros());
+        [0.1, 0.3, 0.7, 1, 2.5].forEach((short, hour) => {
+            input.demand[0][hour] = 100;
+            input.shortfall[0][hour] = short;
+        });
+        expect(filled(heatmapSvg(input))).toEqual([
+            "#0a84ff",
+            "#2bb1a8",
+            "#c3c33a",
+            "#ff9f0a",
+            "#ff453a"
+        ]);
+    });
+
+    it("never draws an empty quiet hour as cool, whatever else the grid holds", () => {
+        // Nobody on at a quiet hour is a whole moderator short. It used to be
+        // drawn blue beside one sliver-of-shift cell reading 20.2k.
+        const input = grid(zeros());
+        input.demand[0][0] = 22;
+        input.shortfall[0][0] = 1;
+        input.demand[0][1] = 504;
+        input.shortfall[0][1] = 40;
+        expect(filled(heatmapSvg(input))[0]).toBe("#ff9f0a");
+    });
+
+    it("draws a covered hour as nothing to worry about, not as an empty window", () => {
+        const input = grid(zeros());
+        input.demand[0][0] = 800;
+        const svg = heatmapSvg(input);
+        expect(svg).not.toContain("No demand recorded");
+        expect(svg).toContain('height="27" rx="7" fill="rgba(255,255,255,0.045)"');
+        expect(filled(svg)).toEqual([]);
+        expect(svg).not.toMatch(/font-size="9.5"/);
+    });
+
+    it("colours a cell by the figure it prints, so 1.0 is never the colour of 0.9", () => {
+        const input = grid(zeros());
+        input.demand[0][0] = 504;
+        input.shortfall[0][0] = 0.975;
+        const svg = heatmapSvg(input);
+        expect(svg).toContain(">1.0<");
+        expect(filled(svg)).toEqual(["#ff9f0a"]);
+    });
+
+    it("draws a shortfall that rounds to nothing as covered, with no 0.0 on it", () => {
+        const input = grid(zeros());
+        input.demand[0][0] = 800;
+        input.shortfall[0][0] = 0.04;
+        const svg = heatmapSvg(input);
+        expect(filled(svg)).toEqual([]);
+        expect(svg).not.toMatch(/font-size="9.5"/);
+    });
+
+    it("labels itself in moderators short", () => {
+        const svg = heatmapSvg(banded());
+        expect(svg).toContain("Moderators short of what the hour's messages need.");
+        expect(svg).not.toContain("per available moderator");
     });
 });
 

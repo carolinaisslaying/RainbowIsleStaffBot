@@ -381,3 +381,100 @@ describe("where a member's grid begins", () => {
         expect(memberWindowStart(to, 8, joined)).toEqual(to);
     });
 });
+
+describe("moderators short of what an hour needs", () => {
+    const from = Date.parse("2026-08-03T00:00:00Z");
+    /** Consecutive hours from Monday 12:00 in Auckland, judged for shortfall. */
+    const hours = (messages: number[], overrides: Partial<ObservationInput> = {}) =>
+        observe(
+            input({
+                to: new Date(from + messages.length * HOUR),
+                messagesByHour: new Map(messages.map((count, index) => [from + index * HOUR, count])),
+                judgeShortfall: true,
+                ...overrides
+            })
+        );
+
+    it("takes the median hour anybody spoke in as the one a single moderator covers", () => {
+        expect(hours([100, 400, 800]).typicalHour).toBe(400);
+        expect(hours([100, 400, 800, 1000]).typicalHour).toBe(600);
+    });
+
+    it("counts an hour with nobody on shift as at least one short, however quiet", () => {
+        // Messages divided by coverage used to read nobody as one moderator,
+        // so an empty quiet hour scored exactly what one moderator would have.
+        const result = hours([22, 400, 800]);
+        expect(result.needed[0][12]).toBe(1);
+        expect(result.shortfall[0][12]).toBe(1);
+    });
+
+    it("asks more of a busier hour, in proportion to the typical one", () => {
+        const result = hours([100, 400, 800]);
+        expect(result.needed[0][13]).toBe(1);
+        expect(result.needed[0][14]).toBe(2);
+        expect(result.shortfall[0][14]).toBe(2);
+    });
+
+    it("never scores a sliver of shift worse than nobody at all", () => {
+        // 504 messages against ninety seconds of shift used to read as 20.2k
+        // per moderator, forty times worse than the same hour left empty.
+        const sliver = hours([100, 400, 800], { coverageByHour: new Map([[from + 2 * HOUR, 90_000]]) });
+        const empty = hours([100, 400, 800]);
+        expect(sliver.shortfall[0][14]).toBeLessThan(empty.shortfall[0][14]);
+        expect(sliver.shortfall[0][14]).toBeCloseTo(2 - 0.025, 5);
+    });
+
+    it("reads an hour with enough moderators as nobody short", () => {
+        const result = hours([100, 400, 800], {
+            coverageByHour: new Map([[from + 2 * HOUR, 2.5 * HOUR]])
+        });
+        expect(result.shortfall[0][14]).toBe(0);
+    });
+
+    it("needs nobody for an hour with no messages, and leaves it out of the typical hour", () => {
+        const result = hours([0, 0, 100, 400, 800]);
+        expect(result.observed[0][12]).toBe(1);
+        expect(result.shortfall[0][12]).toBe(0);
+        expect(result.typicalHour).toBe(400);
+    });
+
+    it("averages each hour's shortfall, so a covered week never hides an empty one", () => {
+        // Two moderators one week and none the next averages to one on shift,
+        // which against a need of one reads as covered. It was an empty hour
+        // half the time.
+        const week = 7 * 24 * HOUR;
+        const result = observe(
+            input({
+                from: new Date(from),
+                to: new Date(from + week + HOUR),
+                judgeShortfall: true,
+                messagesByHour: new Map([
+                    [from, 100],
+                    [from + week, 100]
+                ]),
+                coverageByHour: new Map([[from, 2 * HOUR]])
+            })
+        );
+        expect(result.coverage[0][12]).toBe(1);
+        expect(result.shortfall[0][12]).toBe(0.5);
+    });
+
+    it("scales a partly heard hour's messages before judging it", () => {
+        const result = hours([400, 400, 400], {
+            uptime: new Map([
+                [from, 60],
+                [from + HOUR, 30],
+                [from + 2 * HOUR, 60]
+            ]),
+            measuredSince: from
+        });
+        expect(result.typicalHour).toBe(400);
+        expect(result.needed[0][13]).toBe(2);
+    });
+
+    it("judges nothing unless asked, which is every grid but the coverage gap", () => {
+        const result = hours([100, 400, 800], { judgeShortfall: false });
+        expect(result.typicalHour).toBe(0);
+        expect(sum(result.shortfall)).toBe(0);
+    });
+});

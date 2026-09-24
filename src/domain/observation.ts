@@ -86,6 +86,11 @@ export interface ObservationInput {
      * the bot missed is, rather than read as a quiet hour.
      */
     excludedHours?: ReadonlySet<number>;
+    /**
+     * Also judge every heard hour for how many moderators short it was,
+     * against the typical hour of this same window. The coverage gap only.
+     */
+    judgeShortfall?: boolean;
 }
 
 export interface Observation {
@@ -95,8 +100,47 @@ export interface Observation {
     demand: number[][];
     /** Mean moderators available, over the times the cell was heard. */
     coverage: number[][];
+    /** Mean moderators each hour's messages called for. Zero unless judged. */
+    needed: number[][];
+    /** Mean moderators short of that. Zero unless judged. */
+    shortfall: number[][];
+    /**
+     * Messages in the median hour anybody spoke in: the hour one moderator is
+     * taken to cover. Zero unless judged, or when nobody spoke at all.
+     */
+    typicalHour: number;
     /** Every hour heard, across the whole grid. */
     observedHours: number;
+}
+
+/**
+ * How many moderators an hour's messages call for: one for a typical hour, in
+ * proportion above it, and never fewer than one for an hour anybody spoke in.
+ * A quiet hour still needs somebody there to answer it. An hour with no
+ * messages needs nobody, because there is nothing to judge it by.
+ *
+ * Scaled to the server's own typical hour rather than to a fixed number of
+ * messages a moderator can handle, because nobody has measured that number and
+ * any figure typed into a config would be a guess presented as a policy. The
+ * cost is that the need is relative: a server twice as busy everywhere still
+ * asks one moderator of its typical hour.
+ */
+export function moderatorsNeeded(messages: number, typicalHour: number): number {
+    if (messages <= 0) return 0;
+    if (typicalHour <= 0) return 1;
+    return Math.max(1, messages / typicalHour);
+}
+
+/**
+ * The median of the hours anybody spoke in. Silent hours are left out: on a
+ * channel that is mostly quiet they would make the median zero, and an hour
+ * with nobody in it says nothing about what a busy one asks of a moderator.
+ */
+export function typicalHourOf(messages: readonly number[]): number {
+    const spoken = messages.filter((count) => count > 0).sort((a, b) => a - b);
+    if (spoken.length === 0) return 0;
+    const middle = Math.floor(spoken.length / 2);
+    return spoken.length % 2 === 1 ? spoken[middle] : (spoken[middle - 1] + spoken[middle]) / 2;
 }
 
 /**
@@ -113,6 +157,9 @@ export function observe(input: ObservationInput): Observation {
     const observed = emptyGrid();
     const demandSum = emptyGrid();
     const coverageSum = emptyGrid();
+    const neededSum = emptyGrid();
+    const shortfallSum = emptyGrid();
+    const heard: { weekday: number; hour: number; messages: number; coverageMs: number }[] = [];
     let observedHours = 0;
 
     for (let hour = input.from.getTime(); hour < input.to.getTime(); hour += HOUR_MS) {
@@ -121,10 +168,31 @@ export function observe(input: ObservationInput): Observation {
         if (weight === null) continue;
 
         const cell = gridCellFor(new Date(hour), input.timeZone, input.weekStartDay);
+        const messages = (input.messagesByHour.get(hour) ?? 0) / weight;
+        const coverageMs = input.coverageByHour.get(hour) ?? 0;
         observed[cell.weekday][cell.hour] += 1;
-        demandSum[cell.weekday][cell.hour] += (input.messagesByHour.get(hour) ?? 0) / weight;
-        coverageSum[cell.weekday][cell.hour] += input.coverageByHour.get(hour) ?? 0;
+        demandSum[cell.weekday][cell.hour] += messages;
+        coverageSum[cell.weekday][cell.hour] += coverageMs;
+        heard.push({ ...cell, messages, coverageMs });
         observedHours += 1;
+    }
+
+    // A second pass, because the typical hour is not known until every hour
+    // has been heard. Judged hour by hour and then averaged, never from the
+    // averages: two moderators one week and none the next averages to one on
+    // shift, which would read as covered an hour that was empty half the time.
+    const typicalHour = input.judgeShortfall
+        ? typicalHourOf(heard.map((reading) => reading.messages))
+        : 0;
+    if (input.judgeShortfall) {
+        for (const reading of heard) {
+            const needed = moderatorsNeeded(reading.messages, typicalHour);
+            neededSum[reading.weekday][reading.hour] += needed;
+            shortfallSum[reading.weekday][reading.hour] += Math.max(
+                0,
+                needed - reading.coverageMs / HOUR_MS
+            );
+        }
     }
 
     const mean = (sums: number[][], scale = 1) =>
@@ -139,6 +207,9 @@ export function observe(input: ObservationInput): Observation {
         observed,
         demand: mean(demandSum),
         coverage: mean(coverageSum, HOUR_MS),
+        needed: mean(neededSum),
+        shortfall: mean(shortfallSum),
+        typicalHour,
         observedHours
     };
 }
