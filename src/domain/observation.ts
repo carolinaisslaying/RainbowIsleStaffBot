@@ -87,10 +87,10 @@ export interface ObservationInput {
      */
     excludedHours?: ReadonlySet<number>;
     /**
-     * Also judge every heard hour for how many moderators short it was,
-     * against the typical hour of this same window. The coverage gap only.
+     * Also measure each heard hour's load on the moderators on shift, and
+     * whether anybody was. The coverage gap only.
      */
-    judgeShortfall?: boolean;
+    judgeLoad?: boolean;
 }
 
 export interface Observation {
@@ -100,13 +100,16 @@ export interface Observation {
     demand: number[][];
     /** Mean moderators available, over the times the cell was heard. */
     coverage: number[][];
-    /** Mean moderators each hour's messages called for. Zero unless judged. */
-    needed: number[][];
-    /** Mean moderators short of that. Zero unless judged. */
-    shortfall: number[][];
+    /** Mean messages per moderator on shift (`loadOf`). Zero unless judged. */
+    load: number[][];
     /**
-     * Messages in the median hour anybody spoke in: the hour one moderator is
-     * taken to cover. Zero unless judged, or when nobody spoke at all.
+     * Share of the cell's readings, 0 to 1, that were unstaffed hours
+     * (`isUnstaffedHour`). Zero unless judged.
+     */
+    unstaffedShare: number[][];
+    /**
+     * Messages in the median hour anybody spoke in, which is what the load is
+     * read against. Zero unless judged, or when nobody spoke at all.
      */
     typicalHour: number;
     /** Every hour heard, across the whole grid. */
@@ -114,21 +117,52 @@ export interface Observation {
 }
 
 /**
- * How many moderators an hour's messages call for: one for a typical hour, in
- * proportion above it, and never fewer than one for an hour anybody spoke in.
- * A quiet hour still needs somebody there to answer it. An hour with no
- * messages needs nobody, because there is nothing to judge it by.
- *
- * Scaled to the server's own typical hour rather than to a fixed number of
- * messages a moderator can handle, because nobody has measured that number and
- * any figure typed into a config would be a guess presented as a policy. The
- * cost is that the need is relative: a server twice as busy everywhere still
- * asks one moderator of its typical hour.
+ * Below this many moderators on average an hour is unstaffed: nobody on for
+ * more than half of it.
  */
-export function moderatorsNeeded(messages: number, typicalHour: number): number {
-    if (messages <= 0) return 0;
-    if (typicalHour <= 0) return 1;
-    return Math.max(1, messages / typicalHour);
+export const UNSTAFFED_BELOW = 0.5;
+
+/**
+ * Messages per moderator on shift, never dividing by fewer than one. Dividing
+ * by the moderators actually on read ninety seconds of shift as a fortieth of
+ * a moderator, so a sliver of cover scored 20.2k, forty times worse than
+ * nobody at all. Below one moderator the load is simply every message; what
+ * the missing cover means is said by `isUnstaffedHour`, not by this number.
+ */
+export function loadOf(messages: number, moderators: number): number {
+    return messages / Math.max(1, moderators);
+}
+
+/** An hour somebody spoke in with nobody on for most of it. */
+export function isUnstaffedHour(messages: number, moderators: number): boolean {
+    return messages > 0 && moderators < UNSTAFFED_BELOW;
+}
+
+/**
+ * Where the colour steps begin, as multiples of the typical hour's messages.
+ * One moderator through a typical hour sits in the middle step; twice that
+ * load is the top. Read against the server's own typical hour rather than the
+ * grid's busiest cells, where one badly covered hour took the top of the scale
+ * alone and pushed every empty evening into the bottom step.
+ */
+export const LOAD_STEPS = [0.5, 0.75, 1.25, 2];
+
+/**
+ * How far up the scale an unstaffed hour is pushed. Nobody on shift in the
+ * quietest hour lands on the fourth of five steps, so an empty hour is never
+ * drawn as fine, and a busier empty hour climbs to the top with its load.
+ */
+export const UNSTAFFED_LIFT = 3;
+
+/**
+ * The colour step for a cell, 0 to 4, or -1 when nobody spoke. Pure, so the
+ * chart and the list of worst hours read the same answer.
+ */
+export function gapBand(load: number, unstaffed: boolean, typicalHour: number): number {
+    if (load <= 0) return -1;
+    const ratio = typicalHour > 0 ? load / typicalHour : 1;
+    const band = LOAD_STEPS.filter((edge) => ratio >= edge).length;
+    return unstaffed ? Math.min(LOAD_STEPS.length, band + UNSTAFFED_LIFT) : band;
 }
 
 /**
@@ -157,8 +191,8 @@ export function observe(input: ObservationInput): Observation {
     const observed = emptyGrid();
     const demandSum = emptyGrid();
     const coverageSum = emptyGrid();
-    const neededSum = emptyGrid();
-    const shortfallSum = emptyGrid();
+    const loadSum = emptyGrid();
+    const unstaffedSum = emptyGrid();
     const heard: { weekday: number; hour: number; messages: number; coverageMs: number }[] = [];
     let observedHours = 0;
 
@@ -177,21 +211,19 @@ export function observe(input: ObservationInput): Observation {
         observedHours += 1;
     }
 
-    // A second pass, because the typical hour is not known until every hour
-    // has been heard. Judged hour by hour and then averaged, never from the
-    // averages: two moderators one week and none the next averages to one on
-    // shift, which would read as covered an hour that was empty half the time.
-    const typicalHour = input.judgeShortfall
+    // Judged hour by hour and then averaged, never from the averages: two
+    // moderators one week and none the next averages to one on shift, which
+    // would read as staffed an hour that was empty half the time.
+    const typicalHour = input.judgeLoad
         ? typicalHourOf(heard.map((reading) => reading.messages))
         : 0;
-    if (input.judgeShortfall) {
+    if (input.judgeLoad) {
         for (const reading of heard) {
-            const needed = moderatorsNeeded(reading.messages, typicalHour);
-            neededSum[reading.weekday][reading.hour] += needed;
-            shortfallSum[reading.weekday][reading.hour] += Math.max(
-                0,
-                needed - reading.coverageMs / HOUR_MS
-            );
+            const moderators = reading.coverageMs / HOUR_MS;
+            loadSum[reading.weekday][reading.hour] += loadOf(reading.messages, moderators);
+            if (isUnstaffedHour(reading.messages, moderators)) {
+                unstaffedSum[reading.weekday][reading.hour] += 1;
+            }
         }
     }
 
@@ -207,8 +239,8 @@ export function observe(input: ObservationInput): Observation {
         observed,
         demand: mean(demandSum),
         coverage: mean(coverageSum, HOUR_MS),
-        needed: mean(neededSum),
-        shortfall: mean(shortfallSum),
+        load: mean(loadSum),
+        unstaffedShare: mean(unstaffedSum),
         typicalHour,
         observedHours
     };
@@ -282,7 +314,7 @@ export interface DailyProfile {
  * The day's shape with every weekday pooled. The weekly grid needs a week before
  * every cell has a reading; this has a full day after one day.
  */
-export function dailyProfile(observation: Observation): DailyProfile {
+export function dailyProfile(observation: Pick<Observation, "observed" | "demand">): DailyProfile {
     const mean: (number | null)[] = [];
     const samples: number[] = [];
     for (let hour = 0; hour < GRID_HOURS; hour += 1) {

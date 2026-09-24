@@ -17,9 +17,10 @@ function grid(ratio: number[][]): CoverageGrid {
     return {
         coverage: ratio.map((row) => row.map(() => 1)),
         demand: ratio,
-        // Copies, so a test can set messages and moderators short apart.
-        needed: ratio.map((row) => [...row]),
-        shortfall: ratio.map((row) => [...row]),
+        // Copies, so a test can set messages and load apart.
+        load: ratio.map((row) => [...row]),
+        unstaffed: ratio.map((row) => row.map(() => false)),
+        severity: ratio.map((row) => row.map((value) => (value > 0 ? 0 : -1))),
         typicalHour: 0,
         observed: ratio.map((row) => row.map(() => 4)),
         timeZone: "Pacific/Auckland",
@@ -27,7 +28,6 @@ function grid(ratio: number[][]): CoverageGrid {
         observedHours: 4 * 168,
         from: new Date("2026-08-01T00:00:00Z"),
         to: new Date("2026-08-29T00:00:00Z"),
-        maxShortfall: Math.max(0, ...ratio.flat()),
         maxDemand: Math.max(0, ...ratio.flat())
     };
 }
@@ -136,12 +136,25 @@ describe("hours not heard yet", () => {
 describe("the coverage reading", () => {
     const filled = (svg: string) =>
         [...svg.matchAll(/height="27" rx="7" fill="(#[0-9a-f]{6})"/g)].map((match) => match[1]);
+    const rings = (svg: string) => [...svg.matchAll(/stroke="rgba\(255,255,255,0.92\)"/g)].length;
 
-    it("colours moderators short on a fixed scale, so one short is the same colour on every grid", () => {
+    /** One cell at Monday 00:00 with the given load and step. */
+    function one(load: number, severity: number, unstaffed: boolean): CoverageGrid {
         const input = grid(zeros());
-        [0.1, 0.3, 0.7, 1, 2.5].forEach((short, hour) => {
+        input.demand[0][0] = load;
+        input.load[0][0] = load;
+        input.severity[0][0] = severity;
+        input.unstaffed[0][0] = unstaffed;
+        input.typicalHour = 600;
+        return input;
+    }
+
+    it("colours each cell by the step it was given, never by its own scale", () => {
+        const input = grid(zeros());
+        [0, 1, 2, 3, 4].forEach((step, hour) => {
             input.demand[0][hour] = 100;
-            input.shortfall[0][hour] = short;
+            input.load[0][hour] = 100;
+            input.severity[0][hour] = step;
         });
         expect(filled(heatmapSvg(input))).toEqual([
             "#0a84ff",
@@ -152,49 +165,24 @@ describe("the coverage reading", () => {
         ]);
     });
 
-    it("never draws an empty quiet hour as cool, whatever else the grid holds", () => {
-        // Nobody on at a quiet hour is a whole moderator short. It used to be
-        // drawn blue beside one sliver-of-shift cell reading 20.2k.
-        const input = grid(zeros());
-        input.demand[0][0] = 22;
-        input.shortfall[0][0] = 1;
-        input.demand[0][1] = 504;
-        input.shortfall[0][1] = 40;
-        expect(filled(heatmapSvg(input))[0]).toBe("#ff9f0a");
+    it("prints the messages each moderator carried", () => {
+        expect(heatmapSvg(one(540, 2, false))).toContain(">540<");
     });
 
-    it("draws a covered hour as nothing to worry about, not as an empty window", () => {
-        const input = grid(zeros());
-        input.demand[0][0] = 800;
-        const svg = heatmapSvg(input);
-        expect(svg).not.toContain("No demand recorded");
-        expect(svg).toContain('height="27" rx="7" fill="rgba(255,255,255,0.045)"');
-        expect(filled(svg)).toEqual([]);
-        expect(svg).not.toMatch(/font-size="9.5"/);
+    it("rings an hour nobody was on shift for, and keys the ring only when there is one", () => {
+        const empty = heatmapSvg(one(22, 3, true));
+        expect(rings(empty)).toBe(2); // the cell and its key
+        expect(empty).toContain("nobody on shift");
+
+        const staffed = heatmapSvg(one(22, 0, false));
+        expect(rings(staffed)).toBe(0);
+        expect(staffed).not.toContain("nobody on shift");
     });
 
-    it("colours a cell by the figure it prints, so 1.0 is never the colour of 0.9", () => {
-        const input = grid(zeros());
-        input.demand[0][0] = 504;
-        input.shortfall[0][0] = 0.975;
-        const svg = heatmapSvg(input);
-        expect(svg).toContain(">1.0<");
-        expect(filled(svg)).toEqual(["#ff9f0a"]);
-    });
-
-    it("draws a shortfall that rounds to nothing as covered, with no 0.0 on it", () => {
-        const input = grid(zeros());
-        input.demand[0][0] = 800;
-        input.shortfall[0][0] = 0.04;
-        const svg = heatmapSvg(input);
-        expect(filled(svg)).toEqual([]);
-        expect(svg).not.toMatch(/font-size="9.5"/);
-    });
-
-    it("labels itself in moderators short", () => {
-        const svg = heatmapSvg(banded());
-        expect(svg).toContain("Moderators short of what the hour's messages need.");
-        expect(svg).not.toContain("per available moderator");
+    it("labels itself as load per moderator, against the typical hour", () => {
+        const svg = heatmapSvg(one(540, 2, false));
+        expect(svg).toContain("Messages per moderator on shift.");
+        expect(svg).toContain("A typical hour here is 600 messages.");
     });
 });
 

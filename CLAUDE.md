@@ -681,20 +681,19 @@ Its window starts at the first whole hour after `joinedTeamAt` when that is late
 lookback (`memberWindowStart`): the hour somebody joined partway through is dropped, as a leave's
 part hours are, rather than counted as a quiet sample.
 
-**`/coverage staff` plots moderators short, never messages per moderator.** The window's median
-hour anybody spoke in needs one moderator, a busier hour needs more in proportion, and every hour
-anybody spoke in needs at least one (`moderatorsNeeded`, `typicalHourOf`, `domain/observation.ts`);
-the cell is what that leaves uncovered. It is scaled to the server's own typical hour rather than to
-a configured messages-per-moderator figure, because nobody has measured one and a number typed into
-config would be a guess presented as policy. The cost is that the need is relative: a server twice as
-busy everywhere still asks one moderator of its typical hour. The ratio it
-replaced read an hour with nobody on shift as one moderator, so an empty evening scored exactly
-what a staffed one would, and it read ninety seconds of shift as a fortieth of a moderator, so a
-sliver of cover scored 20.2k — forty times worse than none — and took the top of a percentile
-scale alone, pushing every empty evening into the blue. The shortfall is judged per hour and then
-averaged, because averaging coverage first reads two moderators one week and none the next as
-covered. Its colour bands are fixed in moderators (`SHORTFALL_BANDS`), with nobody-on-shift (one
-short) starting the warm end, and a cell is banded on the figure it prints.
+**`/coverage staff` plots messages per moderator on shift, with two repairs.** It never divides
+by fewer than one moderator (`loadOf`, `domain/observation.ts`): ninety seconds of shift used to read
+as a fortieth of a moderator, so one cell scored 20.2k, took the top of a percentile scale alone and
+pushed every empty evening into the blue. And an hour with nobody on for most of it
+(`isUnstaffedHour`) is a state of its own, not a number: it used to divide by one, so an empty
+evening scored exactly what a staffed one would. Such a cell is ringed and lifted three steps
+(`gapBand`), so the quietest empty hour is orange and a busier one red: never drawn as fine, still in
+proportion. Steps are multiples of the window's median hour (`LOAD_STEPS`), so one moderator through
+a typical hour is the middle and nothing can hijack the scale. Each hour is judged before averaging,
+because averaging coverage first reads two moderators one week and none the next as staffed. The
+service decides each cell's step (`severity`) and the renderer only draws it, so the chart and the
+worst-hours list cannot disagree. This replaced a "moderators short" chart for a day: its numbers were
+defensible and nobody could read them, and every empty hour below the median read the same.
 
 **Jobs** (`src/jobs/index.ts`): `shift-sweep`, `uptime` and `leave-transitions` every minute, `recaps` hourly,
 `week-close` at 00:05 in the accounting timezone. All are date-driven and idempotent, so a missed

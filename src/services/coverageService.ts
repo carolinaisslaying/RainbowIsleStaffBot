@@ -12,6 +12,7 @@ import {
     hoursTouchedBy,
     memberWindowStart,
     minutesByUtcHour,
+    gapBand,
     observe,
     spreadByHour
 } from "../domain/observation.js";
@@ -38,11 +39,13 @@ export interface CoverageGrid {
     /** [weekday][hour], weekday 0 = the configured week start day. */
     coverage: number[][];
     demand: number[][];
-    /** Mean moderators each hour's messages called for. Zero off the coverage grid. */
-    needed: number[][];
-    /** Mean moderators short of that. Zero off the coverage grid. */
-    shortfall: number[][];
-    /** Messages in the median hour, which one moderator is taken to cover. */
+    /** Mean messages per moderator on shift. Zero off the coverage grid. */
+    load: number[][];
+    /** Whether most of the cell's readings had nobody on shift. */
+    unstaffed: boolean[][];
+    /** The colour step, 0 to 4, or -1 for nothing to draw (`gapBand`). */
+    severity: number[][];
+    /** Messages in the median hour, which the load is read against. */
     typicalHour: number;
     /** How many times each cell was heard. Zero is "not yet", not "quiet". */
     observed: number[][];
@@ -52,7 +55,6 @@ export interface CoverageGrid {
     observedHours: number;
     from: Date;
     to: Date;
-    maxShortfall: number;
     maxDemand: number;
 }
 
@@ -61,8 +63,9 @@ export interface GapCell {
     hour: number;
     coverage: number;
     demand: number;
-    needed: number;
-    shortfall: number;
+    load: number;
+    unstaffed: boolean;
+    severity: number;
 }
 
 async function buildGrid(
@@ -106,32 +109,34 @@ async function buildGrid(
         coverageByHour,
         uptime,
         measuredSince,
-        judgeShortfall: withCoverage
+        judgeLoad: withCoverage
     });
-    const { coverage, demand, needed, shortfall, observed } = observation;
+    const { coverage, demand, load, observed, typicalHour } = observation;
 
-    // Moderators short of what the hour's messages call for, never messages
-    // divided by moderators. That ratio read an hour with nobody on shift as
-    // one moderator, so an empty evening scored exactly what a staffed one
-    // would, and it read ninety seconds of shift as a fortieth of a moderator,
-    // so a sliver of cover scored forty times worse than none. The rule for
-    // what an hour needs is `moderatorsNeeded` in `domain/observation.ts`.
+    // Messages per moderator on shift, which is what this chart always meant,
+    // with the two ways it went wrong taken out: it never divides by less than
+    // one moderator (`loadOf`), and an hour with nobody on is a state of its
+    // own that lifts the colour rather than a number that pretends somebody
+    // was there. The rules are in `domain/observation.ts`.
+    const unstaffed = observation.unstaffedShare.map((row) => row.map((share) => share >= 0.5));
+    const severity = load.map((row, weekday) =>
+        row.map((value, hour) => gapBand(value, unstaffed[weekday][hour], typicalHour))
+    );
     const maxDemand = Math.max(0, ...demand.flat());
-    const maxShortfall = Math.max(0, ...shortfall.flat());
 
     return {
         coverage,
         demand,
-        needed,
-        shortfall,
-        typicalHour: observation.typicalHour,
+        load,
+        unstaffed,
+        severity,
+        typicalHour,
         observed,
         timeZone,
         weekStartDay: config.weekStartDay,
         observedHours: observation.observedHours,
         from,
         to,
-        maxShortfall,
         maxDemand
     };
 }
@@ -216,8 +221,9 @@ export async function buildMemberActivityGrid(
     return {
         coverage: observation.coverage,
         demand,
-        needed: observation.needed,
-        shortfall: observation.shortfall,
+        load: observation.load,
+        unstaffed: observation.unstaffedShare.map((row) => row.map(() => false)),
+        severity: observation.load.map((row) => row.map(() => -1)),
         typicalHour: 0,
         observed: observation.observed,
         timeZone,
@@ -225,7 +231,6 @@ export async function buildMemberActivityGrid(
         observedHours: observation.observedHours,
         from,
         to,
-        maxShortfall: 0,
         maxDemand,
         leaveHours: excludedHours.size
     };
@@ -241,19 +246,22 @@ function cellsOf(grid: CoverageGrid): GapCell[] {
                 hour,
                 coverage: grid.coverage[weekday][hour],
                 demand: grid.demand[weekday][hour],
-                needed: grid.needed[weekday][hour],
-                shortfall: grid.shortfall[weekday][hour]
+                load: grid.load[weekday][hour],
+                unstaffed: grid.unstaffed[weekday][hour],
+                severity: grid.severity[weekday][hour]
             });
         }
     }
     return cells;
 }
 
-/** The hours most short of moderators. A covered hour is never on the list. */
+/**
+ * The hours furthest up the chart's own scale, busiest first within a step, so
+ * the list and the colours cannot disagree about what is worst.
+ */
 export function worstCells(grid: CoverageGrid, count = 5): GapCell[] {
     return cellsOf(grid)
-        .filter((cell) => cell.shortfall > 0)
-        .sort((left, right) => right.shortfall - left.shortfall || right.demand - left.demand)
+        .sort((left, right) => right.severity - left.severity || right.load - left.load)
         .slice(0, count);
 }
 

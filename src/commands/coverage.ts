@@ -370,8 +370,8 @@ export const coverageCommand: Command = {
         const { gallery, attachment } = heatmapGallery(
             grid,
             "coverage",
-            `A 7 by 24 grid of moderators short of what each hour's messages need, ` +
-                `rendered in ${zone}.`
+            `A 7 by 24 grid of messages per moderator on shift, with hours nobody was on ` +
+                `ringed, rendered in ${zone}.`
         );
 
         // Each hour carries the regions where it falls in the evening: somebody
@@ -380,9 +380,7 @@ export const coverageCommand: Command = {
         const worstText =
             grid.maxDemand === 0
                 ? "_No demand recorded in the window. Check which channels are tracked._"
-                : worst.length === 0
-                  ? "_Every hour had the moderators its messages need._"
-                  : worst
+                : worst
                       .map((cell, index) => {
                           const regions = regionsInEveningDuring(
                               grid.from,
@@ -393,9 +391,12 @@ export const coverageCommand: Command = {
                           );
                           return (
                               `${index + 1}. **${days[cell.weekday]} ${hourLabel(cell.hour)}** ` +
-                              `${perHour(cell.demand)} messages an hour need ` +
-                              `${cell.needed.toFixed(1)} moderators, ${cell.coverage.toFixed(1)} ` +
-                              `on shift: **${cell.shortfall.toFixed(1)} short**\n` +
+                              (cell.unstaffed
+                                  ? `${perHour(cell.demand)} messages an hour, **nobody on shift**`
+                                  : `${perHour(cell.demand)} messages an hour across ` +
+                                    `${cell.coverage.toFixed(1)} moderators: ` +
+                                    `**${perHour(cell.load)} each**`) +
+                              "\n" +
                               (regions.length > 0
                                   ? "-# Evening in: " +
                                     regions
@@ -415,12 +416,13 @@ export const coverageCommand: Command = {
             .addSeparatorComponents(separator())
             .addTextDisplayComponents(
                 text(
-                    `**Five hours most short of moderators**\n${worstText}` +
+                    `**Five heaviest hours for moderators**\n${worstText}` +
                         (grid.typicalHour > 0
-                            ? `\n\n-# A typical hour here, ${perHour(grid.typicalHour)} messages, ` +
-                              "needs one moderator, and a busier hour needs more in proportion. " +
-                              "Every hour anybody spoke in needs at least one, so nobody on shift " +
-                              "is a whole moderator short however quiet the hour."
+                            ? `\n\n-# Colour reads each moderator's load against a typical hour ` +
+                              `here, ${perHour(grid.typicalHour)} messages: one moderator through ` +
+                              "one is the middle of the scale, twice that is the top. An hour with " +
+                              "nobody on shift is ringed and lifted three steps, so it is never " +
+                              "drawn as fine however quiet it was."
                             : "") +
                         footnote(grid)
                 )

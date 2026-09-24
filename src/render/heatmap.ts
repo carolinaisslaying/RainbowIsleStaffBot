@@ -115,45 +115,33 @@ export function scaleTop(values: readonly number[]): number {
 }
 
 /**
- * Where each band above the first begins, in moderators short. Fixed rather
- * than scaled to the grid, for the member card's reason: one short should be
- * the same colour on every card, and on a percentile scale one badly covered
- * hour pushed every empty evening down into the blue.
- *
- * Nobody on shift in an hour anybody spoke in is at least one short, so that
- * is where the warm end begins: an unstaffed hour is never drawn as cool,
- * however quiet it was. Two short, a busy hour with nobody, is the top.
- */
-const SHORTFALL_BANDS = [0.25, 0.5, 1, 2];
-
-/**
  * A member's grid is scaled to the hour itself, not to their own busiest cell:
  * "30" should be the same colour on everybody's card, or two members read side
  * by side look alike whatever they did.
  */
 function topFor(values: readonly number[], kind: HeatmapKind): number {
-    if (kind === "activity") return scaleTop(values);
-    const top = kind === "member" ? 60 : SHORTFALL_BANDS[SHORTFALL_BANDS.length - 1];
-    return values.some((value) => value > 0) ? top : 0;
+    if (kind !== "member") return scaleTop(values);
+    return values.some((value) => value > 0) ? 60 : 0;
 }
 
-function bandFor(value: number, top: number, kind: HeatmapKind): number {
+function bandFor(value: number, top: number): number {
     if (value <= 0 || top <= 0) return -1;
-    if (kind === "coverage") {
-        // Banded on the figure the cell prints, to one decimal: 0.975 prints
-        // as 1.0 and must be the colour of 1.0, not of 0.9 beside it.
-        const printed = Math.round(value * 10) / 10;
-        if (printed <= 0) return -1;
-        return SHORTFALL_BANDS.filter((edge) => printed >= edge).length;
-    }
     const normalised = Math.min(1, value / top);
     return Math.min(RAMP.length - 1, Math.floor(normalised * RAMP.length));
 }
 
-function colourFor(value: number, top: number, kind: HeatmapKind): string {
-    const band = bandFor(value, top, kind);
-    return band < 0 ? EMPTY : PALETTE[kind].ramp[band];
+/**
+ * The coverage grid arrives with its steps already decided (`gapBand` in
+ * `domain/observation.ts`), because they turn on whether anybody was on shift
+ * as well as on the figure, and the list of worst hours has to agree with them.
+ */
+function cellBand(grid: CoverageGrid, kind: HeatmapKind, weekday: number, hour: number, top: number): number {
+    if (kind === "coverage") return grid.severity[weekday][hour];
+    return bandFor(grid.demand[weekday][hour], top);
 }
+
+/** Inset ring on an hour nobody was on shift for, so it never passes for staffed. */
+const UNSTAFFED_RING = "rgba(255,255,255,0.92)";
 
 function figure(value: number): string {
     if (value >= 1000) return `${(value / 1000).toFixed(1)}k`;
@@ -166,8 +154,8 @@ const WORDING: Record<
 > = {
     coverage: {
         empty: "No demand recorded",
-        legend: "Moderators short of what the hour's messages need.",
-        ends: "¼ to 2 or more short",
+        legend: "Messages per moderator on shift.",
+        ends: "light to heavy load",
         unseen: "Dashed hours have not been heard yet."
     },
     activity: {
@@ -211,12 +199,11 @@ function emptyGrid(grid: CoverageGrid, kind: HeatmapKind): string {
 }
 
 export function heatmapSvg(grid: CoverageGrid, kind: HeatmapKind = "coverage"): string {
-    const values = kind === "coverage" ? grid.shortfall : grid.demand;
-    // A coverage grid with every hour covered is good news, not an empty
-    // window, so whether there is anything to draw is asked of the messages.
-    if (!grid.demand.flat().some((value) => value > 0)) return emptyGrid(grid, kind);
+    const values = kind === "coverage" ? grid.load : grid.demand;
     const top = topFor(values.flat(), kind);
     const palette = PALETTE[kind];
+    if (top <= 0) return emptyGrid(grid, kind);
+    let unstaffed = 0;
     let unseen = 0;
 
     const days = weekdayLabels(grid.weekStartDay);
@@ -256,21 +243,31 @@ export function heatmapSvg(grid: CoverageGrid, kind: HeatmapKind = "coverage"): 
                 );
                 continue;
             }
+            const band = cellBand(grid, kind, weekday, hour, top);
             parts.push(
                 `<rect x="${round(x + 1.5)}" y="${round(y + 1.5)}" width="${CELL - 3}" ` +
-                    `height="${CELL - 3}" rx="7" fill="${colourFor(value, top, kind)}" />`
+                    `height="${CELL - 3}" rx="7" fill="${band < 0 ? EMPTY : palette.ramp[band]}" />`
             );
+            // Colour alone would not say it: an unstaffed hour is lifted up the
+            // scale, and the ring is what tells it from a staffed hour that was
+            // merely heavy, in greyscale too.
+            if (kind === "coverage" && band >= 0 && grid.unstaffed[weekday][hour]) {
+                unstaffed += 1;
+                parts.push(
+                    `<rect x="${round(x + 2.75)}" y="${round(y + 2.75)}" width="${CELL - 5.5}" ` +
+                        `height="${CELL - 5.5}" rx="5.75" fill="none" stroke="${UNSTAFFED_RING}" ` +
+                        `stroke-width="1.5" />`
+                );
+            }
 
             // The number is in the cell as well as in the colour, because
             // colour never carries meaning alone. An empty hour has no number:
             // a grid of zeroes is noise, and its emptiness is already the point.
-            // A shortfall that rounds to nothing is drawn as covered, with no
-            // "0.0" printed on it.
-            if (bandFor(value, top, kind) >= 0) {
+            if (band >= 0) {
                 const label = figure(value);
                 parts.push(
                     `<text x="${round(x + CELL / 2)}" y="${round(y + CELL / 2 + 3.5)}" ` +
-                        `fill="${palette.ink[bandFor(value, top, kind)]}" font-size="9.5" ` +
+                        `fill="${palette.ink[band]}" font-size="9.5" ` +
                         `font-family="${FONT_STACK}" ` +
                         `font-weight="bold" text-anchor="middle">${escapeXml(label)}</text>`
                 );
@@ -282,6 +279,9 @@ export function heatmapSvg(grid: CoverageGrid, kind: HeatmapKind = "coverage"): 
     parts.push(
         `<text x="${LEFT_GUTTER}" y="${round(legendY)}" fill="${SURFACE.textMuted}" ` +
             `font-size="11" font-family="${FONT_STACK}">${WORDING[kind].legend}` +
+            (kind === "coverage" && grid.typicalHour > 0
+                ? ` A typical hour here is ${figure(grid.typicalHour)} messages.`
+                : "") +
             (unseen > 0 ? ` ${WORDING[kind].unseen}` : "") +
             `</text>`
     );
@@ -320,6 +320,19 @@ export function heatmapSvg(grid: CoverageGrid, kind: HeatmapKind = "coverage"): 
         `<text x="${barX + barWidth + 10}" y="${round(barY + 8)}" fill="${SURFACE.textMuted}" ` +
             `font-size="10.5" font-family="${FONT_STACK}">${WORDING[kind].ends}</text>`
     );
+
+    // Only when the grid has one, so the key never explains a mark nobody
+    // can find.
+    if (unstaffed > 0) {
+        const ringX = barX + barWidth + 130;
+        parts.push(
+            `<rect x="${ringX}" y="${round(barY - 2.5)}" width="14" height="14" rx="4" ` +
+                `fill="${palette.ramp[palette.ramp.length - 2]}" stroke="${UNSTAFFED_RING}" ` +
+                `stroke-width="1.5" />`,
+            `<text x="${ringX + 22}" y="${round(barY + 8)}" fill="${SURFACE.textMuted}" ` +
+                `font-size="10.5" font-family="${FONT_STACK}">nobody on shift</text>`
+        );
+    }
 
     return panel(parts.join("\n    "), HEIGHT);
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
     busiestRun,
     dailyProfile,
+    gapBand,
     hourWeight,
     hoursTouchedBy,
     listeningOver,
@@ -382,72 +383,56 @@ describe("where a member's grid begins", () => {
     });
 });
 
-describe("moderators short of what an hour needs", () => {
+describe("the load on each moderator", () => {
     const from = Date.parse("2026-08-03T00:00:00Z");
-    /** Consecutive hours from Monday 12:00 in Auckland, judged for shortfall. */
+    /** Consecutive hours from Monday 12:00 in Auckland, judged for load. */
     const hours = (messages: number[], overrides: Partial<ObservationInput> = {}) =>
         observe(
             input({
                 to: new Date(from + messages.length * HOUR),
                 messagesByHour: new Map(messages.map((count, index) => [from + index * HOUR, count])),
-                judgeShortfall: true,
+                judgeLoad: true,
                 ...overrides
             })
         );
 
-    it("takes the median hour anybody spoke in as the one a single moderator covers", () => {
+    it("takes the median hour anybody spoke in as the typical one", () => {
         expect(hours([100, 400, 800]).typicalHour).toBe(400);
         expect(hours([100, 400, 800, 1000]).typicalHour).toBe(600);
+        expect(hours([0, 0, 100, 400, 800]).typicalHour).toBe(400);
     });
 
-    it("counts an hour with nobody on shift as at least one short, however quiet", () => {
-        // Messages divided by coverage used to read nobody as one moderator,
-        // so an empty quiet hour scored exactly what one moderator would have.
-        const result = hours([22, 400, 800]);
-        expect(result.needed[0][12]).toBe(1);
-        expect(result.shortfall[0][12]).toBe(1);
+    it("divides by the moderators on shift", () => {
+        const result = hours([1200], { coverageByHour: new Map([[from, 2 * HOUR]]) });
+        expect(result.load[0][12]).toBe(600);
+        expect(result.unstaffedShare[0][12]).toBe(0);
     });
 
-    it("asks more of a busier hour, in proportion to the typical one", () => {
-        const result = hours([100, 400, 800]);
-        expect(result.needed[0][13]).toBe(1);
-        expect(result.needed[0][14]).toBe(2);
-        expect(result.shortfall[0][14]).toBe(2);
-    });
-
-    it("never scores a sliver of shift worse than nobody at all", () => {
+    it("never divides by a sliver of shift", () => {
         // 504 messages against ninety seconds of shift used to read as 20.2k
         // per moderator, forty times worse than the same hour left empty.
-        const sliver = hours([100, 400, 800], { coverageByHour: new Map([[from + 2 * HOUR, 90_000]]) });
-        const empty = hours([100, 400, 800]);
-        expect(sliver.shortfall[0][14]).toBeLessThan(empty.shortfall[0][14]);
-        expect(sliver.shortfall[0][14]).toBeCloseTo(2 - 0.025, 5);
+        const result = hours([504], { coverageByHour: new Map([[from, 90_000]]) });
+        expect(result.load[0][12]).toBe(504);
+        expect(result.unstaffedShare[0][12]).toBe(1);
     });
 
-    it("reads an hour with enough moderators as nobody short", () => {
-        const result = hours([100, 400, 800], {
-            coverageByHour: new Map([[from + 2 * HOUR, 2.5 * HOUR]])
-        });
-        expect(result.shortfall[0][14]).toBe(0);
+    it("marks an hour nobody was on for most of as unstaffed, and one covered for half as staffed", () => {
+        expect(hours([22]).unstaffedShare[0][12]).toBe(1);
+        const half = hours([22], { coverageByHour: new Map([[from, HOUR / 2]]) });
+        expect(half.unstaffedShare[0][12]).toBe(0);
     });
 
-    it("needs nobody for an hour with no messages, and leaves it out of the typical hour", () => {
-        const result = hours([0, 0, 100, 400, 800]);
-        expect(result.observed[0][12]).toBe(1);
-        expect(result.shortfall[0][12]).toBe(0);
-        expect(result.typicalHour).toBe(400);
+    it("never calls an hour without messages unstaffed", () => {
+        expect(hours([0]).unstaffedShare[0][12]).toBe(0);
     });
 
-    it("averages each hour's shortfall, so a covered week never hides an empty one", () => {
-        // Two moderators one week and none the next averages to one on shift,
-        // which against a need of one reads as covered. It was an empty hour
-        // half the time.
+    it("judges each hour before averaging, so a staffed week never hides an empty one", () => {
         const week = 7 * 24 * HOUR;
         const result = observe(
             input({
                 from: new Date(from),
                 to: new Date(from + week + HOUR),
-                judgeShortfall: true,
+                judgeLoad: true,
                 messagesByHour: new Map([
                     [from, 100],
                     [from + week, 100]
@@ -455,26 +440,45 @@ describe("moderators short of what an hour needs", () => {
                 coverageByHour: new Map([[from, 2 * HOUR]])
             })
         );
+        // Averaged first, that is one moderator on and nobody missing.
         expect(result.coverage[0][12]).toBe(1);
-        expect(result.shortfall[0][12]).toBe(0.5);
-    });
-
-    it("scales a partly heard hour's messages before judging it", () => {
-        const result = hours([400, 400, 400], {
-            uptime: new Map([
-                [from, 60],
-                [from + HOUR, 30],
-                [from + 2 * HOUR, 60]
-            ]),
-            measuredSince: from
-        });
-        expect(result.typicalHour).toBe(400);
-        expect(result.needed[0][13]).toBe(2);
+        expect(result.unstaffedShare[0][12]).toBe(0.5);
+        expect(result.load[0][12]).toBe(75);
     });
 
     it("judges nothing unless asked, which is every grid but the coverage gap", () => {
-        const result = hours([100, 400, 800], { judgeShortfall: false });
+        const result = hours([100, 400, 800], { judgeLoad: false });
         expect(result.typicalHour).toBe(0);
-        expect(sum(result.shortfall)).toBe(0);
+        expect(sum(result.load)).toBe(0);
+    });
+});
+
+describe("the colour step for a coverage cell", () => {
+    const typical = 600;
+
+    it("puts one moderator through a typical hour in the middle step", () => {
+        expect(gapBand(600, false, typical)).toBe(2);
+    });
+
+    it("climbs with the load, to the top at twice a typical hour", () => {
+        expect([100, 400, 600, 900, 1200].map((load) => gapBand(load, false, typical))).toEqual([
+            0, 1, 2, 3, 4
+        ]);
+    });
+
+    it("never draws an unstaffed hour below the fourth step, however quiet", () => {
+        // Messages divided by coverage used to read nobody as one moderator,
+        // so an empty quiet evening was the coolest colour on the grid.
+        expect(gapBand(22, true, typical)).toBe(3);
+        expect(gapBand(22, false, typical)).toBe(0);
+    });
+
+    it("still ranks a busier unstaffed hour above a quiet one", () => {
+        expect(gapBand(400, true, typical)).toBe(4);
+        expect(gapBand(22, true, typical)).toBeLessThan(gapBand(400, true, typical));
+    });
+
+    it("has nothing to draw for an hour nobody spoke in", () => {
+        expect(gapBand(0, true, typical)).toBe(-1);
     });
 });
