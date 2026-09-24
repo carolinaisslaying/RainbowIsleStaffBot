@@ -46,7 +46,8 @@ const WIDTH = LEFT_GUTTER + GRID_HOURS * CELL + PAD;
 const HEIGHT = TOP_GUTTER + GRID_DAYS * CELL + LEGEND_HEIGHT;
 
 /**
- * Perceptually ordered ramp, cool to hot. Never relied on alone.
+ * Cool to hot, for the coverage gap: the one heatmap whose reading is a
+ * problem, so warmth saying "worse" is the point. Never relied on alone.
  *
  * Index 0 is the empty reading and is deliberately not a colour: an hour that
  * recorded nothing should recede into the panel rather than sit on it.
@@ -67,24 +68,24 @@ const UNSEEN_STROKE = "rgba(255,255,255,0.16)";
 const CELL_INK = "rgba(0,0,0,0.82)";
 
 /**
- * A member's ramp: one hue, dim to bright, never the status palette above.
- * A card about one person is read as a verdict on them, and on the cool-to-hot
- * ramp their busiest hour was red, which everywhere else in this bot means
- * something went wrong. So it takes the review charts' teal (`render/trend.ts`)
- * stepped in OKLCH lightness at a fixed hue: more minutes is brighter, and
- * nothing about the colour says good or bad.
+ * For readings of how much rather than how bad: a member's minutes and the
+ * server's messages. One hue, dim to bright, never the cool-to-hot ramp above,
+ * on which the busiest hour was red: the colour this bot uses for something
+ * having gone wrong, on a card about one person, and on a server chart where
+ * busy is not bad. The review charts' teal (`render/trend.ts`) stepped in OKLCH
+ * lightness at a fixed hue, so more is brighter and nothing says good or bad.
  *
  * Validated as an ordinal ramp against the panel ground: lightness rises
  * monotonically, and the dimmest step clears the panel at 2.2:1.
  */
-const MEMBER_RAMP = ["#035160", "#0b758a", "#169cb7", "#4ec2de", "#8fe7fe"];
+const MAGNITUDE_RAMP = ["#035160", "#0b758a", "#169cb7", "#4ec2de", "#8fe7fe"];
 
 /**
  * A one-hue ramp spans dark to light, so a single ink cannot read on all of it
  * the way it does on the ramp above. Light ink on the two dim steps (8.9:1 and
  * 5.4:1), dark on the three bright ones (6.5:1 and up).
  */
-const MEMBER_INK = ["#ffffff", "#ffffff", CELL_INK, CELL_INK, CELL_INK];
+const MAGNITUDE_INK = ["#ffffff", "#ffffff", CELL_INK, CELL_INK, CELL_INK];
 
 interface Palette {
     ramp: readonly string[];
@@ -93,11 +94,12 @@ interface Palette {
 }
 
 const HEAT: Palette = { ramp: RAMP, ink: RAMP.map(() => CELL_INK) };
+const MAGNITUDE: Palette = { ramp: MAGNITUDE_RAMP, ink: MAGNITUDE_INK };
 
 const PALETTE: Record<HeatmapKind, Palette> = {
     coverage: HEAT,
-    activity: HEAT,
-    member: { ramp: MEMBER_RAMP, ink: MEMBER_INK }
+    activity: MAGNITUDE,
+    member: MAGNITUDE
 };
 
 /**

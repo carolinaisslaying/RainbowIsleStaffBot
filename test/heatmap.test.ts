@@ -235,6 +235,24 @@ describe("a member's card with nothing to plot", () => {
     });
 });
 
+describe("the server activity reading's colours", () => {
+    it("is the same one-hue ramp as a member's, not the coverage gap's", () => {
+        const input = memberBanded();
+        const svg = heatmapSvg(input, "activity");
+        const filled = [...svg.matchAll(/height="27" rx="7" fill="(#[0-9a-f]{6})"/g)].map(
+            (match) => match[1]
+        );
+        expect(new Set(filled)).toEqual(
+            new Set(["#035160", "#0b758a", "#169cb7", "#4ec2de", "#8fe7fe"])
+        );
+        expect(svg).not.toContain("#ff453a");
+    });
+
+    it("leaves the coverage gap on its cool-to-hot ramp", () => {
+        expect(heatmapSvg(banded(), "coverage")).toContain('fill="#ff453a"');
+    });
+});
+
 describe("the legend", () => {
     it("gives zero a grey swatch of its own on every kind, before the ramp", () => {
         for (const kind of ["coverage", "activity", "member"] as const) {
