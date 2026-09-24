@@ -26,7 +26,7 @@ export interface Region {
 }
 
 export const RECRUITING_REGIONS: readonly Region[] = [
-    { label: "Hawaii", zone: "Pacific/Honolulu" },
+    { label: "Hawaiʻi", zone: "Pacific/Honolulu" },
     { label: "Alaska", zone: "America/Anchorage" },
     { label: "US and Canada Pacific", zone: "America/Los_Angeles" },
     { label: "US and Canada Mountain", zone: "America/Denver" },

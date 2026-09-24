@@ -45,14 +45,14 @@ describe("the regions a brief can name", () => {
 
 describe("who is having their evening", () => {
     // 08:00 UTC, Wednesday 30 September 2026: 21:00 in New Zealand (NZDT),
-    // 22:00 the evening before in Hawaii, 18:00 in Eastern Australia (AEST),
+    // 22:00 the evening before in Hawaiʻi, 18:00 in Eastern Australia (AEST),
     // 16:00 in Western Australia.
     const instant = new Date("2026-09-30T08:00:00Z");
 
     it("lists the regions between 18:00 and 23:00 local, with their local time", () => {
         expect(regionsInEvening(instant)).toEqual([
             { label: "New Zealand", localTime: "21:00" },
-            { label: "Hawaii", localTime: "22:00" },
+            { label: "Hawaiʻi", localTime: "22:00" },
             { label: "Eastern Australia", localTime: "18:00" }
         ]);
     });
