@@ -19,6 +19,8 @@ import {
 } from "../services/coverageService.js";
 import { busiestRun, dailyProfile, quietestHour } from "../domain/observation.js";
 import {
+    leaveHoursNote,
+    memberEmptyNote,
     reliabilityNote,
     renderHeatmap,
     sampleLabel,
@@ -39,6 +41,7 @@ import { defer, respond } from "../discord/respond.js";
 import { isValidTimezone, searchTimezones } from "../time/timezones.js";
 import { labelWindow } from "../time/format.js";
 import { COLOUR } from "../render/theme.js";
+import { HOUR_MS } from "../time/calendar.js";
 
 function hourLabel(hour: number): string {
     return `${String(hour).padStart(2, "0")}:00`;
@@ -56,8 +59,8 @@ function headline(title: string, grid: CoverageGrid, accountingTimezone: string)
 }
 
 /** The reliability note as a footnote, or nothing once there is enough data. */
-function footnote(grid: CoverageGrid): string {
-    const note = reliabilityNote(grid.observedHours);
+function footnote(grid: CoverageGrid, kind: HeatmapKind = "coverage"): string {
+    const note = reliabilityNote(grid.observedHours, kind);
     return note === null ? "" : `\n-# ${note}`;
 }
 
@@ -297,11 +300,6 @@ export const coverageCommand: Command = {
 
             const name = await staffDisplayName(client, config, target.id, target.username);
             const grid = await buildMemberActivityGrid(config, member, zone, weeks);
-            const leaveNote =
-                grid.leaveHours > 0
-                    ? `\n-# ${grid.leaveHours} hour${grid.leaveHours === 1 ? "" : "s"} on leave ` +
-                      "left out of the averages."
-                    : "";
 
             const container = new ContainerBuilder()
                 .setAccentColor(COLOUR.report)
@@ -314,9 +312,12 @@ export const coverageCommand: Command = {
                     .addSeparatorComponents(separator())
                     .addTextDisplayComponents(
                         text(
-                            `_No activity minutes recorded for ${name} in this window._` +
-                                leaveNote +
-                                footnote(grid)
+                            memberEmptyNote(
+                                name,
+                                grid.observedHours,
+                                grid.leaveHours,
+                                (grid.to.getTime() - grid.from.getTime()) / HOUR_MS
+                            )
                         )
                     );
                 await respond(interaction, containersMessage([container]));
@@ -342,7 +343,11 @@ export const coverageCommand: Command = {
                 .addMediaGalleryComponents(gallery)
                 .addSeparatorComponents(separator())
                 .addTextDisplayComponents(
-                    text(`**Five most active hours**\n${busiest}` + leaveNote + footnote(grid))
+                    text(
+                        `**Five most active hours**\n${busiest}` +
+                            leaveHoursNote(grid.leaveHours) +
+                            footnote(grid, "member")
+                    )
                 );
 
             await respond(interaction, {

@@ -268,11 +268,17 @@ export function sampleLabel(observedHours: number): string {
  * Two weeks is where it stops: every cell has two readings, which is enough for
  * the shape of a week even if one evening can still move a single cell.
  */
-export function reliabilityNote(observedHours: number): string | null {
+export function reliabilityNote(
+    observedHours: number,
+    kind: HeatmapKind = "coverage"
+): string | null {
     if (observedHours < 24) {
+        // On a member's card a dashed cell is usually leave, not an hour that is
+        // still to come; the chart's own legend already says so.
+        const dashed = kind === "member" ? "were on leave or not heard" : "have not come round yet";
         return (
             `Based on ${observedHours} hour${observedHours === 1 ? "" : "s"}. Each filled cell ` +
-            "is a single hour, and the dashed ones have not come round yet."
+            `is a single hour, and the dashed ones ${dashed}.`
         );
     }
     if (observedHours < 7 * 24) {
@@ -287,6 +293,43 @@ export function reliabilityNote(observedHours: number): string | null {
         return `Based on ${days} days. Cells will settle as the second week comes in.`;
     }
     return null;
+}
+
+function hours(count: number): string {
+    return `${count} hour${count === 1 ? "" : "s"}`;
+}
+
+/** The subtext saying how much leave a member's grid left out, or nothing. */
+export function leaveHoursNote(leaveHours: number): string {
+    return leaveHours > 0 ? `\n-# ${hours(leaveHours)} on leave left out of the averages.` : "";
+}
+
+/**
+ * What a member's card says in place of a grid with nothing on it.
+ *
+ * A window that was all leave is not a member who did nothing, and must not
+ * read like one: it says so and stops, with no reliability note, because
+ * "the dashed ones have not come round yet" is untrue of hours that came
+ * round and were leave.
+ */
+export function memberEmptyNote(
+    name: string,
+    observedHours: number,
+    leaveHours: number,
+    windowHours: number
+): string {
+    if (observedHours === 0 && leaveHours > 0) {
+        return leaveHours >= windowHours
+            ? `_${name} was on leave for the whole of this window, so there is nothing to average._`
+            : `_Nothing to average: ${name} was on leave for ${hours(leaveHours)} of this window, ` +
+                  "and the bot was not listening for the rest._";
+    }
+    const note = reliabilityNote(observedHours, "member");
+    return (
+        `_No activity minutes recorded for ${name} in this window._` +
+        leaveHoursNote(leaveHours) +
+        (note === null ? "" : `\n-# ${note}`)
+    );
 }
 
 export function renderHeatmap(grid: CoverageGrid, kind: HeatmapKind = "coverage"): Buffer {
