@@ -10,6 +10,7 @@ import {
     GRID_HOURS,
     gridCellFor,
     hoursTouchedBy,
+    memberWindowStart,
     minutesByUtcHour,
     observe,
     spreadByHour
@@ -163,8 +164,9 @@ export interface MemberActivityGrid extends CoverageGrid {
  * `demand` holds minutes rather than messages, so everything that reads a grid
  * (the renderer, `busiestCells`) works unchanged.
  *
- * The window starts at the lookback or when they joined the team, whichever is
- * later: weeks before somebody was staff are not weeks they were quiet. Hours
+ * The window starts at the lookback or the first whole hour after they joined
+ * the team, whichever is later: weeks before somebody was staff are not weeks
+ * they were quiet. Hours
  * on leave are no reading at all, like an hour the bot missed.
  */
 export async function buildMemberActivityGrid(
@@ -175,9 +177,7 @@ export async function buildMemberActivityGrid(
     now = new Date()
 ): Promise<MemberActivityGrid> {
     const to = new Date(Math.floor(now.getTime() / HOUR_MS) * HOUR_MS);
-    const joined = Math.floor(member.joinedTeamAt.getTime() / HOUR_MS) * HOUR_MS;
-    const lookbackFrom = to.getTime() - lookbackWeeks * WEEK_MS;
-    const from = new Date(Math.min(to.getTime(), Math.max(lookbackFrom, joined)));
+    const from = memberWindowStart(to, lookbackWeeks, member.joinedTeamAt);
 
     const [days, leave, uptime, measuredSince] = await Promise.all([
         dayBitmapsBetween(member._id, from, to),

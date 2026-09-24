@@ -1,4 +1,4 @@
-import { HOUR_MS, dayKeyToDate, wallClockIn } from "../time/calendar.js";
+import { HOUR_MS, WEEK_MS, dayKeyToDate, wallClockIn } from "../time/calendar.js";
 import { hourHistogram } from "./bitmap.js";
 import type { LeaveSpan } from "./leaveDays.js";
 
@@ -168,6 +168,19 @@ export function minutesByUtcHour(days: ReadonlyMap<string, Buffer>): Map<number,
         });
     }
     return totals;
+}
+
+/**
+ * Where a member's grid begins: the lookback, or the first whole hour after
+ * they joined, whichever is later. Rounded up, not down: the hour somebody
+ * joined partway through is not an hour they could fill, and counting it read
+ * as a quiet sample, which in a first week is the only sample that cell has.
+ * The same rule as leave, whose part hours are dropped rather than weighed.
+ */
+export function memberWindowStart(to: Date, lookbackWeeks: number, joinedTeamAt: Date): Date {
+    const lookbackFrom = to.getTime() - lookbackWeeks * WEEK_MS;
+    const joined = Math.ceil(joinedTeamAt.getTime() / HOUR_MS) * HOUR_MS;
+    return new Date(Math.min(to.getTime(), Math.max(lookbackFrom, joined)));
 }
 
 /**

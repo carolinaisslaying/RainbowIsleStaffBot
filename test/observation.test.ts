@@ -5,6 +5,7 @@ import {
     hourWeight,
     hoursTouchedBy,
     listeningOver,
+    memberWindowStart,
     minutesByUtcHour,
     observe,
     quietestHour,
@@ -354,5 +355,29 @@ describe("a member's minutes by hour", () => {
                 [Date.parse("2026-08-03T23:00:00Z"), 1]
             ])
         );
+    });
+});
+
+describe("where a member's grid begins", () => {
+    const to = new Date("2026-08-10T00:00:00Z");
+
+    it("starts at the first whole hour after joining, not the hour they joined in", () => {
+        const joined = new Date("2026-08-05T10:45:00Z");
+        expect(memberWindowStart(to, 8, joined).toISOString()).toBe("2026-08-05T11:00:00.000Z");
+    });
+
+    it("keeps a join exactly on the hour", () => {
+        const joined = new Date("2026-08-05T10:00:00Z");
+        expect(memberWindowStart(to, 8, joined).toISOString()).toBe("2026-08-05T10:00:00.000Z");
+    });
+
+    it("uses the lookback for somebody who joined before it", () => {
+        const joined = new Date("2025-01-01T10:45:00Z");
+        expect(memberWindowStart(to, 1, joined).toISOString()).toBe("2026-08-03T00:00:00.000Z");
+    });
+
+    it("never starts after the window ends", () => {
+        const joined = new Date("2026-08-09T23:30:00Z");
+        expect(memberWindowStart(to, 8, joined)).toEqual(to);
     });
 });

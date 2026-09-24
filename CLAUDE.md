@@ -669,7 +669,9 @@ nothing and lose the unflushed counts on every crash.
 `observe`, with two differences. Hours the member was on leave are passed as `excludedHours` and
 drop out of both sides of the average exactly as an unheard hour does. And the scale is fixed at 60
 minutes rather than the 95th percentile, so the same figure is the same colour on everybody's card.
-Its window starts at `joinedTeamAt` when that is later than the lookback.
+Its window starts at the first whole hour after `joinedTeamAt` when that is later than the
+lookback (`memberWindowStart`): the hour somebody joined partway through is dropped, as a leave's
+part hours are, rather than counted as a quiet sample.
 
 **Jobs** (`src/jobs/index.ts`): `shift-sweep`, `uptime` and `leave-transitions` every minute, `recaps` hourly,
 `week-close` at 00:05 in the accounting timezone. All are date-driven and idempotent, so a missed
