@@ -1,11 +1,19 @@
 import { ContainerBuilder, SlashCommandBuilder } from "discord.js";
 import type { Command, CommandContext } from "./types.js";
-import { getOpenShift, openPauseOf, shiftHistory, stateOf } from "../domain/shifts.js";
+import {
+    computeAvailableMs,
+    computeShiftActivityMinutes,
+    getOpenShift,
+    openPauseOf,
+    shiftHistory,
+    stateOf
+} from "../domain/shifts.js";
 import { findStaffByDiscordId } from "../domain/staff.js";
 import { currentWeekStats } from "../domain/weekly.js";
 import { isLeadOrAbove } from "../domain/permissions.js";
 import { autoFinishShift, beginShift, finishShift } from "../services/shiftService.js";
 import { EMOJI } from "../render/emoji.js";
+import { shiftHistoryLine } from "../render/shiftHistory.js";
 import { containersMessage, errorCard, noticeCard, text } from "../render/cards.js";
 import { COLOUR } from "../render/theme.js";
 import { defer, respond } from "../discord/respond.js";
@@ -222,20 +230,29 @@ async function showHistory({ config, interaction, staff, tier }: CommandContext)
     const shifts = await shiftHistory(subject._id, 15);
     const stats = await currentWeekStats(subject._id, config);
 
+    // An open shift's figures are only written when it closes, so they are
+    // measured up to now for the card. Reads alone: nothing is stored.
+    const now = new Date();
     const lines =
         shifts.length === 0
             ? ["_No shifts on record._"]
-            : shifts.map((shift) => {
-                  const duration = shift.endedAt
-                      ? formatDuration(shift.endedAt.getTime() - shift.startedAt.getTime())
-                      : "open";
-                  return (
-                      `${ts(shift.startedAt, "f")}, ${duration}, ` +
-                      `${formatDuration(shift.availableMs)} available, ` +
-                      `${shift.activityMinutes} min earned` +
-                      (shift.endReason ? `, ${shift.endReason}` : "")
-                  );
-              });
+            : await Promise.all(
+                  shifts.map(async (shift) =>
+                      shiftHistoryLine({
+                          startedAt: shift.startedAt,
+                          endedAt: shift.endedAt,
+                          endReason: shift.endReason,
+                          availableMs: shift.endedAt
+                              ? shift.availableMs
+                              : computeAvailableMs(shift, now),
+                          activityMinutes: shift.endedAt
+                              ? shift.activityMinutes
+                              : await computeShiftActivityMinutes(shift, now),
+                          awaySince: shift.endedAt ? null : (openPauseOf(shift)?.from ?? null),
+                          now
+                      })
+                  )
+              );
 
     const container = new ContainerBuilder()
         .setAccentColor(COLOUR.report)
