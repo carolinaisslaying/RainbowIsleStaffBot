@@ -12,6 +12,12 @@ import { wallClockIn } from "./calendar.js";
  * and printed identifiers nobody calls a place. One entry per population
  * centre, labelled the way a person would say it, each pinned to a zone that
  * carries its daylight saving rule.
+ *
+ * The server is English speaking, so the list is the places a moderator for it
+ * is likely to come from: where English is the first language, an official
+ * one, or the everyday language online. Fewer than that leaves hours of the day
+ * with nobody in their evening; `test/regions.test.ts` fails if any UTC hour,
+ * in either hemisphere's summer, has no region to suggest.
  */
 
 export interface Region {
@@ -22,30 +28,17 @@ export interface Region {
 export const RECRUITING_REGIONS: readonly Region[] = [
     { label: "Hawaii", zone: "Pacific/Honolulu" },
     { label: "Alaska", zone: "America/Anchorage" },
-    { label: "US Pacific", zone: "America/Los_Angeles" },
-    { label: "US Mountain", zone: "America/Denver" },
-    { label: "US Central", zone: "America/Chicago" },
-    { label: "Mexico", zone: "America/Mexico_City" },
-    { label: "US East", zone: "America/New_York" },
-    { label: "Colombia and Peru", zone: "America/Bogota" },
-    { label: "Chile", zone: "America/Santiago" },
-    { label: "Brazil", zone: "America/Sao_Paulo" },
-    { label: "Argentina", zone: "America/Argentina/Buenos_Aires" },
+    { label: "US and Canada Pacific", zone: "America/Los_Angeles" },
+    { label: "US and Canada Mountain", zone: "America/Denver" },
+    { label: "US and Canada Central", zone: "America/Chicago" },
+    { label: "US and Canada Eastern", zone: "America/New_York" },
     { label: "UK and Ireland", zone: "Europe/London" },
     { label: "West Africa", zone: "Africa/Lagos" },
     { label: "Central Europe", zone: "Europe/Berlin" },
     { label: "South Africa", zone: "Africa/Johannesburg" },
-    { label: "Eastern Europe", zone: "Europe/Bucharest" },
-    { label: "Turkey", zone: "Europe/Istanbul" },
-    { label: "Moscow", zone: "Europe/Moscow" },
-    { label: "Gulf States", zone: "Asia/Dubai" },
     { label: "Pakistan", zone: "Asia/Karachi" },
     { label: "India", zone: "Asia/Kolkata" },
-    { label: "Bangladesh", zone: "Asia/Dhaka" },
-    { label: "Thailand and Vietnam", zone: "Asia/Bangkok" },
-    { label: "Indonesia", zone: "Asia/Jakarta" },
-    { label: "China, Singapore and the Philippines", zone: "Asia/Shanghai" },
-    { label: "Japan and Korea", zone: "Asia/Tokyo" },
+    { label: "Singapore and the Philippines", zone: "Asia/Singapore" },
     { label: "Western Australia", zone: "Australia/Perth" },
     { label: "Eastern Australia", zone: "Australia/Sydney" },
     { label: "New Zealand", zone: "Pacific/Auckland" }

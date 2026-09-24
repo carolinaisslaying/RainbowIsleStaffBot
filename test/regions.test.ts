@@ -23,6 +23,20 @@ describe("the regions a brief can name", () => {
         }
     });
 
+    it("leave no hour of the day without somebody in their evening, in either summer", () => {
+        for (const day of ["2026-01-14", "2026-07-15"]) {
+            for (let hour = 0; hour < 24; hour += 1) {
+                const instant = new Date(`${day}T${String(hour).padStart(2, "0")}:00:00Z`);
+                expect(regionsInEvening(instant).length, instant.toISOString()).toBeGreaterThan(0);
+            }
+        }
+    });
+
+    it("name Canada, which shares the US zones", () => {
+        const labels = RECRUITING_REGIONS.map((region) => region.label).join(" ");
+        expect(labels).toContain("Canada");
+    });
+
     it("name each place once", () => {
         const labels = RECRUITING_REGIONS.map((region) => region.label);
         expect(new Set(labels).size).toBe(labels.length);
@@ -44,15 +58,12 @@ describe("who is having their evening", () => {
     });
 
     it("puts the one nearest mid-evening first, not the one first in the alphabet", () => {
-        // 15:00 UTC: 20:30 in India, 17:00 in Central Europe (out), 19:00 in the
-        // Gulf, 20:00 in Pakistan, 21:00 in Bangladesh, 22:00 in Bangkok.
+        // 15:00 UTC: 20:30 in India, 20:00 in Pakistan, 17:00 in Central Europe
+        // and South Africa (out), 23:00 in Singapore (out).
         const labels = regionsInEvening(new Date("2026-09-30T15:00:00Z")).map(
             (region) => region.label
         );
-        expect(labels[0]).toBe("India");
-        expect(labels).toContain("Pakistan");
-        expect(labels).toContain("Bangladesh");
-        expect(labels).not.toContain("Central Europe");
+        expect(labels).toEqual(["India", "Pakistan"]);
     });
 
     it("shows a half-hour zone at its real minute", () => {
