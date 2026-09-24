@@ -4,7 +4,7 @@ import { getOpenShift, openPauseOf, shiftHistory, stateOf } from "../domain/shif
 import { findStaffByDiscordId } from "../domain/staff.js";
 import { currentWeekStats } from "../domain/weekly.js";
 import { isLeadOrAbove } from "../domain/permissions.js";
-import { beginShift, finishShift } from "../services/shiftService.js";
+import { autoFinishShift, beginShift, finishShift } from "../services/shiftService.js";
 import { EMOJI } from "../render/emoji.js";
 import { containersMessage, errorCard, noticeCard, text } from "../render/cards.js";
 import { COLOUR } from "../render/theme.js";
@@ -21,6 +21,9 @@ function autoEndAt(pausedFrom: Date, config: { autoEndAfterAwayMinutes: number }
 
 export const shiftCommand: Command = {
     tier: "staff",
+    subcommands: {
+        terminate: { tier: "executive" }
+    },
     data: new SlashCommandBuilder()
         .setName("shift")
         .setDescription("Start, end or check your moderation shift")
@@ -39,6 +42,21 @@ export const shiftCommand: Command = {
                         .setDescription("Whose history. Defaults to you.")
                         .setRequired(false)
                 )
+        )
+        .addSubcommand((sub) =>
+            sub
+                .setName("terminate")
+                .setDescription("End a member's shift for them (Executive)")
+                .addUserOption((option) =>
+                    option.setName("user").setDescription("Whose shift to end").setRequired(true)
+                )
+                .addStringOption((option) =>
+                    option
+                        .setName("reason")
+                        .setDescription("Why, for their DM and the audit log")
+                        .setMaxLength(500)
+                        .setRequired(false)
+                )
         ),
 
     async execute(context) {
@@ -47,6 +65,11 @@ export const shiftCommand: Command = {
 
         if (sub === "history") {
             await showHistory(context);
+            return;
+        }
+
+        if (sub === "terminate") {
+            await terminateShift(context);
             return;
         }
 
@@ -120,6 +143,60 @@ export const shiftCommand: Command = {
         );
     }
 };
+
+/**
+ * An Executive ending somebody else's shift. Executive only through
+ * `subcommands.terminate`, so the dispatcher has already refused everyone else.
+ * It closes the shift through the same path as the automatic ends, so the
+ * member gets their usual summary by DM, and the minutes count as normal.
+ */
+async function terminateShift({ client, config, interaction }: CommandContext): Promise<void> {
+    const target = interaction.options.getUser("user", true);
+    if (target.id === interaction.user.id) {
+        await respond(
+            interaction,
+            errorCard(`To end your own shift, use ${cmd("shift end", interaction.guildId)}.`)
+        );
+        return;
+    }
+
+    await defer(interaction, true);
+    const subject = await findStaffByDiscordId(target.id);
+    const delivered = subject
+        ? await autoFinishShift(client, config, subject._id, "terminated", new Date(), {
+              discordId: interaction.user.id,
+              name: await staffDisplayName(
+                  client,
+                  config,
+                  interaction.user.id,
+                  interaction.user.username
+              ),
+              reason: interaction.options.getString("reason")?.trim() || undefined
+          })
+        : null;
+
+    if (delivered === null) {
+        await respond(
+            interaction,
+            noticeCard("No open shift", `<@${target.id}> is not on shift right now.`, {
+                ephemeral: true
+            })
+        );
+        return;
+    }
+
+    await respond(
+        interaction,
+        noticeCard(
+            "Shift ended",
+            `Ended <@${target.id}>'s shift. ` +
+                (delivered
+                    ? "They have been sent their shift summary."
+                    : "Their DMs are closed, so they have not been told."),
+            { ephemeral: true, colour: COLOUR.settled }
+        )
+    );
+}
 
 async function showHistory({ config, interaction, staff, tier }: CommandContext): Promise<void> {
     const target = interaction.options.getUser("user");

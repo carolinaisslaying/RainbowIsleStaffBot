@@ -174,7 +174,7 @@ everything about warnings is under `/warnings` whoever is asking.
 
 | Command | Subcommands | Who |
 |---|---|---|
-| `/shift` | `start`, `end`, `status`, `history [user]` | Staff; someone else's history is Lead and above |
+| `/shift` | `start`, `end`, `status`, `history [user]`, `terminate user [reason]` | Staff; someone else's history is Lead and above; `terminate` is Executive only |
 | `/leave` | `request`, `extend`, `end`, `list` | Staff; `list` is Lead and above |
 | `/stats` | `rings [user]`, `leaderboard [scope] [page]` | Staff; someone else's rings is Lead and above |
 | `/warnings` | `view [user]`, `issue user` | Staff reads their own; Lead reads anyone's; `issue` is Executive |

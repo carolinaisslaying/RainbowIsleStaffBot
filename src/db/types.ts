@@ -41,7 +41,8 @@ export type ShiftEndReason =
     | "max_duration"
     | "auto_ended_away"
     | "leave_started"
-    | "reconciled";
+    | "reconciled"
+    | "terminated";
 
 export type PauseCause = "presence" | "inactivity";
 

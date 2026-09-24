@@ -38,8 +38,20 @@ const REASON_LABEL: Record<ShiftEndReason, string> = {
     max_duration: "maximum shift length reached",
     auto_ended_away: "away too long",
     leave_started: "leave began",
-    reconciled: "reconciled on restart"
+    reconciled: "reconciled on restart",
+    terminated: "an Executive ended it"
 };
+
+/** Somebody other than the member ending their shift: `/shift terminate`. */
+export interface EndedBy {
+    discordId: string;
+    name: string;
+    reason?: string;
+}
+
+function reasonLabelFor(reason: ShiftEndReason, endedBy?: EndedBy): string {
+    return endedBy ? `${endedBy.name} ended it` : REASON_LABEL[reason];
+}
 
 /** Last message timestamp per staff member, for the inactivity sweep. */
 const lastSeen = new Map<string, number>();
@@ -264,7 +276,8 @@ export async function finishShift(
     staff: StaffDoc,
     displayName: string,
     reason: ShiftEndReason,
-    at = new Date()
+    at = new Date(),
+    endedBy?: EndedBy
 ): Promise<RenderedMessage | null> {
     const open = await getOpenShift(staff._id);
     if (!open) return null;
@@ -280,11 +293,12 @@ export async function finishShift(
     }
 
     await audit("shift.end", {
-        actorId: staff.discordId,
+        actorId: endedBy?.discordId ?? staff.discordId,
         targetStaffId: staff._id,
         detail: {
             shiftId: open._id.toHexString(),
             reason,
+            ...(endedBy?.reason ? { reasonGiven: endedBy.reason } : {}),
             availableMs: closed.availableMs,
             activityMinutes: closed.activityMinutes
         }
@@ -312,22 +326,28 @@ export async function finishShift(
         durationMs: closed.durationMs,
         pausedMs: closed.pausedMs,
         earnedMinutes: closed.activityMinutes,
-        reasonLabel: REASON_LABEL[reason],
+        reasonLabel: reasonLabelFor(reason, endedBy),
+        reasonGiven: endedBy?.reason,
         startedAt: open.startedAt,
         endedAt: at
     });
 }
 
-/** Close a shift and DM the summary, for the automatic end reasons. */
+/**
+ * Close a shift and DM the summary, for every end the member did not ask for:
+ * the automatic reasons, and an Executive's `/shift terminate`. Answers whether
+ * the DM arrived, or null when there was no open shift to close.
+ */
 export async function autoFinishShift(
     client: Client,
     config: StaffBotConfig,
     staffId: ObjectId,
     reason: ShiftEndReason,
-    at = new Date()
-): Promise<void> {
+    at = new Date(),
+    endedBy?: EndedBy
+): Promise<boolean | null> {
     const staff = await findStaffById(staffId);
-    if (!staff) return;
+    if (!staff) return null;
 
     const displayName = await staffDisplayName(client, config, staff.discordId, "You");
 
@@ -343,8 +363,8 @@ export async function autoFinishShift(
     // matters and it needs no PNG.
     let card: RenderedMessage | null = null;
     try {
-        card = await finishShift(client, config, staff, displayName, reason, at);
-        if (card === null) return; // there was no open shift; nothing happened
+        card = await finishShift(client, config, staff, displayName, reason, at, endedBy);
+        if (card === null) return null; // there was no open shift; nothing happened
     } catch (error) {
         log.error(
             `Closing shift for ${staff._id.toHexString()} raised after the shift was ended; ` +
@@ -353,10 +373,10 @@ export async function autoFinishShift(
         );
     }
 
-    await tryDm(
+    return tryDm(
         client,
         staff.discordId,
-        card ? { ...card } : { ...plainShiftEndCard(reason, at) }
+        card ? { ...card } : { ...plainShiftEndCard(reason, at, endedBy) }
     );
 }
 
@@ -366,10 +386,12 @@ export async function autoFinishShift(
  * It says the one thing they need to know and nothing it has to compute, so
  * there is nothing left in it that can fail.
  */
-function plainShiftEndCard(reason: ShiftEndReason, at: Date): RenderedMessage {
+function plainShiftEndCard(reason: ShiftEndReason, at: Date, endedBy?: EndedBy): RenderedMessage {
     return noticeCard(
         "Your shift has ended",
-        `${REASON_LABEL[reason]}, ${ts(at, "R")}.\n\n` +
+        `${reasonLabelFor(reason, endedBy)}, ${ts(at, "R")}.\n` +
+            (endedBy?.reason ? `Reason given: ${endedBy.reason}\n` : "") +
+            "\n" +
             "Your minutes for it are counted. The summary card could not be drawn this time, " +
             `so use ${cmd("stats rings")} to see where the week stands.`,
         { colour: COLOUR.settled }

@@ -231,6 +231,8 @@ export interface ShiftSummaryInput extends RingCardInput {
     pausedMs: number;
     earnedMinutes: number;
     reasonLabel: string;
+    /** Why somebody else ended it, when they said. */
+    reasonGiven?: string;
     startedAt: Date;
     endedAt: Date;
 }
@@ -243,6 +245,7 @@ export function shiftSummaryCard(input: ShiftSummaryInput): RenderedMessage {
     });
 
     const summary = [
+        ...(input.reasonGiven ? [`Reason given: ${input.reasonGiven}`] : []),
         `**${formatMinutes(input.earnedMinutes)}** earned this shift.`,
         `Ran ${ts(input.startedAt, "t")} to ${ts(input.endedAt, "t")}, ` +
             `${formatDuration(input.durationMs)} in total. ` +

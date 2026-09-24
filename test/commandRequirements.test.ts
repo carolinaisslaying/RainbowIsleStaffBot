@@ -52,6 +52,9 @@ describe("the registered layout", () => {
         const warnings = commandsByName.get("warnings")!;
         expect(requirementsFor(warnings, "issue").tier).toBe("executive");
         expect(requirementsFor(warnings, "view").tier).toBe("staff");
+        const shift = commandsByName.get("shift")!;
+        expect(requirementsFor(shift, "terminate").tier).toBe("executive");
+        expect(requirementsFor(shift, "end").tier).toBe("staff");
         expect(requirementsFor(commandsByName.get("settings")!, "timezone").bypassOnboarding).toBe(
             true
         );
