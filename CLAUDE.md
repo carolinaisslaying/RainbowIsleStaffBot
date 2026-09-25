@@ -693,8 +693,9 @@ leaf. One colour language across the three cards, so green is the good end where
 ramp is stepped evenly in OKLCH lightness so the order survives greyscale, and each ink array
 (`GAP_INK`, `ACTIVITY_INK`) is reversed with its ramp, so light figures sit on burgundy and brick
 and dark ones on the light steps. They used to take a one-hue teal ramp that said nothing about good
-or bad; that was replaced on request, and a member's quietest hour now deliberately reads as the bad
-end. Hours nobody was on for most of carry a dark inset ring rather than a white one. Every
+or bad. It went because an Executive found the blue hard to read, and the hues varying from red to
+green are what make the scale readable for them — so do not bring a one-hue or blue ramp back.
+A member's quietest hour reading as the bad end is the accepted price of that. Hours nobody was on for most of carry a dark inset ring rather than a white one. Every
 heatmap's legend gives zero its own grey swatch, because empty cells carry no figure.
 On `/coverage member`, its window starts at the first whole hour after `joinedTeamAt` when that is later than the
 lookback (`memberWindowStart`): the hour somebody joined partway through is dropped, as a leave's
