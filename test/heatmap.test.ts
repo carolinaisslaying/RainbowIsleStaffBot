@@ -19,6 +19,7 @@ function grid(ratio: number[][]): CoverageGrid {
         demand: ratio,
         // Copies, so a test can set messages and load apart.
         load: ratio.map((row) => [...row]),
+        uncovered: ratio.map((row) => row.map(() => 0)),
         unstaffed: ratio.map((row) => row.map(() => false)),
         severity: ratio.map((row) => row.map((value) => (value > 0 ? 0 : -1))),
         typicalHour: 0,
@@ -78,16 +79,25 @@ describe("what a cell says", () => {
         expect(figures).toHaveLength(5);
     });
 
-    it("uses one ink on every band, because dark out-contrasts light on all five", () => {
-        // Black on the ramp's blue is 5.7:1; white on it is 3.7:1. The figures
-        // are 9.5px and bold, where contrast beats every other consideration,
-        // so the fix for the cool end of the ramp is a darker ink, not a light
-        // one.
-        const svg = heatmapSvg(banded());
-        const inks = new Set(
-            [...svg.matchAll(/fill="([^"]+)" font-size="9.5"/g)].map((match) => match[1])
+    it("prints each figure in whichever ink out-contrasts its step", () => {
+        // Dark on the three light steps (9.6, 7.4 and 5.5:1), white on brick
+        // and burgundy (4.9 and 7.7:1, where dark managed 3.8 and 2.5).
+        const input = grid(zeros());
+        [0, 1, 2, 3, 4].forEach((step, hour) => {
+            input.demand[0][hour] = 100;
+            input.load[0][hour] = 100;
+            input.severity[0][hour] = step;
+        });
+        const inks = [...heatmapSvg(input).matchAll(/fill="([^"]+)" font-size="9.5"/g)].map(
+            (match) => match[1]
         );
-        expect(inks).toEqual(new Set(["rgba(0,0,0,0.82)"]));
+        expect(inks).toEqual([
+            "rgba(0,0,0,0.82)",
+            "rgba(0,0,0,0.82)",
+            "rgba(0,0,0,0.82)",
+            "#ffffff",
+            "#ffffff"
+        ]);
     });
 });
 
@@ -136,7 +146,7 @@ describe("hours not heard yet", () => {
 describe("the coverage reading", () => {
     const filled = (svg: string) =>
         [...svg.matchAll(/height="27" rx="7" fill="(#[0-9a-f]{6})"/g)].map((match) => match[1]);
-    const rings = (svg: string) => [...svg.matchAll(/stroke="rgba\(255,255,255,0.92\)"/g)].length;
+    const rings = (svg: string) => [...svg.matchAll(/stroke="#111216"/g)].length;
 
     /** One cell at Monday 00:00 with the given load and step. */
     function one(load: number, severity: number, unstaffed: boolean): CoverageGrid {
@@ -157,11 +167,11 @@ describe("the coverage reading", () => {
             input.severity[0][hour] = step;
         });
         expect(filled(heatmapSvg(input))).toEqual([
-            "#0a84ff",
-            "#2bb1a8",
-            "#c3c33a",
-            "#ff9f0a",
-            "#ff453a"
+            "#86df9a",
+            "#d0a83e",
+            "#d27c02",
+            "#c14b24",
+            "#9a273a"
         ]);
     });
 
@@ -172,11 +182,11 @@ describe("the coverage reading", () => {
     it("rings an hour nobody was on shift for, and keys the ring only when there is one", () => {
         const empty = heatmapSvg(one(22, 3, true));
         expect(rings(empty)).toBe(2); // the cell and its key
-        expect(empty).toContain("nobody on shift");
+        expect(empty).toContain("nobody on for most of the hour");
 
         const staffed = heatmapSvg(one(22, 0, false));
         expect(rings(staffed)).toBe(0);
-        expect(staffed).not.toContain("nobody on shift");
+        expect(staffed).not.toContain("nobody on for most");
     });
 
     it("labels itself as load per moderator, against the typical hour", () => {
@@ -234,7 +244,7 @@ describe("the member reading", () => {
             (match) => match[1]
         );
         expect(filled).toEqual(["#035160", "#0b758a", "#169cb7", "#4ec2de", "#8fe7fe"]);
-        for (const status of ["#0a84ff", "#2bb1a8", "#c3c33a", "#ff9f0a", "#ff453a"]) {
+        for (const status of ["#86df9a", "#d0a83e", "#d27c02", "#c14b24", "#9a273a"]) {
             expect(svg).not.toContain(status);
         }
     });
@@ -301,11 +311,11 @@ describe("the server activity reading's colours", () => {
         expect(new Set(filled)).toEqual(
             new Set(["#035160", "#0b758a", "#169cb7", "#4ec2de", "#8fe7fe"])
         );
-        expect(svg).not.toContain("#ff453a");
+        expect(svg).not.toContain("#9a273a");
     });
 
-    it("leaves the coverage gap on its cool-to-hot ramp", () => {
-        expect(heatmapSvg(banded(), "coverage")).toContain('fill="#ff453a"');
+    it("leaves the coverage gap on its leaf-to-burgundy ramp", () => {
+        expect(heatmapSvg(banded(), "coverage")).toContain('fill="#86df9a"');
     });
 });
 

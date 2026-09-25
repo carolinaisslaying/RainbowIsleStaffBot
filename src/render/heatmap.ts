@@ -46,33 +46,41 @@ const WIDTH = LEFT_GUTTER + GRID_HOURS * CELL + PAD;
 const HEIGHT = TOP_GUTTER + GRID_DAYS * CELL + LEGEND_HEIGHT;
 
 /**
- * Cool to hot, for the coverage gap: the one heatmap whose reading is a
- * problem, so warmth saying "worse" is the point. Never relied on alone.
+ * Leaf to burgundy, for the coverage gap: the one heatmap whose reading is a
+ * problem, so a light load reading green and a heavy one burgundy is the
+ * point. Never relied on alone: every cell prints its figure.
  *
- * Index 0 is the empty reading and is deliberately not a colour: an hour that
- * recorded nothing should recede into the panel rather than sit on it.
+ * Built in OKLCH: lightness falls in even steps (0.83 to 0.46) while the hue
+ * turns from leaf through gold and amber to brick and burgundy, so the order
+ * survives greyscale and every colour-vision deficiency the validator checks.
+ * The burgundy is as dark as it can be and still clear the panel at 2.25:1.
+ * It replaced a blue-to-red status ramp whose top was the red this bot uses
+ * for something broken.
+ *
+ * An hour nobody spoke in is deliberately not a colour: it recedes into the
+ * panel rather than sitting on it.
  */
-const RAMP = ["#0a84ff", "#2bb1a8", "#c3c33a", "#ff9f0a", "#ff453a"];
+const GAP_RAMP = ["#86df9a", "#d0a83e", "#d27c02", "#c14b24", "#9a273a"];
 const EMPTY = "rgba(255,255,255,0.045)";
 const UNSEEN_STROKE = "rgba(255,255,255,0.16)";
 
-/**
- * Ink for the figure inside a cell.
- *
- * One value for all five bands, not a light one for the cool end. Dark ink
- * out-contrasts light on every colour in this ramp, the blue included: black on
- * #0a84ff is 5.7:1 against white's 3.7:1, and the figures are 9.5px and bold,
- * where contrast is worth more than anything else. So the fix is to darken the
- * ink rather than to flip it.
- */
+/** Dark ink for the figure inside a light cell. */
 const CELL_INK = "rgba(0,0,0,0.82)";
 
 /**
+ * Whichever ink out-contrasts each step. The figures are 9.5px and bold, where
+ * contrast is worth more than anything else: dark on the three light steps
+ * (9.6, 7.4 and 5.5:1), white on brick and burgundy (4.9 and 7.7:1, where dark
+ * managed 3.8 and 2.5).
+ */
+const GAP_INK = [CELL_INK, CELL_INK, CELL_INK, "#ffffff", "#ffffff"];
+
+/**
  * For readings of how much rather than how bad: a member's minutes and the
- * server's messages. One hue, dim to bright, never the cool-to-hot ramp above,
- * on which the busiest hour was red: the colour this bot uses for something
- * having gone wrong, on a card about one person, and on a server chart where
- * busy is not bad. The review charts' teal (`render/trend.ts`) stepped in OKLCH
+ * server's messages. One hue, dim to bright, never a status ramp like the
+ * coverage gap's. On one of those the busiest hour was red: the colour this
+ * bot uses for something having gone wrong, on a card about one person, and on
+ * a server chart where busy is not bad. The review charts' teal (`render/trend.ts`) stepped in OKLCH
  * lightness at a fixed hue, so more is brighter and nothing says good or bad.
  *
  * Validated as an ordinal ramp against the panel ground: lightness rises
@@ -93,7 +101,7 @@ interface Palette {
     ink: readonly string[];
 }
 
-const HEAT: Palette = { ramp: RAMP, ink: RAMP.map(() => CELL_INK) };
+const HEAT: Palette = { ramp: GAP_RAMP, ink: GAP_INK };
 const MAGNITUDE: Palette = { ramp: MAGNITUDE_RAMP, ink: MAGNITUDE_INK };
 
 const PALETTE: Record<HeatmapKind, Palette> = {
@@ -127,7 +135,7 @@ function topFor(values: readonly number[], kind: HeatmapKind): number {
 function bandFor(value: number, top: number): number {
     if (value <= 0 || top <= 0) return -1;
     const normalised = Math.min(1, value / top);
-    return Math.min(RAMP.length - 1, Math.floor(normalised * RAMP.length));
+    return Math.min(GAP_RAMP.length - 1, Math.floor(normalised * GAP_RAMP.length));
 }
 
 /**
@@ -140,8 +148,16 @@ function cellBand(grid: CoverageGrid, kind: HeatmapKind, weekday: number, hour: 
     return bandFor(grid.demand[weekday][hour], top);
 }
 
-/** Inset ring on an hour nobody was on shift for, so it never passes for staffed. */
-const UNSTAFFED_RING = "rgba(255,255,255,0.92)";
+/**
+ * A dark ring just inside an hour nobody was on shift for, so it reads as a
+ * hole punched in the cell and never passes for staffed. Dark rather than
+ * white: a white ring competed with the white figures on the dark steps, and
+ * hatching made the figures underneath hard to read.
+ */
+const UNSTAFFED_RING = "#111216";
+
+/** The legend's sample cell for the ring: grey, so it names no step. */
+const RING_KEY_FILL = "#8a8d96";
 
 function figure(value: number): string {
     if (value >= 1000) return `${(value / 1000).toFixed(1)}k`;
@@ -254,9 +270,9 @@ export function heatmapSvg(grid: CoverageGrid, kind: HeatmapKind = "coverage"): 
             if (kind === "coverage" && band >= 0 && grid.unstaffed[weekday][hour]) {
                 unstaffed += 1;
                 parts.push(
-                    `<rect x="${round(x + 2.75)}" y="${round(y + 2.75)}" width="${CELL - 5.5}" ` +
-                        `height="${CELL - 5.5}" rx="5.75" fill="none" stroke="${UNSTAFFED_RING}" ` +
-                        `stroke-width="1.5" />`
+                    `<rect x="${round(x + 3.5)}" y="${round(y + 3.5)}" width="${CELL - 7}" ` +
+                        `height="${CELL - 7}" rx="5.5" fill="none" stroke="${UNSTAFFED_RING}" ` +
+                        `stroke-width="2" />`
                 );
             }
 
@@ -326,11 +342,14 @@ export function heatmapSvg(grid: CoverageGrid, kind: HeatmapKind = "coverage"): 
     if (unstaffed > 0) {
         const ringX = barX + barWidth + 130;
         parts.push(
+            // A grey sample cell: the ring goes on any step, so a swatch in
+            // one of the ramp's colours would say it meant that step.
             `<rect x="${ringX}" y="${round(barY - 2.5)}" width="14" height="14" rx="4" ` +
-                `fill="${palette.ramp[palette.ramp.length - 2]}" stroke="${UNSTAFFED_RING}" ` +
-                `stroke-width="1.5" />`,
+                `fill="${RING_KEY_FILL}" />`,
+            `<rect x="${ringX + 1.5}" y="${round(barY - 1)}" width="11" height="11" rx="3" ` +
+                `fill="none" stroke="${UNSTAFFED_RING}" stroke-width="1.6" />`,
             `<text x="${ringX + 22}" y="${round(barY + 8)}" fill="${SURFACE.textMuted}" ` +
-                `font-size="10.5" font-family="${FONT_STACK}">nobody on shift</text>`
+                `font-size="10.5" font-family="${FONT_STACK}">nobody on for most of the hour</text>`
         );
     }
 

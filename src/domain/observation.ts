@@ -103,10 +103,10 @@ export interface Observation {
     /** Mean messages per moderator on shift (`loadOf`). Zero unless judged. */
     load: number[][];
     /**
-     * Share of the cell's readings, 0 to 1, that were unstaffed hours
-     * (`isUnstaffedHour`). Zero unless judged.
+     * Mean share of each hour, 0 to 1, that nobody was on shift for
+     * (`uncoveredShare`). Zero unless judged.
      */
-    unstaffedShare: number[][];
+    uncovered: number[][];
     /**
      * Messages in the median hour anybody spoke in, which is what the load is
      * read against. Zero unless judged, or when nobody spoke at all.
@@ -117,26 +117,33 @@ export interface Observation {
 }
 
 /**
- * Below this many moderators on average an hour is unstaffed: nobody on for
- * more than half of it.
- */
-export const UNSTAFFED_BELOW = 0.5;
-
-/**
  * Messages per moderator on shift, never dividing by fewer than one. Dividing
  * by the moderators actually on read ninety seconds of shift as a fortieth of
  * a moderator, so a sliver of cover scored 20.2k, forty times worse than
  * nobody at all. Below one moderator the load is simply every message; what
- * the missing cover means is said by `isUnstaffedHour`, not by this number.
+ * the missing cover means is said by `uncoveredShare`, not by this number.
  */
 export function loadOf(messages: number, moderators: number): number {
     return messages / Math.max(1, moderators);
 }
 
-/** An hour somebody spoke in with nobody on for most of it. */
-export function isUnstaffedHour(messages: number, moderators: number): boolean {
-    return messages > 0 && moderators < UNSTAFFED_BELOW;
+/**
+ * How much of an hour nobody was on shift for, 0 to 1: the part of the first
+ * moderator the hour did not get. Zero for an hour nobody spoke in, which asks
+ * nothing of anybody.
+ */
+export function uncoveredShare(messages: number, moderators: number): number {
+    if (messages <= 0) return 0;
+    return Math.min(1, Math.max(0, 1 - moderators));
 }
+
+/**
+ * Past this share of the hour uncovered, the cell is ringed: nobody was on for
+ * most of it. The ring is a label, not the rule. The colour already follows the
+ * share continuously (`gapBand`), so being a minute either side of this moves
+ * the ring and never the colour.
+ */
+export const RING_ABOVE = 0.5;
 
 /**
  * Where the colour steps begin, as multiples of the typical hour's messages.
@@ -148,21 +155,24 @@ export function isUnstaffedHour(messages: number, moderators: number): boolean {
 export const LOAD_STEPS = [0.5, 0.75, 1.25, 2];
 
 /**
- * How far up the scale an unstaffed hour is pushed. Nobody on shift in the
- * quietest hour lands on the fourth of five steps, so an empty hour is never
- * drawn as fine, and a busier empty hour climbs to the top with its load.
+ * How far up the scale a wholly uncovered hour is pushed, in steps. Nobody on
+ * shift in the quietest hour lands on the fourth of five steps, so an empty
+ * hour is never drawn as fine, and a busier empty hour climbs to the top with
+ * its load. Part cover lifts in proportion: half an hour with nobody is half
+ * the lift. It used to be all or nothing at half an hour, so a minute of cover
+ * either side of that moved a cell from plain blue to red.
  */
-export const UNSTAFFED_LIFT = 3;
+export const UNCOVERED_LIFT = 3;
 
 /**
  * The colour step for a cell, 0 to 4, or -1 when nobody spoke. Pure, so the
  * chart and the list of worst hours read the same answer.
  */
-export function gapBand(load: number, unstaffed: boolean, typicalHour: number): number {
+export function gapBand(load: number, uncovered: number, typicalHour: number): number {
     if (load <= 0) return -1;
     const ratio = typicalHour > 0 ? load / typicalHour : 1;
     const band = LOAD_STEPS.filter((edge) => ratio >= edge).length;
-    return unstaffed ? Math.min(LOAD_STEPS.length, band + UNSTAFFED_LIFT) : band;
+    return Math.min(LOAD_STEPS.length, band + Math.round(UNCOVERED_LIFT * uncovered));
 }
 
 /**
@@ -192,7 +202,7 @@ export function observe(input: ObservationInput): Observation {
     const demandSum = emptyGrid();
     const coverageSum = emptyGrid();
     const loadSum = emptyGrid();
-    const unstaffedSum = emptyGrid();
+    const uncoveredSum = emptyGrid();
     const heard: { weekday: number; hour: number; messages: number; coverageMs: number }[] = [];
     let observedHours = 0;
 
@@ -213,7 +223,9 @@ export function observe(input: ObservationInput): Observation {
 
     // Judged hour by hour and then averaged, never from the averages: two
     // moderators one week and none the next averages to one on shift, which
-    // would read as staffed an hour that was empty half the time.
+    // would read as covered an hour that was empty half the time. Averaged
+    // this way, a cell empty three weeks in eight carries three eighths of
+    // the lift rather than none.
     const typicalHour = input.judgeLoad
         ? typicalHourOf(heard.map((reading) => reading.messages))
         : 0;
@@ -221,9 +233,10 @@ export function observe(input: ObservationInput): Observation {
         for (const reading of heard) {
             const moderators = reading.coverageMs / HOUR_MS;
             loadSum[reading.weekday][reading.hour] += loadOf(reading.messages, moderators);
-            if (isUnstaffedHour(reading.messages, moderators)) {
-                unstaffedSum[reading.weekday][reading.hour] += 1;
-            }
+            uncoveredSum[reading.weekday][reading.hour] += uncoveredShare(
+                reading.messages,
+                moderators
+            );
         }
     }
 
@@ -240,7 +253,7 @@ export function observe(input: ObservationInput): Observation {
         demand: mean(demandSum),
         coverage: mean(coverageSum, HOUR_MS),
         load: mean(loadSum),
-        unstaffedShare: mean(unstaffedSum),
+        uncovered: mean(uncoveredSum),
         typicalHour,
         observedHours
     };

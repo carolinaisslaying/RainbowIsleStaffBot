@@ -14,6 +14,7 @@ import {
     busiestCells,
     weekdayLabels,
     worstCells,
+    type GapCell,
     regionsInEveningDuring,
     type CoverageGrid
 } from "../services/coverageService.js";
@@ -49,6 +50,18 @@ function hourLabel(hour: number): string {
 
 function perHour(value: number): string {
     return value >= 10 ? String(Math.round(value)) : value.toFixed(1);
+}
+
+/** One of the worst hours, in words: its load, or that nobody was there. */
+function gapLine(cell: GapCell): string {
+    const messages = `${perHour(cell.demand)} messages an hour`;
+    if (cell.uncovered >= 0.99) return `${messages}, **nobody on shift**`;
+    const gapMinutes = Math.round(cell.uncovered * 60);
+    return (
+        `${messages} across ${cell.coverage.toFixed(1)} moderators: ` +
+        `**${perHour(cell.load)} each**` +
+        (gapMinutes >= 5 ? `, nobody on for ${gapMinutes} min of it` : "")
+    );
 }
 
 /**
@@ -391,11 +404,7 @@ export const coverageCommand: Command = {
                           );
                           return (
                               `${index + 1}. **${days[cell.weekday]} ${hourLabel(cell.hour)}** ` +
-                              (cell.unstaffed
-                                  ? `${perHour(cell.demand)} messages an hour, **nobody on shift**`
-                                  : `${perHour(cell.demand)} messages an hour across ` +
-                                    `${cell.coverage.toFixed(1)} moderators: ` +
-                                    `**${perHour(cell.load)} each**`) +
+                              gapLine(cell) +
                               "\n" +
                               (regions.length > 0
                                   ? "-# Evening in: " +
@@ -420,9 +429,10 @@ export const coverageCommand: Command = {
                         (grid.typicalHour > 0
                             ? `\n\n-# Colour reads each moderator's load against a typical hour ` +
                               `here, ${perHour(grid.typicalHour)} messages: one moderator through ` +
-                              "one is the middle of the scale, twice that is the top. An hour with " +
-                              "nobody on shift is ringed and lifted three steps, so it is never " +
-                              "drawn as fine however quiet it was."
+                              "one is the middle of the scale, twice that is the top. Time with " +
+                              "nobody on shift lifts an hour up to three steps, in proportion, so " +
+                              "an empty hour is never drawn as fine however quiet it was. Ringed " +
+                              "hours had nobody on for most of the hour."
                             : "") +
                         footnote(grid)
                 )

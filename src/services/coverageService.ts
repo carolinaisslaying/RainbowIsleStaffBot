@@ -14,6 +14,7 @@ import {
     minutesByUtcHour,
     gapBand,
     observe,
+    RING_ABOVE,
     spreadByHour
 } from "../domain/observation.js";
 import { HOUR_MS, WEEK_MS } from "../time/calendar.js";
@@ -41,7 +42,9 @@ export interface CoverageGrid {
     demand: number[][];
     /** Mean messages per moderator on shift. Zero off the coverage grid. */
     load: number[][];
-    /** Whether most of the cell's readings had nobody on shift. */
+    /** Mean share of each hour, 0 to 1, with nobody on shift. */
+    uncovered: number[][];
+    /** Whether nobody was on for most of the hour, which the chart rings. */
     unstaffed: boolean[][];
     /** The colour step, 0 to 4, or -1 for nothing to draw (`gapBand`). */
     severity: number[][];
@@ -64,6 +67,7 @@ export interface GapCell {
     coverage: number;
     demand: number;
     load: number;
+    uncovered: number;
     unstaffed: boolean;
     severity: number;
 }
@@ -118,9 +122,10 @@ async function buildGrid(
     // one moderator (`loadOf`), and an hour with nobody on is a state of its
     // own that lifts the colour rather than a number that pretends somebody
     // was there. The rules are in `domain/observation.ts`.
-    const unstaffed = observation.unstaffedShare.map((row) => row.map((share) => share >= 0.5));
+    const { uncovered } = observation;
+    const unstaffed = uncovered.map((row) => row.map((share) => share > RING_ABOVE));
     const severity = load.map((row, weekday) =>
-        row.map((value, hour) => gapBand(value, unstaffed[weekday][hour], typicalHour))
+        row.map((value, hour) => gapBand(value, uncovered[weekday][hour], typicalHour))
     );
     const maxDemand = Math.max(0, ...demand.flat());
 
@@ -128,6 +133,7 @@ async function buildGrid(
         coverage,
         demand,
         load,
+        uncovered,
         unstaffed,
         severity,
         typicalHour,
@@ -222,7 +228,8 @@ export async function buildMemberActivityGrid(
         coverage: observation.coverage,
         demand,
         load: observation.load,
-        unstaffed: observation.unstaffedShare.map((row) => row.map(() => false)),
+        uncovered: observation.uncovered.map((row) => row.map(() => 0)),
+        unstaffed: observation.uncovered.map((row) => row.map(() => false)),
         severity: observation.load.map((row) => row.map(() => -1)),
         typicalHour: 0,
         observed: observation.observed,
@@ -247,6 +254,7 @@ function cellsOf(grid: CoverageGrid): GapCell[] {
                 coverage: grid.coverage[weekday][hour],
                 demand: grid.demand[weekday][hour],
                 load: grid.load[weekday][hour],
+                uncovered: grid.uncovered[weekday][hour],
                 unstaffed: grid.unstaffed[weekday][hour],
                 severity: grid.severity[weekday][hour]
             });

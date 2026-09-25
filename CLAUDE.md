@@ -675,7 +675,9 @@ minutes rather than the 95th percentile, so the same figure is the same colour o
 lightness (`MAGNITUDE_RAMP`): more is brighter and nothing says good or bad. On the cool-to-hot ramp
 a member's busiest hour was red, which reads as a verdict on a card about one person, and a busy
 server hour is not a bad one. A one-hue ramp runs dark to light, so the cell figure's ink flips per
-band (`MAGNITUDE_INK`). `/coverage staff` alone measures a problem and keeps a warm ramp. Every
+band (`MAGNITUDE_INK`). `/coverage staff` alone measures a problem and keeps a multi-hue ramp, leaf through gold and amber
+to brick and burgundy (`GAP_RAMP`), stepped evenly in OKLCH lightness so the order survives
+greyscale; hours nobody was on for most of carry a dark inset ring rather than a white one. Every
 heatmap's legend gives zero its own grey swatch, because empty cells carry no figure.
 Its window starts at the first whole hour after `joinedTeamAt` when that is later than the
 lookback (`memberWindowStart`): the hour somebody joined partway through is dropped, as a leave's
@@ -684,11 +686,14 @@ part hours are, rather than counted as a quiet sample.
 **`/coverage staff` plots messages per moderator on shift, with two repairs.** It never divides
 by fewer than one moderator (`loadOf`, `domain/observation.ts`): ninety seconds of shift used to read
 as a fortieth of a moderator, so one cell scored 20.2k, took the top of a percentile scale alone and
-pushed every empty evening into the blue. And an hour with nobody on for most of it
-(`isUnstaffedHour`) is a state of its own, not a number: it used to divide by one, so an empty
-evening scored exactly what a staffed one would. Such a cell is ringed and lifted three steps
-(`gapBand`), so the quietest empty hour is orange and a busier one red: never drawn as fine, still in
-proportion. Steps are multiples of the window's median hour (`LOAD_STEPS`), so one moderator through
+pushed every empty evening into the blue. And time with nobody on shift is not a number
+but a lift: it used to divide by one, so an empty evening scored exactly what a staffed one would.
+Now the share of the hour nobody covered (`uncoveredShare`) lifts the cell up to three steps in
+proportion (`gapBand`), so the quietest wholly empty hour is on the fourth step and a busier one on
+the top: never drawn as fine, still in proportion to activity. It was briefly all or nothing at half
+an hour, which put a cliff in the scale: thirty minutes of cover read plain, twenty-nine read red.
+The ring (`RING_ABOVE`) is a label on top, for hours nobody was on for most of; the colour never
+depends on it. Steps are multiples of the window's median hour (`LOAD_STEPS`), so one moderator through
 a typical hour is the middle and nothing can hijack the scale. Each hour is judged before averaging,
 because averaging coverage first reads two moderators one week and none the next as staffed. The
 service decides each cell's step (`severity`) and the renderer only draws it, so the chart and the

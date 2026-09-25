@@ -405,7 +405,7 @@ describe("the load on each moderator", () => {
     it("divides by the moderators on shift", () => {
         const result = hours([1200], { coverageByHour: new Map([[from, 2 * HOUR]]) });
         expect(result.load[0][12]).toBe(600);
-        expect(result.unstaffedShare[0][12]).toBe(0);
+        expect(result.uncovered[0][12]).toBe(0);
     });
 
     it("never divides by a sliver of shift", () => {
@@ -413,17 +413,19 @@ describe("the load on each moderator", () => {
         // per moderator, forty times worse than the same hour left empty.
         const result = hours([504], { coverageByHour: new Map([[from, 90_000]]) });
         expect(result.load[0][12]).toBe(504);
-        expect(result.unstaffedShare[0][12]).toBe(1);
+        expect(result.uncovered[0][12]).toBeCloseTo(0.975, 5);
     });
 
-    it("marks an hour nobody was on for most of as unstaffed, and one covered for half as staffed", () => {
-        expect(hours([22]).unstaffedShare[0][12]).toBe(1);
+    it("measures how much of the hour nobody was on for, not whether anybody was", () => {
+        expect(hours([22]).uncovered[0][12]).toBe(1);
         const half = hours([22], { coverageByHour: new Map([[from, HOUR / 2]]) });
-        expect(half.unstaffedShare[0][12]).toBe(0);
+        expect(half.uncovered[0][12]).toBe(0.5);
+        const two = hours([22], { coverageByHour: new Map([[from, 2 * HOUR]]) });
+        expect(two.uncovered[0][12]).toBe(0);
     });
 
-    it("never calls an hour without messages unstaffed", () => {
-        expect(hours([0]).unstaffedShare[0][12]).toBe(0);
+    it("never calls an hour without messages uncovered", () => {
+        expect(hours([0]).uncovered[0][12]).toBe(0);
     });
 
     it("judges each hour before averaging, so a staffed week never hides an empty one", () => {
@@ -442,7 +444,7 @@ describe("the load on each moderator", () => {
         );
         // Averaged first, that is one moderator on and nobody missing.
         expect(result.coverage[0][12]).toBe(1);
-        expect(result.unstaffedShare[0][12]).toBe(0.5);
+        expect(result.uncovered[0][12]).toBe(0.5);
         expect(result.load[0][12]).toBe(75);
     });
 
@@ -457,28 +459,38 @@ describe("the colour step for a coverage cell", () => {
     const typical = 600;
 
     it("puts one moderator through a typical hour in the middle step", () => {
-        expect(gapBand(600, false, typical)).toBe(2);
+        expect(gapBand(600, 0, typical)).toBe(2);
     });
 
     it("climbs with the load, to the top at twice a typical hour", () => {
-        expect([100, 400, 600, 900, 1200].map((load) => gapBand(load, false, typical))).toEqual([
+        expect([100, 400, 600, 900, 1200].map((load) => gapBand(load, 0, typical))).toEqual([
             0, 1, 2, 3, 4
         ]);
     });
 
-    it("never draws an unstaffed hour below the fourth step, however quiet", () => {
+    it("never draws a wholly uncovered hour below the fourth step, however quiet", () => {
         // Messages divided by coverage used to read nobody as one moderator,
         // so an empty quiet evening was the coolest colour on the grid.
-        expect(gapBand(22, true, typical)).toBe(3);
-        expect(gapBand(22, false, typical)).toBe(0);
+        expect(gapBand(22, 1, typical)).toBe(3);
+        expect(gapBand(22, 0, typical)).toBe(0);
     });
 
-    it("still ranks a busier unstaffed hour above a quiet one", () => {
-        expect(gapBand(400, true, typical)).toBe(4);
-        expect(gapBand(22, true, typical)).toBeLessThan(gapBand(400, true, typical));
+    it("lifts in proportion to the time nobody was on, so there is no cliff at half an hour", () => {
+        // All or nothing at half an hour moved a cell from plain blue to red
+        // for a minute of cover either side.
+        const lifts = [0, 0.1, 0.3, 0.49, 0.51, 0.7, 1].map((share) => gapBand(22, share, typical));
+        expect(lifts).toEqual([0, 0, 1, 1, 2, 2, 3]);
+        for (let index = 1; index < lifts.length; index += 1) {
+            expect(lifts[index] - lifts[index - 1]).toBeLessThanOrEqual(1);
+        }
+    });
+
+    it("still ranks a busier uncovered hour above a quiet one", () => {
+        expect(gapBand(400, 1, typical)).toBe(4);
+        expect(gapBand(22, 1, typical)).toBeLessThan(gapBand(400, 1, typical));
     });
 
     it("has nothing to draw for an hour nobody spoke in", () => {
-        expect(gapBand(0, true, typical)).toBe(-1);
+        expect(gapBand(0, 1, typical)).toBe(-1);
     });
 });
