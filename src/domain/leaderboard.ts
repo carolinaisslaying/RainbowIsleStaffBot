@@ -21,6 +21,8 @@
  * A claim and its own caveat cannot live in two files.
  */
 
+import { EMOJI } from "../render/emoji.js";
+
 export interface LeaderboardAudience {
     /** Lead or Executive: sees hidden members, flagged. */
     privileged: boolean;
@@ -54,8 +56,8 @@ export function leaderboardVisibility(audience: LeaderboardAudience): Leaderboar
             ephemeral: true,
             note:
                 `Only you can see this. It shows ${moderators(audience.hiddenCount)} who have ` +
-                "hidden themselves, marked as hidden, and your own row, which is hidden from " +
-                "other Moderators. Do not screenshot it into a shared channel."
+                `hidden themselves, marked ${EMOJI.hidden}, and your own row, which is hidden ` +
+                "from other Moderators. Do not screenshot it into a shared channel."
         };
     }
 
@@ -64,9 +66,9 @@ export function leaderboardVisibility(audience: LeaderboardAudience): Leaderboar
             ephemeral: true,
             note:
                 "Only you can see this, because you are Lead or Executive and it shows " +
-                `${moderators(audience.hiddenCount)} who have hidden themselves, marked as ` +
-                "hidden. Other Moderators posting the leaderboard do not see those rows. Do " +
-                "not screenshot it into a shared channel."
+                `${moderators(audience.hiddenCount)} who have hidden themselves, marked ` +
+                `${EMOJI.hidden}. Other Moderators posting the leaderboard do not see those ` +
+                "rows. Do not screenshot it into a shared channel."
         };
     }
 
@@ -79,7 +81,8 @@ export function leaderboardVisibility(audience: LeaderboardAudience): Leaderboar
             ephemeral: true,
             note:
                 "Only you can see this, because you have hidden yourself from the leaderboard " +
-                "and your own row is on it. Everyone else's copy leaves you out." +
+                `and your own row is on it, marked ${EMOJI.hidden}. Everyone else's copy ` +
+                "leaves you out." +
                 (others > 0
                     ? ` ${moderators(others)} have also hidden themselves and are not on ` +
                       "your copy either."
@@ -136,4 +139,50 @@ export function leaderboardRowVisible(options: {
     if (!options.optedOut) return true;
     if (options.publicView) return false;
     return options.privileged || options.isViewer;
+}
+
+export interface StandingInput<T> {
+    member: T;
+    minutes: number;
+    onLeave: boolean;
+    optedOut: boolean;
+}
+
+export interface Standing<T> {
+    rank: number;
+    member: T;
+    minutes: number;
+    onLeave: boolean;
+}
+
+/**
+ * A closed week's standings as the room may see them: hidden members left out,
+ * most minutes first, ranked 1..n over what remains. This is the copy the
+ * leaderboard log posts, and it goes into a channel, so it is always the public
+ * view — there is no reader to make an exception for.
+ *
+ * `hiddenCount` comes back with the rows so the log card can say how many were
+ * left out through `leaderboardVisibility`, rather than counting them again.
+ */
+export function publicStandings<T>(inputs: StandingInput<T>[]): {
+    rows: Standing<T>[];
+    hiddenCount: number;
+} {
+    const listed = inputs.filter((input) =>
+        leaderboardRowVisible({
+            optedOut: input.optedOut,
+            isViewer: false,
+            privileged: false,
+            publicView: true
+        })
+    );
+    const rows = [...listed]
+        .sort((left, right) => right.minutes - left.minutes)
+        .map((input, index) => ({
+            rank: index + 1,
+            member: input.member,
+            minutes: input.minutes,
+            onLeave: input.onLeave
+        }));
+    return { rows, hiddenCount: inputs.length - listed.length };
 }

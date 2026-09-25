@@ -610,6 +610,21 @@ member's rollup is checked before theirs. A send that then fails is logged loudl
 retried, because retrying is how a week gets posted twice. `/admin recap` rehearses either: `team: true` for the channel
 posting, otherwise one member's DM. Neither claims a receipt, so the real ones still go out.
 
+**The leaderboard log is the closed week, frozen.** `services/leaderboardLogService.ts` posts
+each closed week's standings to `leaderboardLogChannelId` once, beside the team recap and on the
+same rules: read from that week's rollups rather than counted live, built before its receipt
+(`claimLeaderboardLog`), spent without posting on a cold start, a failed send logged rather than
+retried. It is always the public view — `publicStandings` (`domain/leaderboard.ts`) drops hidden
+members and returns how many, and the footnote comes from `leaderboardVisibility` like every other
+copy. Every row is on one card with no buttons: `leaderboardCard` splits rows into text displays of
+25 to stay under the 4000 character limit, and a single page draws no paging row. Sent with
+`allowedMentions: { parse: [] }`, because a name that cannot be fetched falls back to a mention.
+
+**A hidden row carries 🔒 (`EMOJI.hidden`) wherever it is drawn**: a Lead's copy, and the member's
+own row on theirs, `(you)` included. It replaced the word "(hidden)". A padlock rather than an eye,
+because an eye beside a name reads as "visible". A public copy never admits a hidden row, so it
+never shows one.
+
 **Review charts.** `render/trend.ts` draws two, both pure string functions like the others.
 `trendSvg` plots a member's last six fortnights as bars against a dashed requirement line, because
 "0 of 240" reads identically whether somebody has always been at zero or fell off a cliff, and those

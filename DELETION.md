@@ -225,6 +225,15 @@ naming a leave, warning or assessment by its record id, and where the reply
 sits. No user ID. A ping left pointing at a deleted record is harmless; its
 reply stays in the channel until somebody deletes it by hand.
 
+## Posted weekly cards are not in the database
+
+The leaderboard log (`leaderboardLogChannelId`) posts each closed week's
+standings, by display name, and the team recap (`recapChannelId`) can name the
+member with the longest run of weeks. Neither message is recorded anywhere the
+bot can find again, so a purge leaves them in place. If a request covers them,
+edit or delete those messages in Discord by hand. Clearing the member's
+`deliveries` does not re-post a week: those receipts are keyed by week alone.
+
 ## Verification
 
 ```javascript

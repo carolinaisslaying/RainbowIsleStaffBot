@@ -45,6 +45,11 @@ export async function claimTeamRecap(weekStart: Date): Promise<boolean> {
     return claim(`team-recap:${weekStart.getTime()}`);
 }
 
+/** The closed week's leaderboard, logged once. */
+export async function claimLeaderboardLog(weekStart: Date): Promise<boolean> {
+    return claim(`leaderboard-log:${weekStart.getTime()}`);
+}
+
 /** Claim a one-shot delivery. Returns false if it has already been sent. */
 async function claim(key: string): Promise<boolean> {
     try {

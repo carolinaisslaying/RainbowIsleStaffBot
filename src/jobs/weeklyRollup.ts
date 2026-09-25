@@ -8,8 +8,13 @@ import {
 } from "../domain/weekly.js";
 import { assessFortnight, backfillPlan, closingFortnightIndex } from "../domain/assessments.js";
 import { runFortnightAssessment } from "../services/assessmentService.js";
-import { claimFortnightAnnouncement, claimTeamRecap } from "../services/notifications.js";
+import {
+    claimFortnightAnnouncement,
+    claimLeaderboardLog,
+    claimTeamRecap
+} from "../services/notifications.js";
 import { postTeamRecap } from "../services/teamRecapService.js";
+import { postLeaderboardLog } from "../services/leaderboardLogService.js";
 import { log } from "../log.js";
 
 /**
@@ -36,6 +41,16 @@ export async function closeWeek(
     } catch (error) {
         // A recap nobody could post must not stop the assessment that follows.
         log.error("Team recap failed to post", error);
+    }
+
+    // The week's final standings, kept in their own channel, on the same
+    // receipt rule.
+    try {
+        if (await postLeaderboardLog(client, config, closing)) {
+            log.info("Posted the leaderboard log for the closed week.");
+        }
+    } catch (error) {
+        log.error("Leaderboard log failed to post", error);
     }
 
     const fortnightIndex = closingFortnightIndex(closing, config);
@@ -81,17 +96,23 @@ export async function catchUpMissedWeeks(
         // nobody anything.
         await rebuildWeekForAll(window, config, at);
 
-        // The team recap follows the same rule as the fortnight announcement:
-        // a first boot spends the receipt without posting, so a fresh
-        // deployment does not fill the recap channel with eight weeks of
-        // history that closed before it existed.
+        // The team recap and the leaderboard log follow the same rule as the
+        // fortnight announcement: a first boot spends the receipt without
+        // posting, so a fresh deployment does not fill either channel with
+        // eight weeks of history that closed before it existed.
         if (coldStart) {
             await claimTeamRecap(window.start);
+            await claimLeaderboardLog(window.start);
         } else {
             try {
                 await postTeamRecap(client, config, window);
             } catch (error) {
                 log.error("Team recap failed to post during catch-up", error);
+            }
+            try {
+                await postLeaderboardLog(client, config, window);
+            } catch (error) {
+                log.error("Leaderboard log failed to post during catch-up", error);
             }
         }
 

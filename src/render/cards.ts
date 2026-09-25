@@ -269,7 +269,10 @@ export interface LeaderboardRowView {
     state: RingState;
     isViewer: boolean;
     onLeave: boolean;
-    /** Opted out of public listing. Only a privileged viewer ever sees this row. */
+    /**
+     * Opted out of public listing, and drawn with the padlock. Only a Lead or
+     * Executive, or the member themselves, ever sees such a row.
+     */
     hidden?: boolean;
 }
 
@@ -298,8 +301,9 @@ export function leaderboardCard(options: LeaderboardCardOptions): RenderedMessag
         const trailing = row.onLeave
             ? "on leave"
             : `${row.activityMinutes} min, ${percent(row.activityMinutes, row.target)}%`;
-        const suffix = row.isViewer ? " (you)" : row.hidden ? " (hidden)" : "";
-        return `${row.rank}. **${row.label}**${suffix} ${trailing}`;
+        const marker = row.hidden ? ` ${EMOJI.hidden}` : "";
+        const suffix = row.isViewer ? " (you)" : "";
+        return `${row.rank}. **${row.label}**${marker}${suffix} ${trailing}`;
     };
 
     const container = new ContainerBuilder()
@@ -318,7 +322,14 @@ export function leaderboardCard(options: LeaderboardCardOptions): RenderedMessag
             text("_Nobody has recorded activity minutes in this window yet._")
         );
     } else {
-        container.addTextDisplayComponents(text(options.rows.map(renderRow).join("\n")));
+        // In blocks of 25, because a text display holds 4000 characters and the
+        // leaderboard log puts every row on one card. A block opening at "26."
+        // carries on the numbering, so the split does not show.
+        for (let start = 0; start < options.rows.length; start += 25) {
+            container.addTextDisplayComponents(
+                text(options.rows.slice(start, start + 25).map(renderRow).join("\n"))
+            );
+        }
     }
 
     // The viewer's own row is pinned at the bottom regardless of position, with

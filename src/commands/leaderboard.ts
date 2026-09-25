@@ -184,7 +184,10 @@ export async function renderLeaderboard(
             }),
             isViewer: entry.staff._id.equals(viewer._id),
             onLeave: entry.onLeave,
-            hidden: privileged && entry.staff.leaderboardOptOut
+            // Every hidden row that reaches a copy carries the padlock: a Lead's
+            // copy, and the member's own row on theirs. A public copy never
+            // admits one, so this is false there whatever the flag says.
+            hidden: !publicView && entry.staff.leaderboardOptOut
         };
     };
 

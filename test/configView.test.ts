@@ -209,6 +209,73 @@ describe("leaderboard rows stay a valid ordered list", () => {
         const json = JSON.stringify(card.components[0].toJSON());
         expect(json).toContain("17. ");
     });
+
+    const bodyOf = (card: { components: { toJSON(): unknown }[] }) =>
+        [...JSON.stringify(card.components[0].toJSON()).matchAll(/"content":"((?:[^"\\]|\\.)*)"/g)]
+            .map((match) => JSON.parse(`"${match[1]}"`) as string)
+            .join("\n");
+
+    it("marks a hidden row with the padlock, beside the name and before (you)", async () => {
+        const { leaderboardCard } = await import("../src/render/cards.js");
+        const row = (rank: number, extra: { hidden?: boolean; isViewer?: boolean }) => ({
+            rank,
+            label: `Member ${rank}`,
+            activityMinutes: 60,
+            target: 120,
+            state: "red" as const,
+            isViewer: false,
+            onLeave: false,
+            ...extra
+        });
+        const body = bodyOf(
+            leaderboardCard({
+                title: "t",
+                windowLabel: "w",
+                rows: [row(1, { hidden: true }), row(2, {})],
+                viewerRow: row(1, { hidden: true, isViewer: true }),
+                page: 1,
+                pageCount: 1,
+                scope: "week",
+                totalMinutes: 120,
+                participants: 2
+            })
+        );
+        expect(body).toContain("1. **Member 1** 🔒 60 min");
+        expect(body).toContain("2. **Member 2** 60 min");
+        expect(body).toContain("1. **Member 1** 🔒 (you) 60 min");
+        expect(body).not.toContain("(hidden)");
+    });
+
+    it("puts every row of a long log on one card, numbered straight through", async () => {
+        const { leaderboardCard } = await import("../src/render/cards.js");
+        const rows = Array.from({ length: 60 }, (_, index) => ({
+            rank: index + 1,
+            label: `Member ${index + 1}`,
+            activityMinutes: 600 - index,
+            target: 120,
+            state: "green" as const,
+            isViewer: false,
+            onLeave: false
+        }));
+        const card = leaderboardCard({
+            title: "t",
+            windowLabel: "w",
+            rows,
+            viewerRow: null,
+            page: 1,
+            pageCount: 1,
+            scope: "log",
+            totalMinutes: 0,
+            participants: 60
+        });
+        const body = bodyOf(card);
+        const numbered = body.split("\n").filter((line) => /^\d+\. /.test(line));
+        expect(numbered.map((line) => Number(line.split(".")[0]))).toEqual(
+            rows.map((row) => row.rank)
+        );
+        // No paging buttons on a single-page card, so the log carries none.
+        expect(JSON.stringify(card.components[0].toJSON())).not.toContain("leaderboard:");
+    });
 });
 
 describe("shipped defaults", () => {

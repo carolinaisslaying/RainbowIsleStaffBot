@@ -30,6 +30,7 @@ import {
 } from "../render/cards.js";
 import { FACES } from "../render/faces.js";
 import { COLOUR } from "../render/theme.js";
+import { EMOJI } from "../render/emoji.js";
 import { defer, respond } from "../discord/respond.js";
 import { cmd } from "../discord/commandMentions.js";
 
@@ -123,7 +124,7 @@ export const settingsCommand: Command = {
                 (hide
                     ? `Your row is gone from ${leaderboard} for ` +
                       "other Moderators. You still see your own position there, and Leads " +
-                      "and Executives still see you, marked as hidden.\n\nWhile anyone " +
+                      `and Executives still see you, marked ${EMOJI.hidden}.\n\nWhile anyone ` +
                       "is hidden, your copy of the leaderboard and theirs arrive privately, " +
                       "where only the reader can see them."
                     : `Your row is back on ${leaderboard} for ` +

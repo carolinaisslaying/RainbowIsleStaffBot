@@ -50,6 +50,12 @@ export const EMOJI = {
     /** Something recomputed rather than decided. */
     recompute: "🔄",
     /**
+     * A member hidden from the leaderboard, beside their row on the copies that
+     * may still show it. A padlock rather than an eye: an eye next to a name
+     * reads as "visible", which is the opposite of what it marks.
+     */
+    hidden: "🔒",
+    /**
      * Something needs attention: an undelivered DM, a setting worth a second
      * look, a leave that exempts nothing. Not the warning sign, which is the Caution rung's
      * mark alone, so a Caution card carrying one of these never reads as two

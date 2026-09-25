@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { leaderboardRowVisible } from "../src/domain/leaderboard.js";
+import { leaderboardRowVisible, publicStandings } from "../src/domain/leaderboard.js";
 
 /**
  * Which rows reach which copy of the leaderboard.
@@ -60,5 +60,38 @@ describe("whether a leaderboard row is drawn", () => {
                 publicView: true
             })
         ).toBe(false);
+    });
+});
+
+describe("a closed week's standings, as the log posts them", () => {
+    const input = (name: string, minutes: number, optedOut = false, onLeave = false) => ({
+        member: name,
+        minutes,
+        onLeave,
+        optedOut
+    });
+
+    it("leaves hidden members out, counts them, and ranks the rest straight through", () => {
+        const { rows, hiddenCount } = publicStandings([
+            input("low", 30),
+            input("hidden top", 900, true),
+            input("high", 300),
+            input("hidden low", 5, true),
+            input("mid", 120)
+        ]);
+        expect(hiddenCount).toBe(2);
+        expect(rows.map((row) => [row.rank, row.member])).toEqual([
+            [1, "high"],
+            [2, "mid"],
+            [3, "low"]
+        ]);
+    });
+
+    it("keeps members on leave, flagged, in their place by minutes", () => {
+        const { rows } = publicStandings([input("away", 0, false, true), input("here", 40)]);
+        expect(rows.map((row) => [row.member, row.onLeave])).toEqual([
+            ["here", false],
+            ["away", true]
+        ]);
     });
 });

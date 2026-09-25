@@ -24,6 +24,7 @@ export interface StaffBotConfig {
     leaveChannelId: string;
     reportChannelId: string;
     recapChannelId: string;
+    leaderboardLogChannelId: string;
     warningChannelId: string;
 
     accountingTimezone: string;
@@ -172,6 +173,14 @@ export const CONFIG_KEYS: Record<keyof StaffBotConfig, KeySpec> = {
         importance: "optional",
         group: "channels",
         consequence: "No team summary is posted; members still get their own by DM"
+    },
+    leaderboardLogChannelId: {
+        kind: "string",
+        description: "Each closed week's leaderboard, kept as a record",
+        target: "channel",
+        importance: "optional",
+        group: "channels",
+        consequence: "Closed weeks' standings are not kept anywhere"
     },
     warningChannelId: {
         kind: "string",
@@ -369,6 +378,7 @@ export const DEFAULT_CONFIG: StaffBotConfig = {
     leaveChannelId: "",
     reportChannelId: "",
     recapChannelId: "",
+    leaderboardLogChannelId: "",
     warningChannelId: "",
     accountingTimezone: "UTC",
     weekStartDay: 1,
