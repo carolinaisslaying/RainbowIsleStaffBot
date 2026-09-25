@@ -685,16 +685,18 @@ nothing and lose the unflushed counts on every crash.
 drop out of both sides of the average exactly as an unheard hour does. And the scale is fixed at 60
 minutes rather than the 95th percentile, so the same figure is the same colour on everybody's card.
 
-**Colour says how much, except where the reading is a problem.** `/coverage member` and
-`/coverage server` measure how much, so they take one hue, the trend charts' teal stepped in
-lightness (`MAGNITUDE_RAMP`): more is brighter and nothing says good or bad. On the cool-to-hot ramp
-a member's busiest hour was red, which reads as a verdict on a card about one person, and a busy
-server hour is not a bad one. A one-hue ramp runs dark to light, so the cell figure's ink flips per
-band (`MAGNITUDE_INK`). `/coverage staff` alone measures a problem and keeps a multi-hue ramp, leaf through gold and amber
-to brick and burgundy (`GAP_RAMP`), stepped evenly in OKLCH lightness so the order survives
-greyscale; hours nobody was on for most of carry a dark inset ring rather than a white one. Every
+**All three heatmaps share one ramp; the direction says which end is good.** `/coverage staff`
+measures a problem, so it runs leaf through gold and amber to brick and burgundy (`GAP_RAMP`): more
+load is worse. `/coverage server` and `/coverage member` measure something where more is better, so
+they run the same five colours backwards (`ACTIVITY_RAMP`): a quiet hour is burgundy, a busy one
+leaf. One colour language across the three cards, so green is the good end wherever it appears. The
+ramp is stepped evenly in OKLCH lightness so the order survives greyscale, and each ink array
+(`GAP_INK`, `ACTIVITY_INK`) is reversed with its ramp, so light figures sit on burgundy and brick
+and dark ones on the light steps. They used to take a one-hue teal ramp that said nothing about good
+or bad; that was replaced on request, and a member's quietest hour now deliberately reads as the bad
+end. Hours nobody was on for most of carry a dark inset ring rather than a white one. Every
 heatmap's legend gives zero its own grey swatch, because empty cells carry no figure.
-Its window starts at the first whole hour after `joinedTeamAt` when that is later than the
+On `/coverage member`, its window starts at the first whole hour after `joinedTeamAt` when that is later than the
 lookback (`memberWindowStart`): the hour somebody joined partway through is dropped, as a leave's
 part hours are, rather than counted as a quiet sample.
 

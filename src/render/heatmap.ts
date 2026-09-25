@@ -48,9 +48,10 @@ const WIDTH = LEFT_GUTTER + GRID_HOURS * CELL + PAD;
 const HEIGHT = TOP_GUTTER + GRID_DAYS * CELL + LEGEND_HEIGHT;
 
 /**
- * Leaf to burgundy, for the coverage gap: the one heatmap whose reading is a
- * problem, so a light load reading green and a heavy one burgundy is the
- * point. Never relied on alone: every cell prints its figure.
+ * Leaf to burgundy, for the coverage gap, where more is worse: a light load
+ * reads green and a heavy one burgundy. The other two heatmaps run the same
+ * ramp backwards (`ACTIVITY_RAMP`). Never relied on alone: every cell prints
+ * its figure.
  *
  * Built in OKLCH: lightness falls in even steps (0.83 to 0.46) while the hue
  * turns from leaf through gold and amber to brick and burgundy, so the order
@@ -78,25 +79,21 @@ const CELL_INK = "rgba(0,0,0,0.82)";
 const GAP_INK = [CELL_INK, CELL_INK, CELL_INK, "#ffffff", "#ffffff"];
 
 /**
- * For readings of how much rather than how bad: a member's minutes and the
- * server's messages. One hue, dim to bright, never a status ramp like the
- * coverage gap's. On one of those the busiest hour was red: the colour this
- * bot uses for something having gone wrong, on a card about one person, and on
- * a server chart where busy is not bad. The review charts' teal
- * (`render/trend.ts`) stepped in OKLCH lightness at a fixed hue, so more is
- * brighter and nothing says good or bad.
+ * For readings where more is better: a member's minutes and the server's
+ * messages. The coverage gap's own ramp, run the other way, so all three
+ * heatmaps speak one colour language: leaf is the good end and burgundy the
+ * bad one on every card, and a Moderator reading them side by side never has
+ * to remember which chart's green means what. A busy hour is leaf; a quiet one
+ * burgundy. The ink turns with it, index for index.
  *
- * Validated as an ordinal ramp against the panel ground: lightness rises
- * monotonically, and the dimmest step clears the panel at 2.2:1.
+ * This replaced a one-hue teal ramp that said nothing about good or bad. The
+ * trade is deliberate: a member's quietest hour now reads as the bad end of a
+ * scale, and that is the reading these cards are meant to give. Still never
+ * relied on alone: every cell prints its figure, and lightness steps evenly
+ * so the order survives greyscale.
  */
-const MAGNITUDE_RAMP = ["#035160", "#0b758a", "#169cb7", "#4ec2de", "#8fe7fe"];
-
-/**
- * A one-hue ramp spans dark to light, so a single ink cannot read on all of it
- * the way it does on the ramp above. Light ink on the two dim steps (8.9:1 and
- * 5.4:1), dark on the three bright ones (6.5:1 and up).
- */
-const MAGNITUDE_INK = ["#ffffff", "#ffffff", CELL_INK, CELL_INK, CELL_INK];
+const ACTIVITY_RAMP = [...GAP_RAMP].reverse();
+const ACTIVITY_INK = [...GAP_INK].reverse();
 
 interface Palette {
     ramp: readonly string[];
@@ -105,12 +102,12 @@ interface Palette {
 }
 
 const HEAT: Palette = { ramp: GAP_RAMP, ink: GAP_INK };
-const MAGNITUDE: Palette = { ramp: MAGNITUDE_RAMP, ink: MAGNITUDE_INK };
+const ACTIVITY: Palette = { ramp: ACTIVITY_RAMP, ink: ACTIVITY_INK };
 
 const PALETTE: Record<HeatmapKind, Palette> = {
     coverage: HEAT,
-    activity: MAGNITUDE,
-    member: MAGNITUDE
+    activity: ACTIVITY,
+    member: ACTIVITY
 };
 
 /**

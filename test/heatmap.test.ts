@@ -230,7 +230,7 @@ describe("the member reading", () => {
         const filled = [...svg.matchAll(/height="27" rx="7" fill="(#[0-9a-f]{6})"/g)].map(
             (match) => match[1]
         );
-        expect(filled).toEqual(["#035160"]);
+        expect(filled).toEqual(["#9a273a"]);
     });
 
     it("labels itself in minutes out of sixty", () => {
@@ -239,18 +239,15 @@ describe("the member reading", () => {
         expect(svg).toContain("1 to 60 minutes");
     });
 
-    it("is one hue, dim to bright, and never the status colours the server cards use", () => {
+    it("runs the coverage gap's ramp backwards, burgundy for quiet to leaf for busy", () => {
         const svg = heatmapSvg(memberBanded(), "member");
         const filled = [...svg.matchAll(/height="27" rx="7" fill="(#[0-9a-f]{6})"/g)].map(
             (match) => match[1]
         );
-        expect(filled).toEqual(["#035160", "#0b758a", "#169cb7", "#4ec2de", "#8fe7fe"]);
-        for (const status of ["#86df9a", "#d0a83e", "#d27c02", "#c14b24", "#9a273a"]) {
-            expect(svg).not.toContain(status);
-        }
+        expect(filled).toEqual(["#9a273a", "#c14b24", "#d27c02", "#d0a83e", "#86df9a"]);
     });
 
-    it("prints light figures on the dim steps and dark ones on the bright", () => {
+    it("prints light figures on burgundy and brick and dark ones on the light steps", () => {
         const svg = heatmapSvg(memberBanded(), "member");
         const inks = [...svg.matchAll(/fill="([^"]+)" font-size="9.5"/g)].map((match) => match[1]);
         expect(inks).toEqual([
@@ -303,16 +300,14 @@ describe("a member's card with nothing to plot", () => {
 });
 
 describe("the server activity reading's colours", () => {
-    it("is the same one-hue ramp as a member's, not the coverage gap's", () => {
-        const input = memberBanded();
-        const svg = heatmapSvg(input, "activity");
+    it("is the same reversed ramp as a member's, busiest hours leaf", () => {
+        const svg = heatmapSvg(memberBanded(), "activity");
         const filled = [...svg.matchAll(/height="27" rx="7" fill="(#[0-9a-f]{6})"/g)].map(
             (match) => match[1]
         );
-        expect(new Set(filled)).toEqual(
-            new Set(["#035160", "#0b758a", "#169cb7", "#4ec2de", "#8fe7fe"])
-        );
-        expect(svg).not.toContain("#9a273a");
+        expect(new Set(filled)).toEqual(new Set(["#9a273a", "#c14b24", "#d27c02", "#d0a83e", "#86df9a"]));
+        // Scaled to its own 95th percentile, so the busiest cell is the top step.
+        expect(filled[filled.length - 1]).toBe("#86df9a");
     });
 
     it("leaves the coverage gap on its leaf-to-burgundy ramp", () => {
