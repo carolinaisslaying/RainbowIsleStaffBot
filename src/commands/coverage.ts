@@ -14,12 +14,12 @@ import {
     busiestCells,
     weekdayLabels,
     worstCells,
-    type GapCell,
     regionsInEveningDuring,
     type CoverageGrid
 } from "../services/coverageService.js";
 import { busiestRun, dailyProfile, quietestHour } from "../domain/observation.js";
 import {
+    gapLine,
     leaveHoursNote,
     memberEmptyNote,
     reliabilityNote,
@@ -52,17 +52,6 @@ function perHour(value: number): string {
     return value >= 10 ? String(Math.round(value)) : value.toFixed(1);
 }
 
-/** One of the worst hours, in words: its load, or that nobody was there. */
-function gapLine(cell: GapCell): string {
-    const messages = `${perHour(cell.demand)} messages an hour`;
-    if (cell.uncovered >= 0.99) return `${messages}, **nobody on shift**`;
-    const gapMinutes = Math.round(cell.uncovered * 60);
-    return (
-        `${messages} across ${cell.coverage.toFixed(1)} moderators: ` +
-        `**${perHour(cell.load)} each**` +
-        (gapMinutes >= 5 ? `, nobody on for ${gapMinutes} min of it` : "")
-    );
-}
 
 /**
  * Zone, how much data, and the dates the window spans, whenever it spans any.
@@ -429,7 +418,7 @@ export const coverageCommand: Command = {
                         (grid.typicalHour > 0
                             ? `\n\n-# Colour reads each moderator's load against a typical hour ` +
                               `here, ${perHour(grid.typicalHour)} messages: one moderator through ` +
-                              "one is the middle of the scale, twice that is the top. Time with " +
+                              "one reads gold, and burgundy is more than twice that. Time with " +
                               "nobody on shift lifts an hour up to three steps, in proportion, so " +
                               "an empty hour is never drawn as fine however quiet it was. Ringed " +
                               "hours had nobody on for most of the hour."

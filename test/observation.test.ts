@@ -458,13 +458,15 @@ describe("the load on each moderator", () => {
 describe("the colour step for a coverage cell", () => {
     const typical = 600;
 
-    it("puts one moderator through a typical hour in the middle step", () => {
-        expect(gapBand(600, 0, typical)).toBe(2);
+    it("reads one moderator through a typical hour as gold, not amber", () => {
+        // In the middle step, an ordinary staffed hour read as an early
+        // warning on every card.
+        expect(gapBand(600, 0, typical)).toBe(1);
     });
 
-    it("climbs with the load, to the top at twice a typical hour", () => {
-        expect([100, 400, 600, 900, 1200].map((load) => gapBand(load, 0, typical))).toEqual([
-            0, 1, 2, 3, 4
+    it("climbs with the load: amber past 1.1 typical hours, brick at 1.6, burgundy at 2.2", () => {
+        expect([300, 500, 600, 700, 1000, 1400].map((load) => gapBand(load, 0, typical))).toEqual([
+            0, 1, 1, 2, 3, 4
         ]);
     });
 

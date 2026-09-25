@@ -694,7 +694,8 @@ the top: never drawn as fine, still in proportion to activity. It was briefly al
 an hour, which put a cliff in the scale: thirty minutes of cover read plain, twenty-nine read red.
 The ring (`RING_ABOVE`) is a label on top, for hours nobody was on for most of; the colour never
 depends on it. Steps are multiples of the window's median hour (`LOAD_STEPS`), so one moderator through
-a typical hour is the middle and nothing can hijack the scale. Each hour is judged before averaging,
+a typical hour reads gold, amber starts at 1.1 typical hours, and nothing can hijack the scale. A
+typical hour used to be the middle step, amber, so ordinary staffed hours read as early warnings. Each hour is judged before averaging,
 because averaging coverage first reads two moderators one week and none the next as staffed. The
 service decides each cell's step (`severity`) and the renderer only draws it, so the chart and the
 worst-hours list cannot disagree. This replaced a "moderators short" chart for a day: its numbers were

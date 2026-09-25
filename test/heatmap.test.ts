@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+    gapLine,
     heatmapSvg,
     memberEmptyNote,
     reliabilityNote,
@@ -343,5 +344,43 @@ describe("the colour scale", () => {
     it("is the largest reading when there are too few to trim", () => {
         expect(scaleTop([1, 2, 3])).toBe(3);
         expect(scaleTop([0, 0])).toBe(0);
+    });
+});
+
+describe("one of the worst hours, in words", () => {
+    const cell = (demand: number, coverage: number, uncovered: number) => ({
+        weekday: 0,
+        hour: 0,
+        demand,
+        coverage,
+        load: demand / Math.max(1, coverage),
+        uncovered,
+        unstaffed: uncovered > 0.5,
+        severity: 4
+    });
+
+    it("says nobody was on shift for an hour nobody covered", () => {
+        expect(gapLine(cell(581, 0, 1))).toBe("581 messages an hour, **nobody on shift**");
+    });
+
+    it("never divides by a fraction of a moderator, even in words", () => {
+        // "504 messages an hour across 0.0 moderators: 504 each" was on the
+        // card for an hour with ninety seconds of cover.
+        const line = gapLine(cell(504, 0.025, 0.975));
+        expect(line).toBe("504 messages an hour, **nobody on for 59 min** of it");
+        expect(line).not.toContain("moderators");
+        expect(line).not.toContain("each");
+    });
+
+    it("gives the share each moderator carried once there was at least one", () => {
+        expect(gapLine(cell(1173, 1.11, 0))).toBe(
+            "1173 messages an hour across 1.1 moderators: **1057 each**"
+        );
+    });
+
+    it("counts at least a minute for a gap that rounds to nothing", () => {
+        expect(gapLine(cell(300, 0.995, 0.005))).toBe(
+            "300 messages an hour, **nobody on for 1 min** of it"
+        );
     });
 });

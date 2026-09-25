@@ -7,7 +7,8 @@ import {
     GRID_DAYS,
     GRID_HOURS,
     weekdayLabels,
-    type CoverageGrid
+    type CoverageGrid,
+    type GapCell
 } from "../services/coverageService.js";
 
 /**
@@ -354,6 +355,29 @@ export function heatmapSvg(grid: CoverageGrid, kind: HeatmapKind = "coverage"): 
     }
 
     return panel(parts.join("\n    "), HEIGHT);
+}
+
+function perHour(value: number): string {
+    return value >= 10 ? String(Math.round(value)) : value.toFixed(1);
+}
+
+/**
+ * One of the worst hours, in words: the share each moderator carried, or how
+ * long nobody was there. Below one moderator there is no share to give, and
+ * "504 messages an hour across 0.0 moderators: 504 each" was on the card for
+ * an hour with ninety seconds of cover.
+ */
+export function gapLine(cell: GapCell): string {
+    const messages = `${perHour(cell.demand)} messages an hour`;
+    if (cell.coverage >= 1) {
+        return (
+            `${messages} across ${cell.coverage.toFixed(1)} moderators: ` +
+            `**${perHour(cell.load)} each**`
+        );
+    }
+    if (cell.uncovered >= 0.99) return `${messages}, **nobody on shift**`;
+    const gapMinutes = Math.max(1, Math.round(cell.uncovered * 60));
+    return `${messages}, **nobody on for ${gapMinutes} min** of it`;
 }
 
 /** How much data a grid rests on, for its header. */

@@ -147,12 +147,14 @@ export const RING_ABOVE = 0.5;
 
 /**
  * Where the colour steps begin, as multiples of the typical hour's messages.
- * One moderator through a typical hour sits in the middle step; twice that
- * load is the top. Read against the server's own typical hour rather than the
- * grid's busiest cells, where one badly covered hour took the top of the scale
- * alone and pushed every empty evening into the bottom step.
+ * One moderator through a typical hour is the second step, gold; amber starts
+ * at a noticeably heavy load, and burgundy at more than twice a typical hour.
+ * A typical hour used to sit in the middle step, so an ordinary staffed hour
+ * read as an early warning. Read against the server's own typical hour rather
+ * than the grid's busiest cells, where one badly covered hour took the top of
+ * the scale alone and pushed every empty evening into the bottom step.
  */
-export const LOAD_STEPS = [0.5, 0.75, 1.25, 2];
+export const LOAD_STEPS = [0.6, 1.1, 1.6, 2.2];
 
 /**
  * How far up the scale a wholly uncovered hour is pushed, in steps. Nobody on
