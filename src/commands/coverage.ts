@@ -24,7 +24,7 @@ import {
     memberEmptyNote,
     reliabilityNote,
     renderHeatmap,
-    sampleLabel,
+    chartTitle,
     type HeatmapKind
 } from "../render/heatmap.js";
 import { isExecutive } from "../domain/permissions.js";
@@ -40,7 +40,6 @@ import {
 import { staffDisplayName } from "../discord/displayName.js";
 import { defer, respond } from "../discord/respond.js";
 import { isValidTimezone, searchTimezones } from "../time/timezones.js";
-import { labelWindow } from "../time/format.js";
 import { COLOUR } from "../render/theme.js";
 import { HOUR_MS } from "../time/calendar.js";
 
@@ -58,10 +57,15 @@ function perHour(value: number): string {
  * Keyed on the window rather than on hours heard: a member on leave for all of
  * it has none heard, and "the whole of this window" needs its dates beside it.
  */
-function headline(title: string, grid: CoverageGrid, accountingTimezone: string): string {
-    const span =
-        grid.to > grid.from ? `, ${labelWindow(grid.from, grid.to, accountingTimezone)}` : "";
-    return `## ${title}\n${grid.timeZone}, ${sampleLabel(grid.observedHours)}${span}`;
+/**
+ * The card's heading. The zone, how much data and the dates are the chart's
+ * own title (`chartTitle`), and printing them here as well put the same line
+ * twice at the top of every coverage card. A card with no chart to show passes
+ * its grid, and gets that line beneath the heading instead: a member on leave
+ * for the whole window still needs to be told which window.
+ */
+function headline(title: string, withoutChart?: CoverageGrid): string {
+    return withoutChart ? `## ${title}\n${chartTitle(withoutChart)}` : `## ${title}`;
 }
 
 /** The reliability note as a footnote, or nothing once there is enough data. */
@@ -239,7 +243,10 @@ export const coverageCommand: Command = {
             const container = new ContainerBuilder()
                 .setAccentColor(COLOUR.report)
                 .addTextDisplayComponents(
-                    text(`${headline("Server activity", grid, config.accountingTimezone)}\n${scope}`)
+                    text(
+                        `${headline("Server activity", grid.maxDemand <= 0 ? grid : undefined)}\n` +
+                            scope
+                    )
                 );
 
             if (grid.maxDemand <= 0) {
@@ -310,7 +317,7 @@ export const coverageCommand: Command = {
             const container = new ContainerBuilder()
                 .setAccentColor(COLOUR.report)
                 .addTextDisplayComponents(
-                    text(headline(`Activity: ${name}`, grid, config.accountingTimezone))
+                    text(headline(`Activity: ${name}`, grid.maxDemand <= 0 ? grid : undefined))
                 );
 
             if (grid.maxDemand <= 0) {
@@ -408,7 +415,7 @@ export const coverageCommand: Command = {
         const container = new ContainerBuilder()
             .setAccentColor(COLOUR.report)
             .addTextDisplayComponents(
-                text(headline("Server activity against staff", grid, config.accountingTimezone))
+                text(headline("Server activity against staff"))
             )
             .addMediaGalleryComponents(gallery)
             .addSeparatorComponents(separator())

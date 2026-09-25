@@ -1,6 +1,7 @@
 import { Resvg } from "@resvg/resvg-js";
 import { FONT_OPTIONS } from "./fonts.js";
 import { escapeXml, round } from "./svg.js";
+import { labelWindow } from "../time/format.js";
 import { FONT_STACK, SURFACE } from "./theme.js";
 import { panelDefs, panelGround, panelRim } from "./panel.js";
 import {
@@ -81,8 +82,9 @@ const GAP_INK = [CELL_INK, CELL_INK, CELL_INK, "#ffffff", "#ffffff"];
  * server's messages. One hue, dim to bright, never a status ramp like the
  * coverage gap's. On one of those the busiest hour was red: the colour this
  * bot uses for something having gone wrong, on a card about one person, and on
- * a server chart where busy is not bad. The review charts' teal (`render/trend.ts`) stepped in OKLCH
- * lightness at a fixed hue, so more is brighter and nothing says good or bad.
+ * a server chart where busy is not bad. The review charts' teal
+ * (`render/trend.ts`) stepped in OKLCH lightness at a fixed hue, so more is
+ * brighter and nothing says good or bad.
  *
  * Validated as an ordinal ramp against the panel ground: lightness rises
  * monotonically, and the dimmest step clears the panel at 2.2:1.
@@ -144,7 +146,13 @@ function bandFor(value: number, top: number): number {
  * `domain/observation.ts`), because they turn on whether anybody was on shift
  * as well as on the figure, and the list of worst hours has to agree with them.
  */
-function cellBand(grid: CoverageGrid, kind: HeatmapKind, weekday: number, hour: number, top: number): number {
+function cellBand(
+    grid: CoverageGrid,
+    kind: HeatmapKind,
+    weekday: number,
+    hour: number,
+    top: number
+): number {
     if (kind === "coverage") return grid.severity[weekday][hour];
     return bandFor(grid.demand[weekday][hour], top);
 }
@@ -199,6 +207,19 @@ function panel(body: string, height: number): string {
 </svg>`;
 }
 
+/**
+ * The chart's own title: zone, how much data, and which dates. The dates are
+ * here rather than only on the card because the image is opened full size and
+ * forwarded without the card around it, and "1 day of data" out of context
+ * says nothing about which day. They are in the chart's zone, so the days
+ * match the rows: the card dated the window in the accounting zone, and read
+ * "23 Sep to 24 Sep" above an Auckland grid with Friday the 25th in it.
+ */
+export function chartTitle(grid: CoverageGrid): string {
+    const span = grid.to > grid.from ? `, ${labelWindow(grid.from, grid.to, grid.timeZone)}` : "";
+    return `${grid.timeZone}, ${sampleLabel(grid.observedHours)}${span}`;
+}
+
 /** Nothing was recorded. Say so, rather than drawing an empty grid. */
 function emptyGrid(grid: CoverageGrid, kind: HeatmapKind): string {
     const height = 132;
@@ -209,7 +230,7 @@ function emptyGrid(grid: CoverageGrid, kind: HeatmapKind): string {
                 `letter-spacing="-0.2" text-anchor="middle">${WORDING[kind].empty}</text>`,
             `<text x="${WIDTH / 2}" y="${height / 2 + 16}" fill="${SURFACE.textMuted}" ` +
                 `font-size="13" font-family="${FONT_STACK}" text-anchor="middle">` +
-                `${escapeXml(grid.timeZone)}, ${sampleLabel(grid.observedHours)}. Nothing to plot yet.</text>`
+                `${escapeXml(chartTitle(grid))}. Nothing to plot yet.</text>`
         ].join("\n    "),
         height
     );
@@ -227,7 +248,7 @@ export function heatmapSvg(grid: CoverageGrid, kind: HeatmapKind = "coverage"): 
     const parts: string[] = [
         `<text x="${LEFT_GUTTER}" y="28" fill="${SURFACE.text}" font-size="14" ` +
             `font-family="${FONT_STACK}" font-weight="bold" letter-spacing="-0.2">` +
-            `${escapeXml(grid.timeZone)}, ${sampleLabel(grid.observedHours)}</text>`
+            `${escapeXml(chartTitle(grid))}</text>`
     ];
 
     for (let hour = 0; hour < GRID_HOURS; hour += 1) {

@@ -384,3 +384,32 @@ describe("one of the worst hours, in words", () => {
         );
     });
 });
+
+describe("the chart's title", () => {
+    const title = (svg: string) => svg.match(/letter-spacing="-0.2">([^<]+)</)?.[1];
+
+    it("names its zone, how much data and which dates, so it stands alone when forwarded", () => {
+        expect(title(heatmapSvg(banded()))).toBe("Pacific/Auckland, 4 week mean, 1 Aug to 29 Aug");
+    });
+
+    it("dates the window in the chart's own zone, so the days match the rows", () => {
+        // In UTC this window is 23 to 24 September; the Auckland grid it is
+        // drawn on has Friday the 25th in it. The card used to print the first
+        // above the second.
+        const input = banded();
+        input.from = new Date("2026-09-23T07:00:00Z");
+        input.to = new Date("2026-09-24T23:00:00Z");
+        input.observedHours = 40;
+        expect(title(heatmapSvg(input))).toBe("Pacific/Auckland, 1 day of data, 23 Sep to 25 Sep");
+    });
+
+    it("dates an empty window too", () => {
+        expect(heatmapSvg(grid(zeros()))).toContain("1 Aug to 29 Aug");
+    });
+
+    it("leaves the dates out of a window with no length", () => {
+        const input = banded();
+        input.to = input.from;
+        expect(title(heatmapSvg(input))).toBe("Pacific/Auckland, 4 week mean");
+    });
+});
