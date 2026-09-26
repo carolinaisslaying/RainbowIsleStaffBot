@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+    activityBand,
     busiestRun,
     dailyProfile,
     gapBand,
     hourWeight,
     hoursTouchedBy,
     listeningOver,
+    memberBand,
     memberWindowStart,
     minutesByUtcHour,
     observe,
@@ -450,8 +452,11 @@ describe("the load on each moderator", () => {
 
     it("judges nothing unless asked, which is every grid but the coverage gap", () => {
         const result = hours([100, 400, 800], { judgeLoad: false });
-        expect(result.typicalHour).toBe(0);
         expect(sum(result.load)).toBe(0);
+    });
+
+    it("still finds the typical hour unjudged, which server activity is read against", () => {
+        expect(hours([100, 400, 800], { judgeLoad: false }).typicalHour).toBe(400);
     });
 });
 
@@ -494,5 +499,48 @@ describe("the colour step for a coverage cell", () => {
 
     it("has nothing to draw for an hour nobody spoke in", () => {
         expect(gapBand(0, 1, typical)).toBe(-1);
+    });
+});
+
+describe("the colour step for a server activity cell", () => {
+    const typical = 673;
+
+    it("reads the typical hour as green, never as a warning", () => {
+        expect(activityBand(673, typical)).toBe(4);
+    });
+
+    it("keeps the warm steps for hours that fell short, darker the further they fell", () => {
+        expect([22, 200, 300, 450, 540].map((messages) => activityBand(messages, typical))).toEqual([
+            0, 1, 2, 3, 4
+        ]);
+    });
+
+    it("gives a busy hour the second shade of green", () => {
+        expect(activityBand(1009, typical)).toBe(4);
+        expect(activityBand(1010, typical)).toBe(5);
+        expect(activityBand(1600, typical)).toBe(5);
+    });
+
+    it("draws nothing for an hour nobody spoke in", () => {
+        expect(activityBand(0, typical)).toBe(-1);
+    });
+
+    it("does not let one spike reshape everybody else's colour", () => {
+        // The median barely moves for one event hour, where the old 95th
+        // percentile top dragged every other cell down the scale.
+        const hours = [...Array.from({ length: 30 }, () => 500), 20_000];
+        const median = hours.sort((a, b) => a - b)[15];
+        expect(activityBand(500, median)).toBe(4);
+    });
+});
+
+describe("the colour step for a member's cell", () => {
+    it("is green from thirty minutes, and the deeper shade from forty-five", () => {
+        expect([1, 5, 10, 20, 30, 45, 60].map(memberBand)).toEqual([0, 1, 2, 3, 4, 5, 5]);
+        expect([4.9, 29.9, 44.9].map(memberBand)).toEqual([0, 3, 4]);
+    });
+
+    it("draws nothing for an hour with no activity", () => {
+        expect(memberBand(0)).toBe(-1);
     });
 });

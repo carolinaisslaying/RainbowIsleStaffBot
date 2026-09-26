@@ -49,9 +49,9 @@ const HEIGHT = TOP_GUTTER + GRID_DAYS * CELL + LEGEND_HEIGHT;
 
 /**
  * Leaf to burgundy, for the coverage gap, where more is worse: a light load
- * reads green and a heavy one burgundy. The other two heatmaps run the same
- * ramp backwards (`ACTIVITY_RAMP`). Never relied on alone: every cell prints
- * its figure.
+ * reads green and a heavy one burgundy. The other two heatmaps run its warm
+ * steps backwards with two greens on top (`ACTIVITY_RAMP`). Never relied on
+ * alone: every cell prints its figure.
  *
  * Built in OKLCH: lightness falls in even steps (0.83 to 0.46) while the hue
  * turns from leaf through gold and amber to brick and burgundy, so the order
@@ -80,20 +80,26 @@ const GAP_INK = [CELL_INK, CELL_INK, CELL_INK, "#ffffff", "#ffffff"];
 
 /**
  * For readings where more is better: a member's minutes and the server's
- * messages. The coverage gap's own ramp, run the other way, so all three
- * heatmaps speak one colour language: leaf is the good end and burgundy the
- * bad one on every card, and a Moderator reading them side by side never has
- * to remember which chart's green means what. A busy hour is leaf; a quiet one
- * burgundy. The ink turns with it, index for index.
+ * messages. The coverage gap's four warm steps, run the other way, then two
+ * shades of green: leaf for a typical hour and mint for a busy one. Green means
+ * the hour was fine; amber and its neighbours only ever mean it fell short,
+ * darker the further it fell. The steps themselves are decided by the service
+ * (`activityBand`, `memberBand`), so this only draws them.
  *
- * This replaced a one-hue teal ramp that said nothing about good or bad. The
- * trade is deliberate: a member's quietest hour now reads as the bad end of a
- * scale, and that is the reading these cards are meant to give. Still never
- * relied on alone: every cell prints its figure, and lightness steps evenly
- * so the order survives greyscale.
+ * The busy shade is lighter rather than darker, so lightness still climbs the
+ * whole way and the order survives greyscale: a deep green sat at amber's
+ * lightness and read as amber under protanopia (Delta E 4.7). Mint against
+ * leaf is Delta E 14.5, further apart than the gold and amber pair the ramp
+ * already carries, and leaf against gold is 8.4 under deuteranopia. Lighter
+ * than this mint the gamut runs out. Still never relied on alone: every cell
+ * prints its figure.
+ *
+ * This replaced a one-hue teal ramp that said nothing about good or bad, and
+ * then five even slices of the busiest hours' figure that put the typical hour
+ * on amber.
  */
-const ACTIVITY_RAMP = [...GAP_RAMP].reverse();
-const ACTIVITY_INK = [...GAP_INK].reverse();
+const ACTIVITY_RAMP = ["#9a273a", "#c14b24", "#d27c02", "#d0a83e", "#83db8a", "#a9ffe8"];
+const ACTIVITY_INK = ["#ffffff", "#ffffff", CELL_INK, CELL_INK, CELL_INK, CELL_INK];
 
 interface Palette {
     ramp: readonly string[];
@@ -109,50 +115,6 @@ const PALETTE: Record<HeatmapKind, Palette> = {
     activity: ACTIVITY,
     member: ACTIVITY
 };
-
-/**
- * The value the top of the ramp stands for: the 95th percentile of the readings,
- * not the largest. On a thin grid one event hour would otherwise take the top
- * band alone and wash every other cell down into the bottom two. Anything above
- * it is simply hot.
- */
-export function scaleTop(values: readonly number[]): number {
-    const positive = values.filter((value) => value > 0).sort((a, b) => a - b);
-    if (positive.length === 0) return 0;
-    return positive[Math.max(0, Math.ceil(positive.length * 0.95) - 1)];
-}
-
-/**
- * A member's grid is scaled to the hour itself, not to their own busiest cell:
- * "30" should be the same colour on everybody's card, or two members read side
- * by side look alike whatever they did.
- */
-function topFor(values: readonly number[], kind: HeatmapKind): number {
-    if (kind !== "member") return scaleTop(values);
-    return values.some((value) => value > 0) ? 60 : 0;
-}
-
-function bandFor(value: number, top: number): number {
-    if (value <= 0 || top <= 0) return -1;
-    const normalised = Math.min(1, value / top);
-    return Math.min(GAP_RAMP.length - 1, Math.floor(normalised * GAP_RAMP.length));
-}
-
-/**
- * The coverage grid arrives with its steps already decided (`gapBand` in
- * `domain/observation.ts`), because they turn on whether anybody was on shift
- * as well as on the figure, and the list of worst hours has to agree with them.
- */
-function cellBand(
-    grid: CoverageGrid,
-    kind: HeatmapKind,
-    weekday: number,
-    hour: number,
-    top: number
-): number {
-    if (kind === "coverage") return grid.severity[weekday][hour];
-    return bandFor(grid.demand[weekday][hour], top);
-}
 
 /**
  * A dark ring just inside an hour nobody was on shift for, so it reads as a
@@ -183,13 +145,13 @@ const WORDING: Record<
     activity: {
         empty: "No messages recorded",
         legend: "Average messages per hour.",
-        ends: "quiet to busiest",
+        ends: "near silent to busy",
         unseen: "Dashed hours have not been heard yet."
     },
     member: {
         empty: "No activity recorded",
-        legend: "Average activity minutes per hour, out of 60.",
-        ends: "1 to 60 minutes",
+        legend: "Average activity minutes per hour, out of 60. Green is 30 or more.",
+        ends: "under 5 to 45 or more minutes",
         unseen: "Dashed hours were on leave or not heard."
     }
 };
@@ -235,9 +197,8 @@ function emptyGrid(grid: CoverageGrid, kind: HeatmapKind): string {
 
 export function heatmapSvg(grid: CoverageGrid, kind: HeatmapKind = "coverage"): string {
     const values = kind === "coverage" ? grid.load : grid.demand;
-    const top = topFor(values.flat(), kind);
     const palette = PALETTE[kind];
-    if (top <= 0) return emptyGrid(grid, kind);
+    if (!values.some((row) => row.some((value) => value > 0))) return emptyGrid(grid, kind);
     let unstaffed = 0;
     let unseen = 0;
 
@@ -278,7 +239,10 @@ export function heatmapSvg(grid: CoverageGrid, kind: HeatmapKind = "coverage"): 
                 );
                 continue;
             }
-            const band = cellBand(grid, kind, weekday, hour, top);
+            // Every grid arrives with its steps already decided (`gapBand`,
+            // `activityBand`, `memberBand`), so the lists printed beside the
+            // chart agree with its colours.
+            const band = grid.severity[weekday][hour];
             parts.push(
                 `<rect x="${round(x + 1.5)}" y="${round(y + 1.5)}" width="${CELL - 3}" ` +
                     `height="${CELL - 3}" rx="7" fill="${band < 0 ? EMPTY : palette.ramp[band]}" />`
@@ -316,6 +280,9 @@ export function heatmapSvg(grid: CoverageGrid, kind: HeatmapKind = "coverage"): 
             `font-size="11" font-family="${FONT_STACK}">${WORDING[kind].legend}` +
             (kind === "coverage" && grid.typicalHour > 0
                 ? ` A typical hour here is ${figure(grid.typicalHour)} messages.`
+                : "") +
+            (kind === "activity" && grid.typicalHour > 0
+                ? ` Green is a typical hour, ${figure(grid.typicalHour)}, or busier.`
                 : "") +
             (unseen > 0 ? ` ${WORDING[kind].unseen}` : "") +
             `</text>`

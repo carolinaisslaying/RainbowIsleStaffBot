@@ -12,7 +12,9 @@ import {
     hoursTouchedBy,
     memberWindowStart,
     minutesByUtcHour,
+    activityBand,
     gapBand,
+    memberBand,
     observe,
     RING_ABOVE,
     spreadByHour
@@ -46,9 +48,13 @@ export interface CoverageGrid {
     uncovered: number[][];
     /** Whether nobody was on for most of the hour, which the chart rings. */
     unstaffed: boolean[][];
-    /** The colour step, 0 to 4, or -1 for nothing to draw (`gapBand`). */
+    /**
+     * The colour step, or -1 for nothing to draw: 0 to 4 on the coverage gap
+     * (`gapBand`), 0 to 5 on server activity (`activityBand`) and a member's
+     * grid (`memberBand`).
+     */
     severity: number[][];
-    /** Messages in the median hour, which the load is read against. */
+    /** Messages in the median hour, which the load and the activity are read against. */
     typicalHour: number;
     /** How many times each cell was heard. Zero is "not yet", not "quiet". */
     observed: number[][];
@@ -124,9 +130,11 @@ async function buildGrid(
     // was there. The rules are in `domain/observation.ts`.
     const { uncovered } = observation;
     const unstaffed = uncovered.map((row) => row.map((share) => share > RING_ABOVE));
-    const severity = load.map((row, weekday) =>
-        row.map((value, hour) => gapBand(value, uncovered[weekday][hour], typicalHour))
-    );
+    const severity = withCoverage
+        ? load.map((row, weekday) =>
+              row.map((value, hour) => gapBand(value, uncovered[weekday][hour], typicalHour))
+          )
+        : demand.map((row) => row.map((messages) => activityBand(messages, typicalHour)));
     const maxDemand = Math.max(0, ...demand.flat());
 
     return {
@@ -230,7 +238,7 @@ export async function buildMemberActivityGrid(
         load: observation.load,
         uncovered: observation.uncovered.map((row) => row.map(() => 0)),
         unstaffed: observation.uncovered.map((row) => row.map(() => false)),
-        severity: observation.load.map((row) => row.map(() => -1)),
+        severity: demand.map((row) => row.map(memberBand)),
         typicalHour: 0,
         observed: observation.observed,
         timeZone,

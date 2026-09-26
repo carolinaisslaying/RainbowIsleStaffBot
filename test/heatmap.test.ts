@@ -3,10 +3,10 @@ import {
     gapLine,
     heatmapSvg,
     memberEmptyNote,
-    reliabilityNote,
-    scaleTop
+    reliabilityNote
 } from "../src/render/heatmap.js";
 import type { CoverageGrid } from "../src/services/coverageService.js";
+import { activityBand, memberBand } from "../src/domain/observation.js";
 
 /**
  * The heatmap is a pure function of a grid, so it needs no database and no
@@ -203,7 +203,7 @@ describe("the activity reading", () => {
         input.demand = input.demand.map((row) => row.map((value) => value * 100));
         const svg = heatmapSvg(input, "activity");
         expect(svg).toContain("Average messages per hour.");
-        expect(svg).toContain("quiet to busiest");
+        expect(svg).toContain("near silent to busy");
         expect(svg).toContain(">1.0k<");
     });
 
@@ -213,38 +213,37 @@ describe("the activity reading", () => {
     });
 });
 
-/** One member reading in each of the five bands of the 0 to 60 minute scale. */
+const ACTIVITY_RAMP = ["#9a273a", "#c14b24", "#d27c02", "#d0a83e", "#83db8a", "#a9ffe8"];
+const filledOf = (svg: string) =>
+    [...svg.matchAll(/height="27" rx="7" fill="(#[0-9a-f]{6})"/g)].map((match) => match[1]);
+
+/** One member reading in each of the six steps, stepped as the service steps them. */
 function memberBanded(): CoverageGrid {
     const minutes = zeros();
-    [6, 18, 30, 42, 54].forEach((value, hour) => (minutes[0][hour] = value));
-    return grid(minutes);
+    [3, 7, 15, 25, 35, 50].forEach((value, hour) => (minutes[0][hour] = value));
+    const input = grid(minutes);
+    input.severity = minutes.map((row) => row.map(memberBand));
+    return input;
 }
 
 describe("the member reading", () => {
-    it("scales to the whole hour, so the same minutes are the same colour on every card", () => {
-        const light = grid(zeros());
-        light.demand[0][0] = 6; // a tenth of the hour, and this member's busiest
-        // Against 60 minutes that is the bottom band; scaled to their own
-        // busiest cell it would have been the top one.
-        const svg = heatmapSvg(light, "member");
-        const filled = [...svg.matchAll(/height="27" rx="7" fill="(#[0-9a-f]{6})"/g)].map(
-            (match) => match[1]
-        );
-        expect(filled).toEqual(["#9a273a"]);
-    });
-
-    it("labels itself in minutes out of sixty", () => {
+    it("labels itself in minutes out of sixty, and says where green starts", () => {
         const svg = heatmapSvg(banded(), "member");
-        expect(svg).toContain("Average activity minutes per hour, out of 60.");
-        expect(svg).toContain("1 to 60 minutes");
+        expect(svg).toContain("Average activity minutes per hour, out of 60. Green is 30 or more.");
+        expect(svg).toContain("under 5 to 45 or more minutes");
     });
 
-    it("runs the coverage gap's ramp backwards, burgundy for quiet to leaf for busy", () => {
-        const svg = heatmapSvg(memberBanded(), "member");
-        const filled = [...svg.matchAll(/height="27" rx="7" fill="(#[0-9a-f]{6})"/g)].map(
-            (match) => match[1]
-        );
-        expect(filled).toEqual(["#9a273a", "#c14b24", "#d27c02", "#d0a83e", "#86df9a"]);
+    it("runs the warm steps up from burgundy, then two shades of green", () => {
+        expect(filledOf(heatmapSvg(memberBanded(), "member"))).toEqual(ACTIVITY_RAMP);
+    });
+
+    it("draws the step it was given, never its own scale", () => {
+        // A tenth of the hour, and this member's busiest: against their own
+        // busiest cell it would have been the top step.
+        const light = grid(zeros());
+        light.demand[0][0] = 6;
+        light.severity[0][0] = memberBand(6);
+        expect(filledOf(heatmapSvg(light, "member"))).toEqual(["#c14b24"]);
     });
 
     it("prints light figures on burgundy and brick and dark ones on the light steps", () => {
@@ -253,6 +252,7 @@ describe("the member reading", () => {
         expect(inks).toEqual([
             "#ffffff",
             "#ffffff",
+            "rgba(0,0,0,0.82)",
             "rgba(0,0,0,0.82)",
             "rgba(0,0,0,0.82)",
             "rgba(0,0,0,0.82)"
@@ -300,18 +300,36 @@ describe("a member's card with nothing to plot", () => {
 });
 
 describe("the server activity reading's colours", () => {
-    it("is the same reversed ramp as a member's, busiest hours leaf", () => {
-        const svg = heatmapSvg(memberBanded(), "activity");
-        const filled = [...svg.matchAll(/height="27" rx="7" fill="(#[0-9a-f]{6})"/g)].map(
-            (match) => match[1]
-        );
-        expect(new Set(filled)).toEqual(new Set(["#9a273a", "#c14b24", "#d27c02", "#d0a83e", "#86df9a"]));
-        // Scaled to its own 95th percentile, so the busiest cell is the top step.
-        expect(filled[filled.length - 1]).toBe("#86df9a");
+    /** Hours around a typical 673, stepped as the service steps them. */
+    function server(): CoverageGrid {
+        const messages = zeros();
+        [22, 200, 300, 450, 673, 1400].forEach((value, hour) => (messages[0][hour] = value));
+        const input = grid(messages);
+        input.typicalHour = 673;
+        input.severity = messages.map((row) => row.map((value) => activityBand(value, 673)));
+        return input;
+    }
+
+    it("reads the typical hour as green, and keeps the warm steps for hours that fell short", () => {
+        const filled = filledOf(heatmapSvg(server(), "activity"));
+        expect(filled).toEqual(ACTIVITY_RAMP);
+        expect(filled[4]).toBe("#83db8a");
     });
 
-    it("leaves the coverage gap on its leaf-to-burgundy ramp", () => {
-        expect(heatmapSvg(banded(), "coverage")).toContain('fill="#86df9a"');
+    it("says what green stands for, in messages", () => {
+        expect(heatmapSvg(server(), "activity")).toContain("Green is a typical hour, 673, or busier.");
+    });
+
+    it("draws one bar segment per step", () => {
+        const svg = heatmapSvg(server(), "activity");
+        const segments = svg.match(/<g clip-path="url\(#rampClip\)">(.*?)<\/g>/)?.[1] ?? "";
+        expect([...segments.matchAll(/fill="(#[0-9a-f]{6})"/g)].map((m) => m[1])).toEqual(ACTIVITY_RAMP);
+    });
+
+    it("leaves the coverage gap on its five-step leaf-to-burgundy ramp", () => {
+        const svg = heatmapSvg(banded(), "coverage");
+        expect(svg).toContain('fill="#86df9a"');
+        expect(svg).not.toContain("#a9ffe8");
     });
 });
 
@@ -327,18 +345,6 @@ describe("the legend", () => {
             const barX = Number(svg.match(/<clipPath id="rampClip"><rect x="(\d+)"/)?.[1]);
             expect(barX).toBeGreaterThan(Number(swatch?.[1]));
         }
-    });
-});
-
-describe("the colour scale", () => {
-    it("tops out at the 95th percentile so one spike does not wash the rest out", () => {
-        const values = [...Array.from({ length: 99 }, () => 10), 1000];
-        expect(scaleTop(values)).toBe(10);
-    });
-
-    it("is the largest reading when there are too few to trim", () => {
-        expect(scaleTop([1, 2, 3])).toBe(3);
-        expect(scaleTop([0, 0])).toBe(0);
     });
 });
 

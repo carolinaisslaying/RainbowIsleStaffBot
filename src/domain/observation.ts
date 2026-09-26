@@ -108,8 +108,8 @@ export interface Observation {
      */
     uncovered: number[][];
     /**
-     * Messages in the median hour anybody spoke in, which is what the load is
-     * read against. Zero unless judged, or when nobody spoke at all.
+     * Messages in the median hour anybody spoke in, which the load and the
+     * server's activity are both read against. Zero when nobody spoke at all.
      */
     typicalHour: number;
     /** Every hour heard, across the whole grid. */
@@ -190,6 +190,44 @@ export function typicalHourOf(messages: readonly number[]): number {
 }
 
 /**
+ * Where the server activity steps begin, as multiples of the typical hour's
+ * messages. Green is a typical hour or busier, split in two shades so a busy
+ * hour still stands out; the warm steps are only ever for an hour that fell
+ * short, darker the further it fell. The scale used to be five even slices of
+ * the busiest hours' figure, so the median hour landed on amber and most of an
+ * ordinary day read as a warning.
+ */
+export const ACTIVITY_STEPS = [0.2, 0.4, 0.6, 0.8, 1.5];
+
+/**
+ * Where a member's steps begin, in activity minutes out of the hour: under 5 is
+ * a glance, 5 to 10 brief, 10 to 20 and 20 to 30 part of the hour, 30 and over
+ * green, and 45 and over the deeper shade. Fixed rather than read against the
+ * member's own typical hour, so the same minutes are the same colour on every
+ * card.
+ */
+export const MEMBER_STEPS = [5, 10, 20, 30, 45];
+
+function stepOf(value: number, steps: readonly number[]): number {
+    return steps.filter((edge) => value >= edge).length;
+}
+
+/**
+ * The colour step for a server activity cell, 0 to 5, or -1 when nobody spoke.
+ * Pure, and read against the window's own typical hour (`typicalHourOf`).
+ */
+export function activityBand(messages: number, typicalHour: number): number {
+    if (messages <= 0) return -1;
+    return stepOf(typicalHour > 0 ? messages / typicalHour : 1, ACTIVITY_STEPS);
+}
+
+/** The colour step for a member's cell, 0 to 5, or -1 when they were not active. */
+export function memberBand(minutes: number): number {
+    if (minutes <= 0) return -1;
+    return stepOf(minutes, MEMBER_STEPS);
+}
+
+/**
  * Walk the window an hour at a time. Walking rather than assuming each weekday
  * came round a fixed number of times is what keeps this right across a DST
  * change in the display zone, and for a window that is five hours long.
@@ -228,9 +266,7 @@ export function observe(input: ObservationInput): Observation {
     // would read as covered an hour that was empty half the time. Averaged
     // this way, a cell empty three weeks in eight carries three eighths of
     // the lift rather than none.
-    const typicalHour = input.judgeLoad
-        ? typicalHourOf(heard.map((reading) => reading.messages))
-        : 0;
+    const typicalHour = typicalHourOf(heard.map((reading) => reading.messages));
     if (input.judgeLoad) {
         for (const reading of heard) {
             const moderators = reading.coverageMs / HOUR_MS;

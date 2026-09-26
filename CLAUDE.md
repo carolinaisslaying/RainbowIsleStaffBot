@@ -675,24 +675,33 @@ minute the gateway is **Ready** (not merely the process running) with `$addToSet
 idempotent. An hour heard for 30+ minutes is scaled up to a full one; under 30 is no data, drawn
 dashed, and left out of both sides of the ratio. Hours before uptime was first measured are assumed
 heard, which is what keeps the counts collected before it usable. The card says how much data it
-rests on (`sampleLabel`, `reliabilityNote` in `render/heatmap.ts`) until two weeks, and the colour
-scale tops out at the 95th percentile so one event hour does not wash out a thin grid. Message
+rests on (`sampleLabel`, `reliabilityNote` in `render/heatmap.ts`) until two weeks. Message
 counting itself is still one `$inc` per message: at a few hundred an hour, batching would buy
 nothing and lose the unflushed counts on every crash.
 
 `/coverage member` is the same grid over one member's activity minutes, fed through the same
 `observe`, with two differences. Hours the member was on leave are passed as `excludedHours` and
-drop out of both sides of the average exactly as an unheard hour does. And the scale is fixed at 60
-minutes rather than the 95th percentile, so the same figure is the same colour on everybody's card.
+drop out of both sides of the average exactly as an unheard hour does. And its steps are fixed
+minutes rather than relative to anything, so the same figure is the same colour on everybody's card.
 
 **All three heatmaps share one ramp; the direction says which end is good.** `/coverage staff`
 measures a problem, so it runs leaf through gold and amber to brick and burgundy (`GAP_RAMP`): more
 load is worse. `/coverage server` and `/coverage member` measure something where more is better, so
-they run the same five colours backwards (`ACTIVITY_RAMP`): a quiet hour is burgundy, a busy one
-leaf. One colour language across the three cards, so green is the good end wherever it appears. The
-ramp is stepped evenly in OKLCH lightness so the order survives greyscale, and each ink array
-(`GAP_INK`, `ACTIVITY_INK`) is reversed with its ramp, so light figures sit on burgundy and brick
-and dark ones on the light steps. They used to take a one-hue teal ramp that said nothing about good
+they run the four warm colours backwards with two greens on top (`ACTIVITY_RAMP`). One colour
+language across the three cards, so green is the good end wherever it appears. Both ramps climb in
+OKLCH lightness so the order survives greyscale, and each ink array (`GAP_INK`, `ACTIVITY_INK`)
+follows its ramp, so light figures sit on burgundy and brick and dark ones on the light steps.
+
+**On the two activity cards, green means fine and the warm colours mean short, and nothing else.**
+An Executive's rule: a typical hour is green, and yellow or orange is only ever for an hour that is
+low. Leaf is typical, mint (lighter, so lightness still climbs) is busy, and gold, amber, brick and
+burgundy step down from there. The steps are decided by the service, never the renderer, as the
+coverage gap's are: `activityBand` reads each hour against the window's typical hour (the median of
+the hours anybody spoke in, `typicalHourOf`) at `ACTIVITY_STEPS` — green from 0.8 of it, mint from
+1.5 — and `memberBand` reads minutes at `MEMBER_STEPS` — green from 30, mint from 45. The server scale
+used to be five even slices up to the 95th percentile, which put the median hour on amber and read
+most of an ordinary day as a warning; the median also barely moves for one event hour, which the
+percentile top did not. They used to take a one-hue teal ramp that said nothing about good
 or bad. It went because an Executive found the blue hard to read, and the hues varying from red to
 green are what make the scale readable for them — so do not bring a one-hue or blue ramp back.
 A member's quietest hour reading as the bad end is the accepted price of that. Hours nobody was on for most of carry a dark inset ring rather than a white one. Every
