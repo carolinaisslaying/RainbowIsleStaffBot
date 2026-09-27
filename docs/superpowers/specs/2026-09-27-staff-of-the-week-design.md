@@ -1,6 +1,7 @@
 # Staff of the Week — design
 
-Status: **draft, awaiting review.** Nothing here is implemented. Branch: `feature/staff-of-the-week`
+Status: **approved 2026-09-28**, implementation planned in
+`docs/superpowers/plans/2026-09-28-staff-of-the-week.md`. Branch: `feature/staff-of-the-week`
 (never pushed to `main` until reviewed and merged deliberately).
 
 ## Purpose

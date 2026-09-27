@@ -32,7 +32,11 @@ export const EMOJI_FOR_COLOUR: Record<number, string> = {
     [COLOUR.admin]: "⚙️",
     [COLOUR.milestone]: "🎉",
     [COLOUR.personal]: "📊",
-    [COLOUR.standings]: "🏆"
+    // Standings trend upwards. The trophy used to sit here and was never drawn,
+    // because the leaderboard card writes its own title; it now belongs to
+    // Staff of the Week alone.
+    [COLOUR.standings]: "📈",
+    [COLOUR.staffOfWeek]: "🏆"
 };
 
 /** Emoji for cards whose state the palette does not distinguish. */
@@ -55,6 +59,12 @@ export const EMOJI = {
      * reads as "visible", which is the opposite of what it marks.
      */
     hidden: "🔒",
+    /**
+     * Staff of the Week, beside the holder's row and on the feature's cards.
+     * The only place the trophy is written; everything else uses this name,
+     * and a test fails if it turns up anywhere else.
+     */
+    staffOfWeek: "🏆",
     /**
      * Something needs attention: an undelivered DM, a setting worth a second
      * look, a leave that exempts nothing. Not the warning sign, which is the Caution rung's
