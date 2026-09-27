@@ -5,6 +5,12 @@ import type { Binary, ObjectId } from "mongodb";
  * That is what makes account migration a one-field update.
  */
 
+/** A member's own Staff of the Week colour. `roleColoursFor` turns it into a role write. */
+export type SotwColour =
+    | { style: "solid"; primary: number }
+    | { style: "gradient"; primary: number; secondary: number }
+    | { style: "holographic" };
+
 export interface StaffDoc {
     _id: ObjectId;
     discordId: string;
@@ -20,6 +26,70 @@ export interface StaffDoc {
      * retiring a face cannot break a member's cards.
      */
     ringFace?: string | null;
+    /**
+     * Their Staff of the Week colour: what they chose, never downgraded to what
+     * the server can currently show. Absent or null is "no preference", which
+     * leaves the role uncoloured while they hold it. Kept whatever happens to
+     * the role — a handoff, a removal, a skip — because it is theirs.
+     */
+    sotwColour?: SotwColour | null;
+    sotwColourUpdatedAt?: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+}
+
+/**
+ * `pending` exists only before a week is handed off: a pick recorded ahead of
+ * time. The handoff turns it into `picked`, and an undecided week into
+ * `random` or `empty`. `skipped` is an Executive choosing nobody.
+ */
+export type StaffOfWeekStatus = "pending" | "picked" | "random" | "skipped" | "empty";
+
+export type StaffOfWeekEventKind =
+    | "set"
+    | "replaced"
+    | "skipped"
+    | "removed"
+    | "drawn"
+    | "pickFailed"
+    | "empty"
+    | "handoff"
+    | "colour"
+    | "colourCleared";
+
+export interface StaffOfWeekEvent {
+    kind: StaffOfWeekEventKind;
+    at: Date;
+    /** Discord id of whoever did it; null for the bot. */
+    actorId: string | null;
+    staffId: ObjectId | null;
+    reason: string | null;
+    /** The draw pool, the colours applied, why a pick could not be honoured. */
+    detail: Record<string, unknown> | null;
+}
+
+/**
+ * One accounting week of Staff of the Week. Never deleted: a removal is an
+ * event. `holders` is everyone who held the role at any point in the week and
+ * `removedHolders` the subset taken off with `/sotw remove`, who are neither
+ * barred nor credited — `creditedHolders` is the only reader of the two.
+ *
+ * The arrays and `events` are created by `$addToSet`/`$push` on first write,
+ * so an older or partly written document may lack them; readers use `?? []`.
+ */
+export interface StaffOfWeekDoc {
+    _id: ObjectId;
+    weekStart: Date;
+    status: StaffOfWeekStatus;
+    /** The holder now, or the pending pick. Null when nobody. */
+    staffId: ObjectId | null;
+    /** Discord id of the Executive who decided; null for a draw or nobody. */
+    decidedBy: string | null;
+    decidedAt: Date | null;
+    holders?: ObjectId[];
+    removedHolders?: ObjectId[];
+    handedOffAt: Date | null;
+    events?: StaffOfWeekEvent[];
     createdAt: Date;
     updatedAt: Date;
 }

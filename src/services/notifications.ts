@@ -50,6 +50,33 @@ export async function claimLeaderboardLog(weekStart: Date): Promise<boolean> {
     return claim(`leaderboard-log:${weekStart.getTime()}`);
 }
 
+/** The week's one Staff of the Week reminder to the Executives. */
+export async function claimSotwReminder(weekStart: Date): Promise<boolean> {
+    return claim(`sotw-reminder:${weekStart.getTime()}`);
+}
+
+/**
+ * The week's one handoff. Claimed before the role moves rather than after,
+ * unlike the recaps: a handoff always has something to do, even for an empty
+ * week, and running one twice would move the role and DM the holder twice.
+ */
+export async function claimSotwHandoff(weekStart: Date): Promise<boolean> {
+    return claim(`sotw-handoff:${weekStart.getTime()}`);
+}
+
+/** Whether a week's handoff has been claimed, without claiming it. */
+export async function sotwHandedOff(weekStart: Date): Promise<boolean> {
+    const found = await collections
+        .deliveries()
+        .findOne({ _id: `sotw-handoff:${weekStart.getTime()}` });
+    return found !== null;
+}
+
+/** One late-change notice per subject per week, so a flapping change does not repeat. */
+export async function claimSotwNotice(key: string): Promise<boolean> {
+    return claim(`sotw-notice:${key}`);
+}
+
 /** Claim a one-shot delivery. Returns false if it has already been sent. */
 async function claim(key: string): Promise<boolean> {
     try {
