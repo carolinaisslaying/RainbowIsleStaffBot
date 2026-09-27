@@ -411,9 +411,10 @@ repository. Its only external requests are Discord CDN images.
   `COLOUR.staffOfWeek` (mint, `0x66d4cf`: not amber, not red, not the standings or caution gold) for
   the feature's cards. The leaderboard's colour-derived mark (`COLOUR.standings`, currently an unused
   🏆 entry in `EMOJI_FOR_COLOUR`) becomes **📈**. A test in `test/tierPresentation.test.ts` style fails
-  if 🏆 appears in any source file but `render/emoji.ts`, as the 📉 test does. `COLOUR.caution` shares
-  the standings value; the plan confirms the Caution rung still takes its mark from `TIER_STYLE` and
-  never from this lookup.
+  if 🏆 appears in any source file but `render/emoji.ts`, as the 📉 test does. The leaderboard card
+  draws its title without an emoji and keeps its accent, and the Caution rung (which shares the gold)
+  takes ⚠️ from `TIER_STYLE`, so neither changes visibly. Adding emoji to other headings is out of
+  scope.
 - ⚠️ is never used; inline alerts use ❗.
 - No card names a file, repository or environment variable (except the existing `/dev` exceptions).
 - Command mentions via `cmd()`.
