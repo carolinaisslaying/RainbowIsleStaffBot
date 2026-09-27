@@ -105,7 +105,7 @@ async function suggestChannels(
 
 /** Which guild a key's roles or channels belong to. */
 function guildForKey(key: keyof StaffBotConfig, config: StaffBotConfig): string {
-    // Review, recap and leaderboard log channels, and the role pinged in them, are in the staff
+    // Review, recap, leaderboard log and Staff of the Week channels, and the role pinged in them, are in the staff
     // server; everything else, including every other role, is in the community
     // server.
     if (
@@ -113,6 +113,7 @@ function guildForKey(key: keyof StaffBotConfig, config: StaffBotConfig): string 
         key === "reportChannelId" ||
         key === "recapChannelId" ||
         key === "leaderboardLogChannelId" ||
+        key === "staffOfWeekChannelId" ||
         key === "staffExecutivePingRole"
     ) {
         return config.staffGuildId;
