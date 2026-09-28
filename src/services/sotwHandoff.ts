@@ -8,13 +8,13 @@ import { previousWeekWindow, weekWindowFor, type WeekWindow } from "../domain/we
 import {
     decideHandoff,
     drawPool,
+    handoffSettled,
     refusalText,
     sotwEnabled,
     type Eligibility,
     type Standing
 } from "../domain/staffOfWeek.js";
 import {
-    anyStaffOfWeek,
     appendEvent,
     findWeek,
     markHandedOff,
@@ -145,7 +145,17 @@ export async function runHandoff(
     }
 
     const label = labelWindow(week.start, week.end, config.accountingTimezone);
-    const role = await handRoleTo(client, config, holder, `Staff of the Week for ${label}`);
+    // The receipt is already claimed, so a throw here must not swallow the
+    // congratulation, the notice and `markHandedOff` that follow — a full
+    // guild member fetch (`membersWithRole`, inside `handRoleTo`) has no catch
+    // of its own, and a spent receipt means nothing would ever retry this week.
+    let role: { granted: boolean; colour: ColourWrite };
+    try {
+        role = await handRoleTo(client, config, holder, `Staff of the Week for ${label}`);
+    } catch (error) {
+        log.error("Could not hand over the Staff of the Week role", error);
+        role = { granted: false, colour: { ok: false, downgraded: false } };
+    }
     if (holder) await congratulate(client, config, holder, role.colour, rng);
 
     const poolNames: string[] = [];
@@ -190,8 +200,13 @@ export async function reassertRole(client: Client, config: StaffBotConfig, now =
 
 /**
  * At boot, after the catch-up. The current week only: a missed week in the
- * past cannot usefully be handed off. A first run — no rollups, or no Staff of
- * the Week record at all — records the week as empty without a draw, so the
+ * past cannot usefully be handed off. A first run — a cold start, or a boot
+ * so far into the week that `handoffSettled`'s grace period has already
+ * lapsed without a receipt — never draws: the week has already begun, and
+ * drawing now is exactly what `handoffSettled`/`HANDOFF_GRACE_MS` exist to
+ * stop. It only records the week as empty, and only when nothing is recorded
+ * for it yet — an Executive's pick for next week, or a document left over
+ * from before the feature was switched off, is never overwritten — so the
  * first real handoff is the next week boundary.
  */
 export async function handoffOnBoot(
@@ -207,9 +222,11 @@ export async function handoffOnBoot(
             await reassertRole(client, config, now);
             return;
         }
-        if (coldStart || !(await anyStaffOfWeek())) {
+        if (coldStart || handoffSettled({ claimed: false, now, weekStart: week.start })) {
             if (await claimSotwHandoff(week.start)) {
-                await recordEmpty(week.start, "Staff of the Week started mid-week.", null, now);
+                if (!(await findWeek(week.start))) {
+                    await recordEmpty(week.start, "Staff of the Week started mid-week.", null, now);
+                }
                 await markHandedOff(week.start, { decision: "coldStart" }, now);
             }
             await reassertRole(client, config, now);
