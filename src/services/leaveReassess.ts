@@ -19,6 +19,7 @@ import { audit } from "../domain/audit.js";
 import { refreshQueueHeader, rowAttention, upsertReviewRow } from "./assessmentService.js";
 import { upsertWarningCard } from "./conductService.js";
 import { pingExecutives, pingKey, resolvePing } from "./pings.js";
+import { checkLeaveAgainstSotw } from "./sotwWatch.js";
 import { log } from "../log.js";
 
 /**
@@ -83,6 +84,10 @@ export async function reassessAfterLeaveChange(
             );
         }
     }
+
+    // Staff of the Week is told, never changed, when leave now exempts the
+    // holder's week or next week's pick.
+    await checkLeaveAgainstSotw(client, config, staffId, now);
 }
 
 async function reassessOne(
