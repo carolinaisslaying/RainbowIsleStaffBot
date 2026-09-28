@@ -396,7 +396,7 @@ warning counts as one whatever its rung, and nothing sums them into an action �
 what it tells an Executive reading the record, never a clock.
 `lifetimeDaysFor`/`warningIsSpent`/`countsNow`/`warningTally` (`domain/review.ts`) are the whole rule.
 
-**Nothing in this bot deletes a warning.** Reopening a review row and the **Withdraw** button on a
+**Nothing in this bot deletes a person's warning.** (A bot's record goes whole, below.) Reopening a review row and the **Withdraw** button on a
 log card both mark `withdrawnAt`/`withdrawnBy`/`withdrawalReason` and leave the record in place
 carrying both reasons. A withdrawn warning counts nowhere, whatever its clock says.
 Reopen used to delete, leaving the audit log as the only trace; `DELETION.md` is corrected. A row
@@ -568,6 +568,17 @@ aborts if that write fails. `DELETION.md` is the procedure for everything else a
 Note `audit()` in `domain/audit.ts` deliberately swallows its own failures; the purge path
 therefore writes to `collections.auditLog()` directly so a failure can abort.
 
+**The one other delete: a bot's staff record.** A bot is never staff — `tierOf` answers `none` for
+one whatever roles it holds — but a bot given the Moderation role for a while once picked up a
+record, and since nothing retires records it stayed on every leaderboard at 0 minutes long after
+the role went. `removeBotStaffRecords` (`services/botRecordCleanup.ts`) runs at boot, before
+`reconcileOnBoot`, and removes any record whose account Discord says is a bot, with everything
+stored against it in `DELETION.md`'s full purge order. The audit log is kept; the audit row goes
+first, with the record embedded, and a failure leaves that record alone. An account that cannot be
+looked up is **kept** (`botRecordAction`, `domain/botRecords.ts`): not knowing is not knowing it is
+a bot. `/warnings issue` and its form decide every rule before `ensureStaff`, on Discord ids, so a
+refused subject — a bot, or anybody not on the team — no longer comes away with a staff record.
+
 **Ring faces.** A member picks one of four curated faces (`render/faces.ts`), stored as
 `StaffDoc.ringFace`. A face sets **only the two soft rings**, shift time and active days, because
 `rings.ts` says those carry no compliance meaning. The outer ring is red/amber/green/grey and is
@@ -614,14 +625,19 @@ posting, otherwise one member's DM. Neither claims a receipt, so the real ones s
 each closed week's standings to `leaderboardLogChannelId` once, beside the team recap and on the
 same rules: read from that week's rollups rather than counted live, built before its receipt
 (`claimLeaderboardLog`), spent without posting on a cold start, a failed send logged rather than
-retried. It is always the public view — `publicStandings` (`domain/leaderboard.ts`) drops hidden
-members and returns how many, and the footnote comes from `leaderboardVisibility` like every other
-copy. Every row is on one card with no buttons: `leaderboardCard` splits rows into text displays of
+retried. **It is an Executive record, so it lists everybody.** The channel is Executive-only, and
+the log used to be the public view, which left hidden members out and ranked everyone beneath them
+wrongly, for readers who see hidden rows everywhere else anyway. `logStandings`
+(`domain/leaderboard.ts`) ranks everyone and flags the hidden in their real place with 🔒, and the
+footnote comes from `leaderboardVisibility` (`executiveRecord: true`) like every other copy.
+`/admin leaderboard-log weeks_ago:` posts a closed week again through the same builder and claims
+no receipt, because the Executive asking is the deliberate act the receipt stands in for; it posts
+beside the old copy, which the bot has no record of. Every row is on one card with no buttons: `leaderboardCard` splits rows into text displays of
 25 to stay under the 4000 character limit, and a single page draws no paging row. Sent with
 `allowedMentions: { parse: [] }`, because a name that cannot be fetched falls back to a mention.
 
 **A hidden row carries 🔒 (`EMOJI.hidden`) wherever it is drawn**: a Lead's copy, and the member's
-own row on theirs, `(you)` included. It replaced the word "(hidden)". A padlock rather than an eye,
+own row on theirs, `(you)` included, and every hidden row on the leaderboard log. It replaced the word "(hidden)". A padlock rather than an eye,
 because an eye beside a name reads as "visible". A public copy never admits a hidden row, so it
 never shows one.
 

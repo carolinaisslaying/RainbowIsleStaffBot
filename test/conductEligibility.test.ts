@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { ObjectId } from "mongodb";
 import { conductWarningPermitted, isConductTier } from "../src/domain/conduct.js";
 import type { Tier } from "../src/domain/permissions.js";
 
-const issuer = new ObjectId();
-const subject = new ObjectId();
+const issuer = "100";
+const subject = "200";
 
 const ask = (overrides: Partial<Parameters<typeof conductWarningPermitted>[0]> = {}) =>
     conductWarningPermitted({
         issuerTier: "executive" as Tier,
         subjectTier: "staff" as Tier,
-        issuerStaffId: issuer,
-        subjectStaffId: subject,
+        issuerDiscordId: issuer,
+        subjectDiscordId: subject,
+        subjectIsBot: false,
         subjectDeparted: false,
         ...overrides
     });
@@ -66,7 +66,7 @@ describe("who may receive one", () => {
     });
 
     it("refuses warning yourself", () => {
-        const result = ask({ subjectStaffId: issuer });
+        const result = ask({ subjectDiscordId: issuer });
         expect(result.ok).toBe(false);
         if (result.ok) return;
         expect(result.reason).toContain("cannot warn yourself");
@@ -85,7 +85,7 @@ describe("who may receive one", () => {
     it("reports self-warning before departure", () => {
         // Both true for an Executive who has left; "you cannot warn yourself"
         // is the one that explains why the command will never work for them.
-        const result = ask({ subjectStaffId: issuer, subjectDeparted: true });
+        const result = ask({ subjectDiscordId: issuer, subjectDeparted: true });
         expect(result.ok).toBe(false);
         if (result.ok) return;
         expect(result.reason).toContain("cannot warn yourself");

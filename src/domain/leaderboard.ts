@@ -30,6 +30,11 @@ export interface LeaderboardAudience {
     viewerHidden: boolean;
     /** How many members are currently hiding, the viewer included. */
     hiddenCount: number;
+    /**
+     * The leaderboard log: a record kept in a channel only Executives read, so
+     * it lists everybody and says so. The other fields do not apply to it.
+     */
+    executiveRecord?: boolean;
 }
 
 export interface LeaderboardVisibility {
@@ -49,6 +54,25 @@ function moderators(count: number): string {
 }
 
 export function leaderboardVisibility(audience: LeaderboardAudience): LeaderboardVisibility {
+    if (audience.executiveRecord) {
+        if (audience.hiddenCount === 0) {
+            return {
+                ephemeral: false,
+                note: "An Executive record. Every Moderator is listed."
+            };
+        }
+        const who =
+            audience.hiddenCount === 1
+                ? "the one Moderator who has hidden themselves"
+                : `the ${audience.hiddenCount} Moderators who have hidden themselves`;
+        return {
+            ephemeral: false,
+            note:
+                `An Executive record. It lists ${who}, marked ${EMOJI.hidden}. ` +
+                "Do not share it outside this channel."
+        };
+    }
+
     const seesHiddenOthers = audience.privileged && audience.hiddenCount > 0;
 
     if (seesHiddenOthers && audience.viewerHidden) {
@@ -153,36 +177,33 @@ export interface Standing<T> {
     member: T;
     minutes: number;
     onLeave: boolean;
+    hidden: boolean;
 }
 
 /**
- * A closed week's standings as the room may see them: hidden members left out,
- * most minutes first, ranked 1..n over what remains. This is the copy the
- * leaderboard log posts, and it goes into a channel, so it is always the public
- * view — there is no reader to make an exception for.
+ * A closed week's standings as the leaderboard log keeps them: everybody, most
+ * minutes first, ranked 1..n, with hidden members flagged in their real place.
  *
- * `hiddenCount` comes back with the rows so the log card can say how many were
- * left out through `leaderboardVisibility`, rather than counting them again.
+ * The log goes to a channel only Executives read, and it is their record of
+ * how the week finished. It used to be the public view, which left hidden
+ * members out: the ranks under them were wrong and the record was incomplete,
+ * for readers who see hidden rows everywhere else anyway.
+ *
+ * `hiddenCount` comes back with the rows so the card can say how many are
+ * flagged through `leaderboardVisibility`, rather than counting them again.
  */
-export function publicStandings<T>(inputs: StandingInput<T>[]): {
+export function logStandings<T>(inputs: StandingInput<T>[]): {
     rows: Standing<T>[];
     hiddenCount: number;
 } {
-    const listed = inputs.filter((input) =>
-        leaderboardRowVisible({
-            optedOut: input.optedOut,
-            isViewer: false,
-            privileged: false,
-            publicView: true
-        })
-    );
-    const rows = [...listed]
+    const rows = [...inputs]
         .sort((left, right) => right.minutes - left.minutes)
         .map((input, index) => ({
             rank: index + 1,
             member: input.member,
             minutes: input.minutes,
-            onLeave: input.onLeave
+            onLeave: input.onLeave,
+            hidden: input.optedOut
         }));
-    return { rows, hiddenCount: inputs.length - listed.length };
+    return { rows, hiddenCount: inputs.filter((input) => input.optedOut).length };
 }

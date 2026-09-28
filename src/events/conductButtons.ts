@@ -6,7 +6,7 @@ import { collections } from "../db/client.js";
 import { TIER_STYLE } from "../render/tiers.js";
 import { conductWarningPermitted, isConductTier } from "../domain/conduct.js";
 import { withdrawWarning } from "../domain/assessments.js";
-import { ensureStaff, findStaffById } from "../domain/staff.js";
+import { ensureStaff, findStaffByDiscordId, findStaffById } from "../domain/staff.js";
 import { fetchPublicMember, isExecutive, resolveTier } from "../domain/permissions.js";
 import { audit } from "../domain/audit.js";
 import { tryDm } from "../discord/roles.js";
@@ -61,19 +61,25 @@ export async function handleConductWarnModal(
 
     const subjectMember = await fetchPublicMember(client, config, subjectDiscordId);
     const subjectTier = resolveTier(subjectDiscordId, subjectMember, config);
-    const subject = await ensureStaff(subjectDiscordId);
+    const existing = await findStaffByDiscordId(subjectDiscordId);
 
     const permitted = conductWarningPermitted({
         issuerTier,
         subjectTier,
-        issuerStaffId: issuer._id,
-        subjectStaffId: subject._id,
-        subjectDeparted: subject.active === false || subjectMember === null
+        issuerDiscordId: interaction.user.id,
+        subjectDiscordId,
+        subjectIsBot: subjectMember?.user.bot ?? false,
+        subjectDeparted: existing?.active === false || subjectMember === null
     });
     if (!permitted.ok) {
         await respond(interaction, errorCard(permitted.reason));
         return;
     }
+
+    // Only once every rule has passed, so a refused subject is never given a
+    // staff record. Somebody on the team who has never run a command has none
+    // yet, and a warning needs one to sit on.
+    const subject = await ensureStaff(subjectDiscordId);
 
     await defer(interaction, true);
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { leaderboardRowVisible, publicStandings } from "../src/domain/leaderboard.js";
+import { leaderboardRowVisible, logStandings } from "../src/domain/leaderboard.js";
 
 /**
  * Which rows reach which copy of the leaderboard.
@@ -71,8 +71,10 @@ describe("a closed week's standings, as the log posts them", () => {
         optedOut
     });
 
-    it("leaves hidden members out, counts them, and ranks the rest straight through", () => {
-        const { rows, hiddenCount } = publicStandings([
+    it("lists hidden members in their real place, flagged, and counts them", () => {
+        // The log is an Executive record in an Executive-only channel. Leaving
+        // hidden members out made its ranks wrong and its roster incomplete.
+        const { rows, hiddenCount } = logStandings([
             input("low", 30),
             input("hidden top", 900, true),
             input("high", 300),
@@ -80,15 +82,17 @@ describe("a closed week's standings, as the log posts them", () => {
             input("mid", 120)
         ]);
         expect(hiddenCount).toBe(2);
-        expect(rows.map((row) => [row.rank, row.member])).toEqual([
-            [1, "high"],
-            [2, "mid"],
-            [3, "low"]
+        expect(rows.map((row) => [row.rank, row.member, row.hidden])).toEqual([
+            [1, "hidden top", true],
+            [2, "high", false],
+            [3, "mid", false],
+            [4, "low", false],
+            [5, "hidden low", true]
         ]);
     });
 
     it("keeps members on leave, flagged, in their place by minutes", () => {
-        const { rows } = publicStandings([input("away", 0, false, true), input("here", 40)]);
+        const { rows } = logStandings([input("away", 0, false, true), input("here", 40)]);
         expect(rows.map((row) => [row.member, row.onLeave])).toEqual([
             ["here", false],
             ["away", true]

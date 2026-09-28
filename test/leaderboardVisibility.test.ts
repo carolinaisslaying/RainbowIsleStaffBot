@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { leaderboardVisibility } from "../src/domain/leaderboard.js";
+import { EMOJI } from "../src/render/emoji.js";
 
 /**
  * The rule that decides whether a leaderboard is posted in the channel or sent
@@ -174,5 +175,42 @@ describe("where a leaderboard may be posted", () => {
                 }
             }
         }
+    });
+});
+
+describe("the leaderboard log's footnote", () => {
+    it("says it is an Executive record and lists the hidden, marked", () => {
+        const seen = leaderboardVisibility({
+            privileged: true,
+            viewerHidden: false,
+            hiddenCount: 3,
+            executiveRecord: true
+        });
+        expect(seen.ephemeral).toBe(false);
+        expect(seen.note).toContain("Executive record");
+        expect(seen.note).toContain("3 Moderators who have hidden themselves");
+        expect(seen.note).toContain(EMOJI.hidden);
+        expect(seen.note).not.toMatch(/not listed|Everyone in this channel/);
+    });
+
+    it("uses the singular for one hidden member", () => {
+        const seen = leaderboardVisibility({
+            privileged: true,
+            viewerHidden: false,
+            hiddenCount: 1,
+            executiveRecord: true
+        });
+        expect(seen.note).toContain("the one Moderator who has hidden themselves");
+    });
+
+    it("says every Moderator is listed when nobody is hidden", () => {
+        const seen = leaderboardVisibility({
+            privileged: true,
+            viewerHidden: false,
+            hiddenCount: 0,
+            executiveRecord: true
+        });
+        expect(seen.note).toContain("Every Moderator is listed");
+        expect(seen.note).not.toMatch(/hidden/);
     });
 });

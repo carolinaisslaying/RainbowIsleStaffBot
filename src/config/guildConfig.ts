@@ -196,7 +196,8 @@ export const CONFIG_KEYS: Record<keyof StaffBotConfig, KeySpec> = {
     },
     leaderboardLogChannelId: {
         kind: "string",
-        description: "Each closed week's leaderboard, kept as a record",
+        description:
+            "Each closed week's leaderboard, kept as a record. Executive-only: it lists hidden members",
         target: "channel",
         importance: "optional",
         group: "channels",
