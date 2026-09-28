@@ -131,6 +131,8 @@ export interface RingCardInput {
     streak?: number;
     heading?: string;
     footnote?: string;
+    /** How many weeks they have been credited with Staff of the Week, and the latest. */
+    staffOfWeek?: { times: number; last: Date | null };
 }
 
 function ringsInputFor(input: RingCardInput): RingsInput {
@@ -179,6 +181,14 @@ export function ringFigures(input: RingCardInput): string {
             input.streak === 1
                 ? "First week meeting the minimum."
                 : `**${input.streak} weeks** in a row meeting the minimum.`
+        );
+    }
+
+    if (input.staffOfWeek && input.staffOfWeek.times > 0) {
+        const times = input.staffOfWeek.times === 1 ? "once" : `${input.staffOfWeek.times} times`;
+        lines.push(
+            `${EMOJI.staffOfWeek} Staff of the Week **${times}**` +
+                (input.staffOfWeek.last ? `, most recently the week of ${ts(input.staffOfWeek.last, "D")}.` : ".")
         );
     }
     return lines.join("\n");
@@ -274,6 +284,8 @@ export interface LeaderboardRowView {
      * Executive, or the member themselves, ever sees such a row.
      */
     hidden?: boolean;
+    /** The Staff of the Week holder for the window, marked with the trophy. */
+    staffOfWeek?: boolean;
 }
 
 export interface LeaderboardCardOptions {
@@ -301,7 +313,8 @@ export function leaderboardCard(options: LeaderboardCardOptions): RenderedMessag
         const trailing = row.onLeave
             ? "on leave"
             : `${row.activityMinutes} min, ${percent(row.activityMinutes, row.target)}%`;
-        const marker = row.hidden ? ` ${EMOJI.hidden}` : "";
+        const marker =
+            (row.hidden ? ` ${EMOJI.hidden}` : "") + (row.staffOfWeek ? ` ${EMOJI.staffOfWeek}` : "");
         const suffix = row.isViewer ? " (you)" : "";
         return `${row.rank}. **${row.label}**${marker}${suffix} ${trailing}`;
     };
@@ -963,6 +976,8 @@ export function teamRecapCard(input: {
     /** The team's own rings. Never a mark per member: see teamRecapService. */
     rings: { png: Buffer; alt: string } | null;
     rehearsal: boolean;
+    /** The new holder's name, when the recap is for the week that just closed. */
+    staffOfWeek?: string | null;
 }): RenderedMessage {
     const container = new ContainerBuilder()
         .setAccentColor(COLOUR.report)
@@ -974,6 +989,12 @@ export function teamRecapCard(input: {
                     `weekly minimum of ${input.teamTargetMinutes}.`
             )
         );
+
+    if (input.staffOfWeek) {
+        container.addTextDisplayComponents(
+            text(`${EMOJI.staffOfWeek} **Staff of the Week:** ${input.staffOfWeek}`)
+        );
+    }
 
     if (input.rings) {
         container.addMediaGalleryComponents(

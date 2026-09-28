@@ -1,15 +1,19 @@
+import { ObjectId } from "mongodb";
 import type { Client } from "discord.js";
 import { collections } from "../db/client.js";
 import type { StaffBotConfig } from "../config/guildConfig.js";
 import type { WeekWindow } from "../domain/weekly.js";
-import { computeStreak, previousWeekWindow } from "../domain/weekly.js";
+import { computeStreak, previousWeekWindow, weekWindowFor } from "../domain/weekly.js";
 import { summariseTeamWeek, teamRecapHeadline } from "../domain/teamRecap.js";
 import { findStaffById } from "../domain/staff.js";
+import { recapHolder } from "../domain/staffOfWeek.js";
+import { findWeek } from "../domain/staffOfWeekStore.js";
 import { staffChannel } from "./leaveService.js";
 import { claimTeamRecap } from "./notifications.js";
 import { teamRecapCard, type RenderedMessage } from "../render/cards.js";
 import { describeRings, renderRingCard } from "../render/rings.js";
 import { ringStateFor } from "../domain/rings.js";
+import { staffDisplayName } from "../discord/displayName.js";
 import { formatMinutes, labelWindow } from "../time/format.js";
 import { log } from "../log.js";
 
@@ -100,6 +104,19 @@ export async function buildTeamRecap(
         face: null
     };
 
+    // The week that has just begun, named only on the recap of the week that
+    // has just closed; a catch-up recap for an older week names nobody.
+    const next = await findWeek(week.end);
+    const holderId = recapHolder({
+        recapWeekEnd: week.end,
+        currentWeekStart: weekWindowFor(new Date(), config).start,
+        nextWeek: next ? { status: next.status, staffId: next.staffId?.toHexString() ?? null } : null
+    });
+    const holder = holderId ? await findStaffById(new ObjectId(holderId)) : null;
+    const staffOfWeek = holder
+        ? await staffDisplayName(client, config, holder.discordId, `<@${holder.discordId}>`)
+        : null;
+
     return teamRecapCard({
         windowLabel: labelWindow(week.start, week.end, config.accountingTimezone),
         headline: teamRecapHeadline(summary),
@@ -116,7 +133,8 @@ export async function buildTeamRecap(
                       alt: `The team's week, as rings. ${describeRings(ringsInput)}`
                   }
                 : null,
-        rehearsal
+        rehearsal,
+        staffOfWeek
     });
 }
 
@@ -151,7 +169,7 @@ export async function postTeamRecap(
     if (!(await claimTeamRecap(week.start))) return false;
 
     try {
-        await channel.send({ ...card });
+        await channel.send({ ...card, allowedMentions: { users: [] } });
     } catch (error) {
         // The receipt is spent and the post did not land. Said loudly rather
         // than swallowed: the alternative is claiming it again on the next

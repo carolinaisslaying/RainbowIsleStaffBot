@@ -8,6 +8,8 @@ import {
     weekWindowFor
 } from "../domain/weekly.js";
 import { isLeadOrAbove } from "../domain/permissions.js";
+import { timesHeld } from "../domain/staffOfWeek.js";
+import { toHolderRecord, weeksHeldBy } from "../domain/staffOfWeekStore.js";
 import { errorCard, noticeCard, ringCard } from "../render/cards.js";
 import { defer, respond } from "../discord/respond.js";
 import { staffDisplayName } from "../discord/displayName.js";
@@ -90,6 +92,14 @@ async function showRings({ client, config, interaction, staff, tier }: CommandCo
     const stats = await currentWeekStats(subject._id, config);
     const streak = await computeStreak(subject._id, config);
 
+    const held = timesHeld(
+        (await weeksHeldBy(subject._id)).map((doc) => ({
+            weekStart: doc.weekStart,
+            ...(toHolderRecord(doc) ?? { holders: [], removedHolders: [] })
+        })),
+        subject._id.toHexString()
+    );
+
     await respond(
         interaction,
         ringCard({
@@ -115,6 +125,7 @@ async function showRings({ client, config, interaction, staff, tier }: CommandCo
             softRingsEnabled: config.softRingsEnabled,
             face: subject.ringFace,
             streak,
+            staffOfWeek: { times: held.count, last: held.last },
             footnote: leaveNoteFor(stats, config.minimumLeaveDays)
         })
     );
