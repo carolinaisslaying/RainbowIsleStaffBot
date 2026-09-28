@@ -59,8 +59,10 @@ import {
     LEAVE_WITHDRAW_MODAL,
     REVIEW_BULK_MODAL,
     REVIEW_DECISION_MODAL,
-    REVIEW_SUBSET_MODAL
+    REVIEW_SUBSET_MODAL,
+    SOTW_REMOVE_MODAL
 } from "../render/modals.js";
+import { handleSotwButton, handleSotwRemoveModal } from "./sotwButtons.js";
 import { renderLeaderboard, type LeaderboardScope } from "../commands/leaderboard.js";
 import { canonicaliseTimezone } from "../time/timezones.js";
 import { publicGuildName, staffGuildName } from "../discord/guildNames.js";
@@ -312,6 +314,11 @@ async function routeModal(
     // Conduct warnings: issuing one, and taking one back. The subject rides in
     // the id, because the warn modal is opened from a command rather than from
     // a message and has nothing else to carry it.
+    if (interaction.customId === SOTW_REMOVE_MODAL) {
+        await handleSotwRemoveModal(client, config, interaction);
+        return;
+    }
+
     if (interaction.customId.startsWith(`${CONDUCT_WARN_MODAL}:`)) {
         await handleConductWarnModal(
             client,
@@ -400,6 +407,10 @@ async function routeButton(client: Client, interaction: import("discord.js").But
     // The Withdraw button on a warning's card in the log.
     if (namespace === "conduct") {
         await handleConductButton(client, config, interaction, first, second);
+        return;
+    }
+    if (namespace === "sotw") {
+        await handleSotwButton(client, config, interaction, first);
         return;
     }
     if (namespace === "leave") {

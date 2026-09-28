@@ -63,8 +63,17 @@ describe("the registered layout", () => {
     it("registers exactly one command per subject", async () => {
         const { commands } = await import("../src/commands/index.js");
         expect(commands.map((entry) => entry.data.name).sort()).toEqual(
-            ["admin", "config", "coverage", "dev", "leave", "settings", "shift", "stats", "warnings"]
+            ["admin", "config", "coverage", "dev", "leave", "settings", "shift", "sotw", "stats", "warnings"]
         );
+    });
+
+    it("keeps /sotw for Executives and leaves the colour to every member", async () => {
+        const { commandsByName } = await import("../src/commands/index.js");
+        const sotw = commandsByName.get("sotw")!;
+        for (const sub of ["set", "skip", "remove", "view"]) {
+            expect(requirementsFor(sotw, sub).tier).toBe("executive");
+        }
+        expect(sotw.seededOnly).not.toBe(true);
     });
 
     it("builds every command within Discord's limits", async () => {
