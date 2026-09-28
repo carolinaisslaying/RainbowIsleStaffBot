@@ -97,6 +97,13 @@ before anything is removed.
 - Edits the log card in place afterwards. The channel keeps the request and the
   decision, and gains a line saying who purged the record behind it.
 
+One other thing deletes, automatically: at boot, a staff record whose Discord
+account is a bot is removed, with everything stored against it, in the order
+below. A bot was never a person on the team, so there is nobody's record to
+keep. The audit log keeps a `staff.botRecordRemoved` row carrying the whole
+record and what was counted against it, written before anything is removed. An
+account the bot cannot look up is left alone.
+
 Nothing else in the bot deletes anything.
 
 ## Before you start

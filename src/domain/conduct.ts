@@ -1,4 +1,3 @@
-import type { ObjectId } from "mongodb";
 import type { ConductTier } from "../db/types.js";
 import type { Tier } from "./permissions.js";
 
@@ -19,8 +18,14 @@ export function conductWarningPermitted(options: {
     issuerTier: Tier;
     /** The tier of the person being warned. */
     subjectTier: Tier;
-    issuerStaffId: ObjectId;
-    subjectStaffId: ObjectId;
+    /**
+     * Discord ids rather than staff ids, so every rule is decided before the
+     * subject has a staff record: a refused subject must not be given one.
+     */
+    issuerDiscordId: string;
+    subjectDiscordId: string;
+    /** A bot account, which is never staff and never gets a record. */
+    subjectIsBot: boolean;
     /** Their staff record is inactive, or they are no longer in the guild. */
     subjectDeparted: boolean;
 }): ConductPermitted | ConductRefusal {
@@ -33,7 +38,11 @@ export function conductWarningPermitted(options: {
         };
     }
 
-    if (options.issuerStaffId.equals(options.subjectStaffId)) {
+    if (options.subjectIsBot) {
+        return { ok: false, reason: "That is a bot account, so it has no staff record." };
+    }
+
+    if (options.issuerDiscordId === options.subjectDiscordId) {
         return {
             ok: false,
             reason:

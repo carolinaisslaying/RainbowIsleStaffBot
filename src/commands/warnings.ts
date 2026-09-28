@@ -2,7 +2,7 @@ import { SlashCommandBuilder } from "discord.js";
 import type { Command, CommandContext } from "./types.js";
 import { fetchPublicMember, isLeadOrAbove, resolveTier } from "../domain/permissions.js";
 import { conductWarningPermitted } from "../domain/conduct.js";
-import { ensureStaff, findStaffByDiscordId } from "../domain/staff.js";
+import { findStaffByDiscordId } from "../domain/staff.js";
 import { CONDUCT_TIERS, type ConductTier } from "../db/types.js";
 import { conductWarnModal } from "../render/modals.js";
 import { TIER_STYLE } from "../render/tiers.js";
@@ -90,18 +90,21 @@ async function viewWarnings({ client, config, interaction, staff, tier }: Comman
  * respond or defer on the way to it. The Executive tier itself is enforced by
  * the dispatcher, from `subcommands.issue`.
  */
-async function issueWarning({ client, config, interaction, staff, tier }: CommandContext) {
+async function issueWarning({ client, config, interaction, tier }: CommandContext) {
     const target = interaction.options.getUser("user", true);
     const subjectMember = await fetchPublicMember(client, config, target.id);
     const subjectTier = resolveTier(target.id, subjectMember, config);
-    const subject = await ensureStaff(target.id);
+    // Read, never created: somebody the rules refuse, a bot included, must not
+    // come away with a staff record. The form's submit creates one if needed.
+    const subject = await findStaffByDiscordId(target.id);
 
     const permitted = conductWarningPermitted({
         issuerTier: tier,
         subjectTier,
-        issuerStaffId: staff._id,
-        subjectStaffId: subject._id,
-        subjectDeparted: subject.active === false || subjectMember === null
+        issuerDiscordId: interaction.user.id,
+        subjectDiscordId: target.id,
+        subjectIsBot: target.bot,
+        subjectDeparted: subject?.active === false || subjectMember === null
     });
     if (!permitted.ok) {
         await respond(interaction, errorCard(permitted.reason));

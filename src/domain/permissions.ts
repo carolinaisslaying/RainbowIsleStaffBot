@@ -97,6 +97,10 @@ export function wearsOnLeaveRole(
 
 export function tierOf(member: GuildMember | null, config: StaffBotConfig): Tier {
     if (!member) return "none";
+    // A bot is never staff, whatever roles it has been given. One that held the
+    // Moderation role for a while used to pick up a staff record and stay on
+    // every leaderboard after the role was gone.
+    if (member.user.bot) return "none";
     if (hasAnyRole(member, config.executiveRoles)) return "executive";
     if (hasAnyRole(member, config.leadRoles)) return "lead";
     if (config.moderationDepartmentRole && member.roles.cache.has(config.moderationDepartmentRole)) {

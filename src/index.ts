@@ -9,6 +9,7 @@ import { registerInteractionHandler } from "./events/interactionCreate.js";
 import { registerMessageHandler } from "./events/messageCreate.js";
 import { registerPresenceHandler } from "./events/presenceUpdate.js";
 import { reconcileOnBoot } from "./jobs/reconcile.js";
+import { removeBotStaffRecords } from "./services/botRecordCleanup.js";
 import { registerJobs } from "./jobs/index.js";
 import { stopScheduler } from "./jobs/scheduler.js";
 import { startApiServer } from "./api/server.js";
@@ -63,6 +64,15 @@ async function main(): Promise<void> {
                     "every managed role, or correct the role IDs with /config set. " +
                     "The bot is still running so that /config is reachable."
             );
+        }
+
+        // A bot is never staff. Any record one picked up goes before anything
+        // reconciles, rolls up or ranks it. A failure here must not stop boot.
+        try {
+            const removed = await removeBotStaffRecords(client);
+            if (removed > 0) log.warn(`Removed ${removed} staff record(s) belonging to bots.`);
+        } catch (error) {
+            log.error("Checking for staff records that belong to bots failed", error);
         }
 
         // Mandatory, and before the schedulers start touching anything.
