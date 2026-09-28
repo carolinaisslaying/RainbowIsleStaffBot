@@ -2,7 +2,7 @@ import { GuildFeature, type Client, type Guild, type Role } from "discord.js";
 import type { StaffBotConfig } from "../config/guildConfig.js";
 import type { SotwColour, StaffDoc } from "../db/types.js";
 import { roleColoursFor } from "../domain/sotwColour.js";
-import { addRole, fetchMember, removeRole } from "../discord/roles.js";
+import { addRole, fetchMember, membersWithRole, removeRole } from "../discord/roles.js";
 import { audit } from "../domain/audit.js";
 import { colouredRoleAbove, type RoleOrderFacts } from "../config/configGuards.js";
 import { log } from "../log.js";
@@ -69,8 +69,14 @@ export async function applyRoleColour(
 }
 
 /**
- * Give the role to `holder` alone, in their colour, or to nobody. Every cached
- * member wearing it who is not the holder loses it, however they came by it.
+ * Give the role to `holder` alone, in their colour, or to nobody. Every member
+ * wearing it who is not the holder loses it, however they came by it.
+ *
+ * `membersWithRole` fetches the guild's members before filtering, rather than
+ * reading `role.members` off discord.js's own cache: the public guild holds
+ * around 110,000 members and is never fully cached, so after a restart the
+ * previous holder was often missing from the cache and kept the role while
+ * the new one was also given it.
  */
 export async function handRoleTo(
     client: Client,
@@ -81,7 +87,8 @@ export async function handRoleTo(
     const found = await sotwRole(client, config);
     if (!found) return { granted: false, colour: { ok: false, downgraded: false } };
 
-    for (const member of found.role.members.values()) {
+    const wearers = await membersWithRole(client, config, found.role.id);
+    for (const member of wearers) {
         if (holder && member.id === holder.discordId) continue;
         await removeRole(member, found.role.id, reason);
     }
