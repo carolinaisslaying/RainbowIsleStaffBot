@@ -154,7 +154,7 @@ export async function runHandoff(
         role = await handRoleTo(client, config, holder, `Staff of the Week for ${label}`);
     } catch (error) {
         log.error("Could not hand over the Staff of the Week role", error);
-        role = { granted: false, colour: { ok: false, downgraded: false } };
+        role = { granted: false, colour: { ok: false, downgraded: false, colours: null } };
     }
     if (holder) await congratulate(client, config, holder, role.colour, rng);
 

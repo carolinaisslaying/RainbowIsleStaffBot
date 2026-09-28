@@ -1,7 +1,7 @@
 import { GuildFeature, type Client, type Guild, type Role } from "discord.js";
 import type { StaffBotConfig } from "../config/guildConfig.js";
 import type { SotwColour, StaffDoc } from "../db/types.js";
-import { roleColoursFor } from "../domain/sotwColour.js";
+import { roleColoursFor, type RoleColourWrite } from "../domain/sotwColour.js";
 import { addRole, fetchMember, membersWithRole, removeRole } from "../discord/roles.js";
 import { audit } from "../domain/audit.js";
 import { colouredRoleAbove, type RoleOrderFacts } from "../config/configGuards.js";
@@ -36,6 +36,8 @@ export function guildHasEnhanced(guild: Guild): boolean {
 export interface ColourWrite {
     ok: boolean;
     downgraded: boolean;
+    /** What was actually applied (or would have been), for callers that log it. */
+    colours: RoleColourWrite | null;
 }
 
 export async function applyRoleColour(
@@ -46,7 +48,7 @@ export async function applyRoleColour(
     actorId: string | null = null
 ): Promise<ColourWrite> {
     const found = await sotwRole(client, config);
-    if (!found) return { ok: false, downgraded: false };
+    if (!found) return { ok: false, downgraded: false, colours: null };
     const { colours, downgraded } = roleColoursFor(colour, guildHasEnhanced(found.guild));
     const current = found.role.colors;
     if (
@@ -54,17 +56,17 @@ export async function applyRoleColour(
         (current.secondaryColor ?? null) === colours.secondaryColor &&
         (current.tertiaryColor ?? null) === colours.tertiaryColor
     ) {
-        return { ok: true, downgraded };
+        return { ok: true, downgraded, colours };
     }
     try {
         // `edit` rather than `setColors`: only the edit form accepts null to
         // clear a gradient's second and third stops.
         await found.role.edit({ colors: colours, reason });
         await audit("sotw.roleColour", { actorId, detail: { roleId: found.role.id, ...colours } });
-        return { ok: true, downgraded };
+        return { ok: true, downgraded, colours };
     } catch (error) {
         log.warn("Could not set the Staff of the Week role's colour", error);
-        return { ok: false, downgraded };
+        return { ok: false, downgraded, colours };
     }
 }
 
@@ -85,7 +87,7 @@ export async function handRoleTo(
     reason: string
 ): Promise<{ granted: boolean; colour: ColourWrite }> {
     const found = await sotwRole(client, config);
-    if (!found) return { granted: false, colour: { ok: false, downgraded: false } };
+    if (!found) return { granted: false, colour: { ok: false, downgraded: false, colours: null } };
 
     const wearers = await membersWithRole(client, config, found.role.id);
     for (const member of wearers) {

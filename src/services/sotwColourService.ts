@@ -3,7 +3,7 @@ import type { StaffBotConfig } from "../config/guildConfig.js";
 import type { SotwColour, StaffDoc } from "../db/types.js";
 import { fetchPublicMember, resolveTier } from "../domain/permissions.js";
 import { forgetStaffLookup, setSotwColour } from "../domain/staff.js";
-import { colourStatus } from "../domain/staffOfWeek.js";
+import { colourStatus, sotwEnabled } from "../domain/staffOfWeek.js";
 import { describeColour, downgradeNote } from "../domain/sotwColour.js";
 import { pickerUrl } from "../domain/sotwFragment.js";
 import { clearStaged, noteRoleWrite, roleWriteCooldown, stagedColour } from "../domain/sotwStaging.js";
@@ -66,9 +66,13 @@ export async function saveStagedColour(
     const staged = stagedColour(staff.discordId, now);
     if (!staged) return "That choice has expired. Enter the code again.";
 
-    // Re-derived at the click, never carried from the card.
-    const holder = await currentHolder(config, new Date(now));
-    const holding = holder?.staff._id.equals(staff._id) ?? false;
+    // Re-derived at the click, never carried from the card. A member is never
+    // "holding" while the feature is off: there is no role to touch, so no
+    // cooldown, no write and no event, whatever a stale doc from before it was
+    // switched off might otherwise say.
+    const enabled = sotwEnabled(config);
+    const holder = enabled ? await currentHolder(config, new Date(now)) : null;
+    const holding = enabled && (holder?.staff._id.equals(staff._id) ?? false);
 
     if (holding) {
         const wait = roleWriteCooldown(staff.discordId, now);
@@ -90,13 +94,20 @@ export async function saveStagedColour(
 
     noteRoleWrite(staff.discordId, now);
     const write = await applyRoleColour(client, config, staged.colour, "Staff of the Week colour changed by its holder", staff.discordId);
-    await appendEvent(
-        holder.week.start,
-        sotwEvent(staged.colour ? "colour" : "colourCleared", { actorId: staff.discordId, staffId: staff._id, detail: { colour: staged.colour } })
-    );
     if (!write.ok) {
         return "Saved. The role could not be updated just now; your colour goes on it at the next restart or handoff.";
     }
+    // What was actually put on the role, not the staged preference: a
+    // downgraded write shows one colour on the role while the preference
+    // stores the gradient or holographic choice behind it.
+    await appendEvent(
+        holder.week.start,
+        sotwEvent(staged.colour ? "colour" : "colourCleared", {
+            actorId: staff.discordId,
+            staffId: staff._id,
+            detail: write.colours ? { ...write.colours } : null
+        })
+    );
     return write.downgraded && staged.colour
         ? `Saved, and on the role. ${downgradeNote(staged.colour)}`
         : "Saved, and the role now wears it.";
