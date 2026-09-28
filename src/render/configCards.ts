@@ -18,7 +18,7 @@ import {
     type StaffBotConfig
 } from "../config/guildConfig.js";
 import { exportConfig, type ConfigChange, type ImportReport } from "../config/configTransfer.js";
-import { configWarnings } from "../config/configGuards.js";
+import { configWarnings, type ConfigWarning } from "../config/configGuards.js";
 import {
     V2_FLAGS,
     containersMessage,
@@ -215,7 +215,8 @@ export async function resolveGuildNames(
 export function configViewCard(
     config: StaffBotConfig,
     guildNames: Map<string, string>,
-    setCommand: string
+    setCommand: string,
+    extraWarnings: ConfigWarning[] = []
 ): RenderedMessage {
     // One heading per block, one divider between blocks, and nothing else
     // doing the dividing. Blank lines inside a text display look like accident;
@@ -265,7 +266,7 @@ export function configViewCard(
     // reach, a shift that ends before the member is marked Away. A card that
     // lists every key and none of their consequences is a card that reads as
     // healthy while the bot assesses nobody.
-    const warnings = configWarnings(config, new Date());
+    const warnings = [...configWarnings(config, new Date()), ...extraWarnings];
     const containers = [statusContainer(config, setCommand), wiring, policy];
 
     if (warnings.length > 0) {

@@ -12,7 +12,8 @@ import {
 import { permittedScrub, scrubPreview } from "../domain/scrub.js";
 import { env } from "../config/env.js";
 import { loadConfig } from "../config/guildConfig.js";
-import { configWarnings } from "../config/configGuards.js";
+import { configWarnings, staffOfWeekRoleOrder } from "../config/configGuards.js";
+import { staffOfWeekRoleFacts } from "../services/sotwRole.js";
 import { db } from "../db/client.js";
 import { uptimeMeasuredSince, uptimeRows } from "../domain/uptime.js";
 import { listeningOver } from "../domain/observation.js";
@@ -144,10 +145,10 @@ export const devCommand: Command = {
                     listening,
                     jobs: jobStatus(),
                     missingRequired: setupStatus(fresh).missingRequired,
-                    warnings: configWarnings(fresh, new Date()).map((warning) => ({
-                        key: String(warning.key),
-                        text: warning.text
-                    })),
+                    warnings: [
+                        ...configWarnings(fresh, new Date()),
+                        ...staffOfWeekRoleOrder(await staffOfWeekRoleFacts(client, fresh))
+                    ].map((warning) => ({ key: String(warning.key), text: warning.text })),
                     dangerousCommands: env.devDangerousCommands
                 })
             );

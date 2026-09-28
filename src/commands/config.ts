@@ -15,8 +15,10 @@ import { isExecutive } from "../domain/permissions.js";
 import {
     configWarnings,
     historyChangeWarning,
-    rewritesHistory
+    rewritesHistory,
+    staffOfWeekRoleOrder
 } from "../config/configGuards.js";
+import { staffOfWeekRoleFacts } from "../services/sotwRole.js";
 import { collections } from "../db/client.js";
 import { errorCard, noticeCard } from "../render/cards.js";
 import {
@@ -359,7 +361,8 @@ export const configCommand: Command = {
             await defer(interaction, true);
             const fresh = await loadConfig();
             const guildNames = await resolveGuildNames(client, fresh);
-            await respond(interaction, configViewCard(fresh, guildNames, setCommand));
+            const roleOrder = staffOfWeekRoleOrder(await staffOfWeekRoleFacts(client, fresh));
+            await respond(interaction, configViewCard(fresh, guildNames, setCommand, roleOrder));
             return;
         }
 
@@ -481,7 +484,10 @@ export async function applyChange(
     // Everything the document now says that will not do what its author
     // expects. Shown after the change rather than instead of it: the write
     // already happened, and policy is theirs to set. See config/configGuards.ts.
-    const warnings = configWarnings(fresh, new Date());
+    const warnings = [
+        ...configWarnings(fresh, new Date()),
+        ...staffOfWeekRoleOrder(await staffOfWeekRoleFacts(client, fresh))
+    ];
     const warningBlock =
         warnings.length === 0
             ? ""

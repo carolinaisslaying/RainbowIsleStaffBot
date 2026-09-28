@@ -376,6 +376,14 @@ describe("the configuration viewer", () => {
         const json = JSON.stringify(configViewCard(DEFAULT_CONFIG, NAMES, "/config set"));
         expect(json).not.toContain("\\n\\n### ");
     });
+
+    it("shows warnings it was handed alongside its own", async () => {
+        const { configViewCard } = await import("../src/render/configCards.js");
+        const card = configViewCard(DEFAULT_CONFIG, NAMES, "/config set", [
+            { key: "staffOfWeekRole", text: "The role is above the bot." }
+        ]);
+        expect(JSON.stringify(card.components.map((c) => c.toJSON()))).toContain("The role is above the bot.");
+    });
 });
 
 describe("splitting the old review channel in two", () => {
