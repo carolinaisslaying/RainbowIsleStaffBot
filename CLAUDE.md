@@ -650,7 +650,19 @@ receipt pattern as the fortnight announcement and the recaps, for the same reaso
 (`drawPool`, `domain/staffOfWeek.ts`) is the closed week's top three who met `weeklyTargetMinutes`
 and may hold it, plus everybody tied with the third, so a tie at the cut never decides who is in;
 pending leave skips the draw entirely, because handing the role to somebody probably away is worse
-than a week with nobody drawn.
+than a week with nobody drawn. The grant itself reads who currently wears the role with
+`membersWithRole` (`services/sotwRole.ts`) — a full public-guild member fetch — rather than trusting
+discord.js's own cache: the public guild holds around 110,000 members and is never fully cached, and
+a cached-only scan let a previous holder who had dropped out of it keep the role after a restart,
+so two members wore it at once. At boot, `handoffOnBoot` treats a boot as a first run once it is a
+cold start or the week is already past `HANDOFF_GRACE_MS` (`handoffSettled`), and in that case
+spends the receipt without drawing and never overwrites a week document that already exists. It used
+to key on "no `staffOfWeek` document exists at all", which let a pick already staged for next week
+get drawn over by a mid-week restart, because a document merely existing didn't yet mean a week had
+been decided. A throw out of `handRoleTo` after the receipt is claimed is caught rather than left to
+abort the run: the handoff still congratulates the holder, posts the notice and marks the week
+handed off, recording `granted: false`, because the receipt is already spent and nothing will retry
+this week if the run stops there.
 
 **Credited versus removed holders.** A week's document keeps `holders` (everybody ever granted it
 that week) and `removedHolders` (anybody taken off early) rather than overwriting one with the
@@ -661,6 +673,18 @@ holder is neither barred by having held it (they were taken off, not credited) n
 held it (they were on the record, briefly) — `/sotw remove` is a correction, not a week that counts
 against anybody.
 
+**A stale card cannot act on a newer pick.** The `/sotw set` week-choice buttons carry the staged
+member's staffId in their own customId (`sotw:rest:<id>`, `sotw:next:<id>`), checked against what is
+actually staged with the non-consuming `peekSet` rather than `takeSet`: a second `/sotw set` while an
+earlier card is still open replaces the staging, and the id on the button is what tells the older
+card to refuse rather than silently act on — or consume — the pick a fresher card is waiting on.
+Every `/sotw` button and the remove modal re-checks `sotwEnabled` at the moment it is pressed or
+submitted, not only when the command that opened it ran, because a card can sit open across a
+`/config set` that turns the feature off in between — the same "buttons check less than the command"
+defect this codebase keeps re-finding elsewhere. `takeRoleFrom` (`services/sotwRole.ts`) returns
+whether the role actually came off, and `/sotw remove` says when it did not, rather than assuming
+Discord agreed.
+
 **The colour is a preference, not a role setting.** `StaffDoc.sotwColour` is what a member chose on
 their own colour picker, saved whether or not they currently hold the role. `roleColoursFor`
 (`domain/sotwColour.ts`) is the one function every role write goes through — the handoff, a
@@ -668,7 +692,13 @@ rest-of-week grant, a Save while holding, and the boot re-assert — so a server
 colours always gets the nearest thing it can show and `downgraded` always comes from the same place.
 Editing the role's colour by hand in Discord's own settings does not stick: `reassertRole` runs on
 every boot and puts the holder's saved preference straight back, because the preference is the
-source of truth and a colour that could be edited around it would stop meaning anything.
+source of truth and a colour that could be edited around it would stop meaning anything. A colour
+event is appended to the week's history only once the role write it describes actually succeeds, and
+it carries the colours that were actually applied (`ColourWrite.colours`, which can be a downgrade)
+rather than what was asked for — the history must never claim a colour Discord never wore. With the
+feature off, `/settings sotw-colour`'s Save stores the preference alone: no cooldown, no role write,
+no event, because telling a holder their colour "goes on the role" would promise something nothing
+is left running to apply.
 
 **The nickname exception.** The colour preview and the picker page's link show the public-guild
 nickname rather than going through `staffDisplayName`, because a colour is a thing seen in the
