@@ -60,9 +60,10 @@ import {
     REVIEW_BULK_MODAL,
     REVIEW_DECISION_MODAL,
     REVIEW_SUBSET_MODAL,
+    SOTW_CODE_MODAL,
     SOTW_REMOVE_MODAL
 } from "../render/modals.js";
-import { handleSotwButton, handleSotwRemoveModal } from "./sotwButtons.js";
+import { handleSotwButton, handleSotwColourButton, handleSotwCodeModal, handleSotwRemoveModal } from "./sotwButtons.js";
 import { renderLeaderboard, type LeaderboardScope } from "../commands/leaderboard.js";
 import { canonicaliseTimezone } from "../time/timezones.js";
 import { publicGuildName, staffGuildName } from "../discord/guildNames.js";
@@ -318,6 +319,10 @@ async function routeModal(
         await handleSotwRemoveModal(client, config, interaction);
         return;
     }
+    if (interaction.customId === SOTW_CODE_MODAL) {
+        await handleSotwCodeModal(client, config, interaction);
+        return;
+    }
 
     if (interaction.customId.startsWith(`${CONDUCT_WARN_MODAL}:`)) {
         await handleConductWarnModal(
@@ -411,6 +416,10 @@ async function routeButton(client: Client, interaction: import("discord.js").But
     }
     if (namespace === "sotw") {
         await handleSotwButton(client, config, interaction, first, second);
+        return;
+    }
+    if (namespace === "sotwColour") {
+        await handleSotwColourButton(client, config, interaction, first);
         return;
     }
     if (namespace === "leave") {

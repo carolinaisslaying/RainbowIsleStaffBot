@@ -21,6 +21,9 @@ import { allWeeksFor } from "../domain/weekly.js";
 import { assessmentHistory, warningsFor } from "../domain/assessments.js";
 import { leaveHistory } from "../domain/leave.js";
 import { audit } from "../domain/audit.js";
+import { sotwEnabled } from "../domain/staffOfWeek.js";
+import { weeksHeldBy } from "../domain/staffOfWeekStore.js";
+import { colourCardFor } from "../services/sotwColourService.js";
 import {
     errorCard,
     faceSetupCard,
@@ -42,7 +45,7 @@ export const settingsCommand: Command = {
     },
     data: new SlashCommandBuilder()
         .setName("settings")
-        .setDescription("Your timezone, ring colours, leaderboard privacy and data")
+        .setDescription("Your timezone, ring colours, Staff of the Week colour, privacy and data")
         .addSubcommand((sub) =>
             sub
                 .setName("timezone")
@@ -59,6 +62,11 @@ export const settingsCommand: Command = {
         )
         .addSubcommand((sub) =>
             sub.setName("face").setDescription("Choose the colours your rings are drawn in")
+        )
+        .addSubcommand((sub) =>
+            sub
+                .setName("sotw-colour")
+                .setDescription("The colour your name takes whenever you are Staff of the Week")
         )
         .addSubcommand((sub) =>
             sub
@@ -105,6 +113,23 @@ export const settingsCommand: Command = {
         // face is chosen and one card that describes the choice.
         if (sub === "face") {
             await respond(interaction, faceSetupCard(FACES, interaction.guildId));
+            return;
+        }
+
+        if (sub === "sotw-colour") {
+            if (!sotwEnabled(context.config)) {
+                await respond(
+                    interaction,
+                    noticeCard(
+                        "Staff of the Week is not set up",
+                        "There is no Staff of the Week role yet, so there is no colour to choose.",
+                        { ephemeral: true, colour: COLOUR.staffOfWeek }
+                    )
+                );
+                return;
+            }
+            await defer(interaction, true);
+            await respond(interaction, await colourCardFor(context.client, context.config, staff));
             return;
         }
 
@@ -175,13 +200,14 @@ async function setTimezone({ interaction }: CommandContext): Promise<void> {
 async function exportData({ interaction, staff }: CommandContext): Promise<void> {
     await defer(interaction, true);
 
-    const [days, shifts, weeks, assessments, warnings, leave] = await Promise.all([
+    const [days, shifts, weeks, assessments, warnings, leave, sotwWeeks] = await Promise.all([
         exportDays(staff._id),
         shiftHistory(staff._id, 10_000),
         allWeeksFor(staff._id),
         assessmentHistory(staff._id, 1000),
         warningsFor(staff._id),
-        leaveHistory(staff._id)
+        leaveHistory(staff._id),
+        weeksHeldBy(staff._id)
     ]);
 
     const payload = {
@@ -199,6 +225,8 @@ async function exportData({ interaction, staff }: CommandContext): Promise<void>
             joinedTeamAt: staff.joinedTeamAt,
             active: staff.active,
             leaderboardOptOut: staff.leaderboardOptOut,
+            sotwColour: staff.sotwColour ?? null,
+            sotwColourUpdatedAt: staff.sotwColourUpdatedAt ?? null,
             createdAt: staff.createdAt,
             updatedAt: staff.updatedAt
         },
@@ -207,7 +235,15 @@ async function exportData({ interaction, staff }: CommandContext): Promise<void>
         weeklyStats: weeks,
         fortnightAssessments: assessments,
         warnings,
-        leave
+        leave,
+        staffOfWeek: sotwWeeks.map((week) => ({
+            weekStart: week.weekStart,
+            status: week.status,
+            removed: (week.removedHolders ?? []).some((id) => id.equals(staff._id)),
+            events: (week.events ?? [])
+                .filter((event) => event.staffId?.equals(staff._id))
+                .map((event) => ({ kind: event.kind, at: event.at, reason: event.reason }))
+        }))
     };
 
     const json = Buffer.from(JSON.stringify(payload, null, 2), "utf8");
@@ -221,7 +257,8 @@ async function exportData({ interaction, staff }: CommandContext): Promise<void>
                 `## Your data\n` +
                     `${days.length} recorded days, ${shifts.length} shifts, ` +
                     `${weeks.length} weekly rollups, ${assessments.length} assessments, ` +
-                    `${warnings.length} warnings, ${leave.length} leave records.\n\n` +
+                    `${warnings.length} warnings, ${leave.length} leave records, ` +
+                    `${sotwWeeks.length} Staff of the Week records.\n\n` +
                     "-# Only you can see this. Nothing here is deleted by any command. " +
                     "Ask an Executive if you need a record removed."
             )

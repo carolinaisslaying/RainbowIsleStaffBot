@@ -1,15 +1,17 @@
-import type { ButtonInteraction, Client, ModalSubmitInteraction } from "discord.js";
+import { MessageFlags, type ButtonInteraction, type Client, type ModalSubmitInteraction } from "discord.js";
 import { ObjectId } from "mongodb";
 import type { StaffBotConfig } from "../config/guildConfig.js";
 import { fetchPublicMember, resolveTier } from "../domain/permissions.js";
-import { findStaffById } from "../domain/staff.js";
+import { findStaffById, findStaffByDiscordId } from "../domain/staff.js";
 import { sotwEnabled } from "../domain/staffOfWeek.js";
-import { peekSet, takeSet } from "../domain/sotwStaging.js";
-import { errorCard } from "../render/cards.js";
-import { FIELD_REASON } from "../render/modals.js";
+import { formatColourCode, parseColourCode } from "../domain/sotwColour.js";
+import { clearStaged, peekSet, stageColour, stagedColour, takeSet } from "../domain/sotwStaging.js";
+import { errorCard, type RenderedMessage } from "../render/cards.js";
+import { FIELD_CODE, FIELD_REASON, sotwCodeModal } from "../render/modals.js";
 import { sotwCard } from "../render/sotwCards.js";
 import { deferOntoOwnCard, respond } from "../discord/respond.js";
 import { grantRestOfWeek, removeHolder, setNextWeek } from "../services/sotwDecisions.js";
+import { colourCardFor, saveStagedColour } from "../services/sotwColourService.js";
 
 /** Every rule re-derived on the click, never carried from the card. */
 async function isExecutive(client: Client, config: StaffBotConfig, userId: string): Promise<boolean> {
@@ -92,4 +94,74 @@ export async function handleSotwRemoveModal(
     await deferOntoOwnCard(interaction);
     const reason = interaction.fields.getTextInputValue(FIELD_REASON).trim();
     await respond(interaction, await removeHolder(client, config, interaction.user.id, reason));
+}
+
+/** Replace the card and its image, rather than stacking a second attachment. */
+async function redraw(interaction: ButtonInteraction | ModalSubmitInteraction, card: RenderedMessage): Promise<void> {
+    await interaction.editReply({
+        components: card.components,
+        files: card.files,
+        attachments: [],
+        flags: MessageFlags.IsComponentsV2
+    } as never);
+}
+
+/**
+ * A member's own colour, holder or not: nothing here checks tier beyond
+ * having a staff record at all, because `/settings sotw-colour` is open to
+ * every member. Every gate that matters — whether saving would touch the
+ * role — is re-derived inside `saveStagedColour` at the click, never carried
+ * from the card that was drawn.
+ */
+export async function handleSotwColourButton(
+    client: Client,
+    config: StaffBotConfig,
+    interaction: ButtonInteraction,
+    action: string
+): Promise<void> {
+    const staff = await findStaffByDiscordId(interaction.user.id);
+    if (!staff) return;
+
+    if (action === "code") {
+        const staged = stagedColour(staff.discordId);
+        const current = staged ? staged.colour : (staff.sotwColour ?? null);
+        await interaction.showModal(sotwCodeModal(current ? formatColourCode(current) : null));
+        return;
+    }
+
+    await interaction.deferUpdate();
+    if (action === "clear") {
+        stageColour(staff.discordId, null);
+        await redraw(interaction, await colourCardFor(client, config, staff, { staged: { colour: null } }));
+        return;
+    }
+    if (action === "cancel") {
+        clearStaged(staff.discordId);
+        await redraw(interaction, await colourCardFor(client, config, staff));
+        return;
+    }
+    if (action === "save") {
+        const message = await saveStagedColour(client, config, staff);
+        const fresh = (await findStaffByDiscordId(staff.discordId)) ?? staff;
+        const still = stagedColour(staff.discordId);
+        await redraw(interaction, await colourCardFor(client, config, fresh, { staged: still, message }));
+    }
+}
+
+export async function handleSotwCodeModal(
+    client: Client,
+    config: StaffBotConfig,
+    interaction: ModalSubmitInteraction
+): Promise<void> {
+    const staff = await findStaffByDiscordId(interaction.user.id);
+    if (!staff) return;
+    await deferOntoOwnCard(interaction);
+
+    const parsed = parseColourCode(interaction.fields.getTextInputValue(FIELD_CODE));
+    if (!parsed.ok) {
+        await redraw(interaction, await colourCardFor(client, config, staff, { staged: stagedColour(staff.discordId), message: parsed.error }));
+        return;
+    }
+    stageColour(staff.discordId, parsed.colour);
+    await redraw(interaction, await colourCardFor(client, config, staff, { staged: { colour: parsed.colour } }));
 }

@@ -76,6 +76,14 @@ describe("the registered layout", () => {
         expect(sotw.seededOnly).not.toBe(true);
     });
 
+    it("lets every member set their own Staff of the Week colour", async () => {
+        const { commandsByName } = await import("../src/commands/index.js");
+        const settings = commandsByName.get("settings")!;
+        const json = settings.data.toJSON() as { options: { name: string }[] };
+        expect(json.options.map((option) => option.name)).toContain("sotw-colour");
+        expect(requirementsFor(settings, "sotw-colour").tier).toBe("staff");
+    });
+
     it("builds every command within Discord's limits", async () => {
         const { commands } = await import("../src/commands/index.js");
         type Node = { name: string; description?: string; options?: Node[] };
