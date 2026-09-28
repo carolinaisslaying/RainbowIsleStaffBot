@@ -2,7 +2,7 @@ import type { Client } from "discord.js";
 import type { ObjectId } from "mongodb";
 import type { StaffBotConfig } from "../config/guildConfig.js";
 import { findStaffByDiscordId, findStaffById } from "../domain/staff.js";
-import { weekLeaveFor } from "../domain/leave.js";
+import { leaveOverlapping, weekLeaveFor } from "../domain/leave.js";
 import { sotwEnabled, type LateCause } from "../domain/staffOfWeek.js";
 import { findWeek } from "../domain/staffOfWeekStore.js";
 import { sotwCard } from "../render/sotwCards.js";
@@ -76,6 +76,17 @@ export async function checkHolderStanding(
         const holder = await currentHolder(config, now);
         const staff = await findStaffByDiscordId(discordId);
         if (!holder || !staff || !holder.staff._id.equals(staff._id)) return;
+        // Starting leave takes the department and rank roles before it adds
+        // the on-leave role, so for a moment the holder reads as not staff.
+        // Leave does not touch Staff of the Week; approved or active leave
+        // covering now means this is that, and there is nothing to report.
+        // (`leaveOverlapping` counts approved and active leave; an ended
+        // record's end has already moved to when it ended, so it never
+        // covers now.)
+        if (cause !== "left") {
+            const covering = await leaveOverlapping(staff._id, now, new Date(now.getTime() + 1));
+            if (covering.length > 0) return;
+        }
         const name = await nameOf(client, config, staff);
         await postNoticeOnce(
             client,

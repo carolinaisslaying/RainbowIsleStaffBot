@@ -10,6 +10,7 @@ import { errorCard, type RenderedMessage } from "../render/cards.js";
 import { FIELD_CODE, FIELD_REASON, sotwCodeModal } from "../render/modals.js";
 import { sotwCard } from "../render/sotwCards.js";
 import { deferOntoOwnCard, respond } from "../discord/respond.js";
+import { cmd } from "../discord/commandMentions.js";
 import { grantRestOfWeek, removeHolder, setNextWeek } from "../services/sotwDecisions.js";
 import { colourCardFor, saveStagedColour } from "../services/sotwColourService.js";
 
@@ -51,19 +52,19 @@ export async function handleSotwButton(
 
     const staged = peekSet(interaction.user.id);
     if (!staged) {
-        await respond(interaction, errorCard("That choice has expired. Run the set command again."));
+        await respond(interaction, errorCard(`That choice has expired. Run ${cmd("sotw set", interaction.guildId)} again.`));
         return;
     }
     if (staged.staffId !== stagedStaffId) {
         // Left staged: this card is the stale one, and whatever is actually
         // staged belongs to a fresher card that may still be open.
-        await respond(interaction, errorCard("That card is out of date. Run the set command again."));
+        await respond(interaction, errorCard(`That card is out of date. Run ${cmd("sotw set", interaction.guildId)} again.`));
         return;
     }
 
     const pending = takeSet(interaction.user.id);
     if (!pending) {
-        await respond(interaction, errorCard("That choice has expired. Run the set command again."));
+        await respond(interaction, errorCard(`That choice has expired. Run ${cmd("sotw set", interaction.guildId)} again.`));
         return;
     }
     const subject = await findStaffById(new ObjectId(pending.staffId));
@@ -78,10 +79,12 @@ export async function handleSotwButton(
     await respond(interaction, card);
 }
 
+/** `expectedStaffId` is the holder the modal was opened for, from its id. */
 export async function handleSotwRemoveModal(
     client: Client,
     config: StaffBotConfig,
-    interaction: ModalSubmitInteraction
+    interaction: ModalSubmitInteraction,
+    expectedStaffId: string
 ): Promise<void> {
     if (!(await isExecutive(client, config, interaction.user.id))) {
         await respond(interaction, errorCard("Staff of the Week is decided by the Executives."));
@@ -93,7 +96,10 @@ export async function handleSotwRemoveModal(
     }
     await deferOntoOwnCard(interaction);
     const reason = interaction.fields.getTextInputValue(FIELD_REASON).trim();
-    await respond(interaction, await removeHolder(client, config, interaction.user.id, reason));
+    await respond(
+        interaction,
+        await removeHolder(client, config, interaction.user.id, reason, expectedStaffId, interaction.guildId)
+    );
 }
 
 /** Replace the card and its image, rather than stacking a second attachment. */

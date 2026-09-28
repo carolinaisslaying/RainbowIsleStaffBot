@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
     barredIds,
+    bootHandoff,
     creditedHolders,
     decideHandoff,
     draw,
@@ -8,6 +9,7 @@ import {
     eligibilityFor,
     isHardRefusal,
     refusalText,
+    type BootHandoffInput,
     type Candidate,
     type Eligibility
 } from "../src/domain/staffOfWeek.js";
@@ -199,6 +201,93 @@ describe("the handoff decision", () => {
         });
         expect(decideHandoff({ week: null, pickEligibility: null, pool: [], rng: () => 0 }).decision).toEqual({
             kind: "empty"
+        });
+    });
+});
+
+describe("the boot handoff", () => {
+    const base: BootHandoffInput = { coldStart: false, claimed: false, handedOff: false, pastGrace: false, week: null };
+    const pending = { status: "pending" as const, staffId: "p" };
+
+    it("only re-asserts the role once the week is handed off", () => {
+        expect(bootHandoff({ ...base, claimed: true, handedOff: true, pastGrace: true, week: pending })).toEqual({
+            kind: "reassert"
+        });
+    });
+
+    it("runs the ordinary handoff inside the grace hour", () => {
+        expect(bootHandoff({ ...base, week: pending })).toEqual({ kind: "run" });
+        expect(bootHandoff(base)).toEqual({ kind: "run" });
+    });
+
+    it("keeps a cold start as it was, a pick included", () => {
+        expect(bootHandoff({ ...base, coldStart: true, week: pending })).toEqual({ kind: "coldStart" });
+        expect(bootHandoff({ ...base, coldStart: true, pastGrace: true })).toEqual({ kind: "coldStart" });
+    });
+
+    describe("past the grace hour, with no receipt", () => {
+        const late = { ...base, pastGrace: true };
+
+        it("honours a pending pick, claiming first", () => {
+            expect(bootHandoff({ ...late, week: pending })).toEqual({ kind: "pick", claim: true });
+        });
+
+        it("records nobody and never draws for an undecided, pickless or skipped week", () => {
+            expect(bootHandoff(late)).toEqual({ kind: "empty", claim: true });
+            expect(bootHandoff({ ...late, week: { status: "pending", staffId: null } })).toEqual({
+                kind: "empty",
+                claim: true
+            });
+            expect(bootHandoff({ ...late, week: { status: "skipped", staffId: null } })).toEqual({
+                kind: "empty",
+                claim: true
+            });
+        });
+
+        it("never overwrites somebody already given the rest of the week, or an empty week", () => {
+            for (const status of ["picked", "random"] as const) {
+                expect(bootHandoff({ ...late, week: { status, staffId: "g" } })).toEqual({ kind: "mark", claim: true });
+            }
+            expect(bootHandoff({ ...late, week: { status: "empty", staffId: null } })).toEqual({
+                kind: "mark",
+                claim: true
+            });
+        });
+    });
+
+    describe("a receipt claimed by a handoff that never finished", () => {
+        const unfinished = { ...base, claimed: true };
+
+        it("finishes a pending pick without claiming again, in or out of the grace hour", () => {
+            expect(bootHandoff({ ...unfinished, week: pending })).toEqual({ kind: "pick", claim: false });
+            expect(bootHandoff({ ...unfinished, pastGrace: true, week: pending })).toEqual({
+                kind: "pick",
+                claim: false
+            });
+        });
+
+        it("records nobody for a pending week without a pick", () => {
+            expect(bootHandoff({ ...unfinished, week: { status: "pending", staffId: null } })).toEqual({
+                kind: "empty",
+                claim: false
+            });
+            expect(bootHandoff(unfinished)).toEqual({ kind: "empty", claim: false });
+        });
+
+        it("only marks a week already granted, so nobody is congratulated twice", () => {
+            for (const status of ["picked", "random", "skipped", "empty"] as const) {
+                expect(bootHandoff({ ...unfinished, week: { status, staffId: null } })).toEqual({
+                    kind: "mark",
+                    claim: false
+                });
+            }
+        });
+
+        it("wins over a cold start, which would claim a receipt already spent", () => {
+            expect(bootHandoff({ ...unfinished, coldStart: true, week: pending })).toEqual({
+                kind: "pick",
+                claim: false
+            });
         });
     });
 });

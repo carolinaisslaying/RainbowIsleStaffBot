@@ -9,6 +9,7 @@ import { audit } from "../domain/audit.js";
 import {
     PENDING_LEAVE_NOTE,
     creditedHolders,
+    isHolding,
     refusalText,
     restOfWeekOffered
 } from "../domain/staffOfWeek.js";
@@ -26,6 +27,7 @@ import { errorCard, type RenderedMessage } from "../render/cards.js";
 import { sotwCard, viewCard, weekChoiceCard, type Leader } from "../render/sotwCards.js";
 import { EMOJI } from "../render/emoji.js";
 import { labelWindow } from "../time/format.js";
+import { cmd } from "../discord/commandMentions.js";
 import { currentHolder, eligibilityOf, nameOf, rosterFor, weekSlots } from "./sotwContext.js";
 import { handRoleTo, takeRoleFrom } from "./sotwRole.js";
 import { congratulate } from "./sotwHandoff.js";
@@ -146,7 +148,9 @@ export async function grantRestOfWeek(
 ): Promise<RenderedMessage> {
     const slots = await weekSlots(config, now);
     const current = await findWeek(slots.current.start);
-    if (current?.staffId) return errorCard("Somebody already holds Staff of the Week this week.");
+    // Holding, not a staffId: a pick left pending by a handoff that never
+    // finished names somebody who holds nothing.
+    if (current && isHolding(current.status)) return errorCard("Somebody already holds Staff of the Week this week.");
 
     const name = await nameOf(client, config, subject);
     const verdict = await eligibilityOf(client, config, subject, slots.current);
@@ -179,10 +183,17 @@ export async function removeHolder(
     config: StaffBotConfig,
     actorId: string,
     reason: string,
+    expectedStaffId: string,
+    guildId: string | null,
     now = new Date()
 ): Promise<RenderedMessage> {
     const holder = await currentHolder(config, now);
     if (!holder) return errorCard("Nobody holds Staff of the Week right now.");
+    // The modal can sit open while the week is handed off or somebody else
+    // removes and re-grants it: remove the person it named or nobody.
+    if (holder.staff._id.toHexString() !== expectedStaffId) {
+        return errorCard(`That holder has changed. Run ${cmd("sotw remove", guildId)} again.`);
+    }
 
     await recordRemoval(holder.week.start, holder.staff._id, actorId, reason, now);
     const roleTaken = await takeRoleFrom(client, config, holder.staff, `Staff of the Week removed: ${reason}`.slice(0, 500));
@@ -197,7 +208,7 @@ export async function removeHolder(
     return sotwCard(
         "Staff of the Week removed",
         `**${name}** no longer holds it. They are not barred from the next two weeks, and this week ` +
-            "is not counted as theirs. Pick somebody for the rest of the week with the set command." +
+            `is not counted as theirs. Pick somebody for the rest of the week with ${cmd("sotw set", guildId)}.` +
             (roleTaken ? "" : `\n${EMOJI.warning} The role could not be taken off in the community server.`),
         { ephemeral: true }
     );

@@ -536,10 +536,14 @@ export function sotwCodeModal(prefill: string | null): ModalBuilder {
         );
 }
 
-/** Taking the role off the current holder. The reason is required and kept. */
-export function sotwRemoveModal(name: string): ModalBuilder {
+/**
+ * Taking the role off the current holder. The reason is required and kept. The
+ * holder's staffId rides in the id, so the submission removes the person the
+ * modal named or nobody.
+ */
+export function sotwRemoveModal(name: string, staffId: string): ModalBuilder {
     return new ModalBuilder()
-        .setCustomId(SOTW_REMOVE_MODAL)
+        .setCustomId(`${SOTW_REMOVE_MODAL}:${staffId}`)
         .setTitle("Remove Staff of the Week")
         .addTextDisplayComponents(
             new TextDisplayBuilder().setContent(

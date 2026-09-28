@@ -60,7 +60,9 @@ export const sotwCommand: Command = {
                 await respond(interaction, errorCard("Nobody holds Staff of the Week right now."));
                 return;
             }
-            await interaction.showModal(sotwRemoveModal(await nameOf(client, config, holder.staff)));
+            await interaction.showModal(
+                sotwRemoveModal(await nameOf(client, config, holder.staff), holder.staff._id.toHexString())
+            );
             return;
         }
 

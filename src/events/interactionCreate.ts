@@ -312,11 +312,16 @@ async function routeModal(
         return;
     }
 
-    // Conduct warnings: issuing one, and taking one back. The subject rides in
-    // the id, because the warn modal is opened from a command rather than from
-    // a message and has nothing else to carry it.
-    if (interaction.customId === SOTW_REMOVE_MODAL) {
-        await handleSotwRemoveModal(client, config, interaction);
+    // Staff of the Week: taking the role off this week's holder, and a colour
+    // code. The holder rides in the remove modal's id, so a modal left open
+    // while the holder changed refuses rather than removing somebody else.
+    if (interaction.customId.startsWith(`${SOTW_REMOVE_MODAL}:`)) {
+        await handleSotwRemoveModal(
+            client,
+            config,
+            interaction,
+            interaction.customId.slice(`${SOTW_REMOVE_MODAL}:`.length)
+        );
         return;
     }
     if (interaction.customId === SOTW_CODE_MODAL) {
@@ -324,6 +329,9 @@ async function routeModal(
         return;
     }
 
+    // Conduct warnings: issuing one, and taking one back. The subject rides in
+    // the id, because the warn modal is opened from a command rather than from
+    // a message and has nothing else to carry it.
     if (interaction.customId.startsWith(`${CONDUCT_WARN_MODAL}:`)) {
         await handleConductWarnModal(
             client,

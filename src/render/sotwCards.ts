@@ -103,7 +103,8 @@ export type HandoffSummary =
     | { kind: "picked"; holder: string; by: string }
     | { kind: "random"; holder: string; pool: string[]; failedPick: string | null }
     | { kind: "skipped"; by: string }
-    | { kind: "empty"; failedPick: string | null };
+    /** `midWeek`: finished after the week began, when there is never a draw. */
+    | { kind: "empty"; failedPick: string | null; midWeek?: boolean };
 
 export function handoffText(summary: HandoffSummary): string {
     const failed = (reason: string | null) =>
@@ -120,6 +121,13 @@ export function handoffText(summary: HandoffSummary): string {
         case "skipped":
             return `Nobody holds Staff of the Week: the week was skipped by ${summary.by}.`;
         case "empty":
+            if (summary.midWeek) {
+                return (
+                    "Nobody holds Staff of the Week. The week had already begun when the handoff " +
+                    "ran, so there was no draw." +
+                    failed(summary.failedPick)
+                );
+            }
             return (
                 "Nobody holds Staff of the Week. Nobody qualified for the draw: nobody who may " +
                 "hold it met the weekly minimum last week." +

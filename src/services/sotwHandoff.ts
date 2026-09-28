@@ -1,17 +1,20 @@
 import type { Client } from "discord.js";
 import { ObjectId } from "mongodb";
 import type { StaffBotConfig } from "../config/guildConfig.js";
-import type { StaffDoc } from "../db/types.js";
+import type { StaffDoc, StaffOfWeekDoc } from "../db/types.js";
 import { collections } from "../db/client.js";
 import { findStaffById } from "../domain/staff.js";
 import { previousWeekWindow, weekWindowFor, type WeekWindow } from "../domain/weekly.js";
 import {
+    bootHandoff,
     decideHandoff,
     drawPool,
     handoffSettled,
     refusalText,
     sotwEnabled,
     type Eligibility,
+    type HandoffDecision,
+    type Refusal,
     type Standing
 } from "../domain/staffOfWeek.js";
 import {
@@ -86,35 +89,45 @@ export async function congratulate(
     return delivered;
 }
 
-export async function runHandoff(
+/** The pending pick, if the week has one, and whether it may still hold the week. */
+async function pendingPick(
     client: Client,
     config: StaffBotConfig,
     week: WeekWindow,
-    now = new Date(),
-    rng: () => number = Math.random
-): Promise<boolean> {
-    if (!sotwEnabled(config)) return false;
-    if (!(await claimSotwHandoff(week.start))) return false;
+    doc: StaffOfWeekDoc | null
+): Promise<{ pickStaff: StaffDoc | null; pickEligibility: Eligibility | null }> {
+    if (doc?.status !== "pending" || !doc.staffId) return { pickStaff: null, pickEligibility: null };
+    const pickStaff = await findStaffById(doc.staffId);
+    const pickEligibility: Eligibility = pickStaff
+        ? await eligibilityOf(client, config, pickStaff, week)
+        : { eligible: false, reason: "inactive" };
+    return { pickStaff, pickEligibility };
+}
 
-    const doc = await findWeek(week.start);
-    let pickStaff: StaffDoc | null = null;
-    let pickEligibility: Eligibility | null = null;
-    if (doc?.status === "pending" && doc.staffId) {
-        pickStaff = await findStaffById(doc.staffId);
-        pickEligibility = pickStaff
-            ? await eligibilityOf(client, config, pickStaff, week)
-            : { eligible: false, reason: "inactive" };
-    }
+interface HandoffOutcome {
+    doc: StaffOfWeekDoc | null;
+    pickStaff: StaffDoc | null;
+    decision: HandoffDecision;
+    pickFailed: Refusal | null;
+    pool: Standing[];
+    /** Finished after the week began, so nothing was drawn and an empty week says so. */
+    midWeek: boolean;
+}
 
-    const needsDraw = doc?.status !== "skipped";
-    const pool = needsDraw ? await drawPoolFor(client, config, week, await closedStandings(week, config)) : [];
-    const { decision, pickFailed } = decideHandoff({
-        week: doc ? { status: doc.status, staffId: doc.staffId?.toHexString() ?? null } : null,
-        pickEligibility,
-        pool,
-        rng
-    });
-
+/**
+ * Everything after the decision: the record, the role, the congratulation,
+ * the notice and `markHandedOff`. Shared by the boundary and by boot finishing
+ * a handoff that never ran, so a pick honoured late is written the same way.
+ */
+async function completeHandoff(
+    client: Client,
+    config: StaffBotConfig,
+    week: WeekWindow,
+    outcome: HandoffOutcome,
+    now: Date,
+    rng: () => number
+): Promise<void> {
+    const { doc, pickStaff, decision, pickFailed, pool } = outcome;
     const pickName = pickStaff ? await nameOf(client, config, pickStaff) : "The recorded pick";
     const failedText = pickFailed ? refusalText(pickFailed, pickName) : null;
     if (pickFailed) {
@@ -141,7 +154,14 @@ export async function runHandoff(
             now
         );
     } else if (decision.kind === "empty") {
-        await recordEmpty(week.start, "Nobody qualified for the draw.", poolDetail, now);
+        await recordEmpty(
+            week.start,
+            outcome.midWeek
+                ? "The pick could not be honoured, and there is no draw once the week has begun."
+                : "Nobody qualified for the draw.",
+            outcome.midWeek ? null : poolDetail,
+            now
+        );
     }
 
     const label = labelWindow(week.start, week.end, config.accountingTimezone);
@@ -171,11 +191,61 @@ export async function runHandoff(
               ? { kind: "random", holder: holderName, pool: poolNames, failedPick: failedText }
               : decision.kind === "skipped"
                 ? { kind: "skipped", by: `<@${doc?.decidedBy}>` }
-                : { kind: "empty", failedPick: failedText };
+                : { kind: "empty", failedPick: failedText, midWeek: outcome.midWeek };
     await postNotice(client, config, sotwCard(`Staff of the Week, ${label}`, handoffText(summary)));
 
-    await markHandedOff(week.start, { decision: decision.kind, colourOk: role.colour.ok, granted: role.granted }, now);
+    await markHandedOff(
+        week.start,
+        { decision: decision.kind, colourOk: role.colour.ok, granted: role.granted, ...(outcome.midWeek ? { midWeek: true } : {}) },
+        now
+    );
+}
+
+export async function runHandoff(
+    client: Client,
+    config: StaffBotConfig,
+    week: WeekWindow,
+    now = new Date(),
+    rng: () => number = Math.random
+): Promise<boolean> {
+    if (!sotwEnabled(config)) return false;
+    if (!(await claimSotwHandoff(week.start))) return false;
+
+    const doc = await findWeek(week.start);
+    const { pickStaff, pickEligibility } = await pendingPick(client, config, week, doc);
+    const needsDraw = doc?.status !== "skipped";
+    const pool = needsDraw ? await drawPoolFor(client, config, week, await closedStandings(week, config)) : [];
+    const { decision, pickFailed } = decideHandoff({
+        week: doc ? { status: doc.status, staffId: doc.staffId?.toHexString() ?? null } : null,
+        pickEligibility,
+        pool,
+        rng
+    });
+    await completeHandoff(client, config, week, { doc, pickStaff, decision, pickFailed, pool, midWeek: false }, now, rng);
     return true;
+}
+
+/**
+ * A pick for a week that has already begun: checked against the hard refusals
+ * alone, as at the boundary, but never replaced by a draw. A pick that fails
+ * leaves the week empty and says why.
+ */
+async function honourPickMidWeek(
+    client: Client,
+    config: StaffBotConfig,
+    week: WeekWindow,
+    doc: StaffOfWeekDoc | null,
+    now: Date,
+    rng: () => number = Math.random
+): Promise<void> {
+    const { pickStaff, pickEligibility } = await pendingPick(client, config, week, doc);
+    const { decision, pickFailed } = decideHandoff({
+        week: doc ? { status: doc.status, staffId: doc.staffId?.toHexString() ?? null } : null,
+        pickEligibility,
+        pool: [],
+        rng
+    });
+    await completeHandoff(client, config, week, { doc, pickStaff, decision, pickFailed, pool: [], midWeek: true }, now, rng);
 }
 
 /** Never lets the handoff stop the recap or the assessment that follow it. */
@@ -200,14 +270,19 @@ export async function reassertRole(client: Client, config: StaffBotConfig, now =
 
 /**
  * At boot, after the catch-up. The current week only: a missed week in the
- * past cannot usefully be handed off. A first run — a cold start, or a boot
- * so far into the week that `handoffSettled`'s grace period has already
- * lapsed without a receipt — never draws: the week has already begun, and
- * drawing now is exactly what `handoffSettled`/`HANDOFF_GRACE_MS` exist to
- * stop. It only records the week as empty, and only when nothing is recorded
- * for it yet — an Executive's pick for next week, or a document left over
- * from before the feature was switched off, is never overwritten — so the
- * first real handoff is the next week boundary.
+ * past cannot usefully be handed off. `bootHandoff` decides; nothing here ever
+ * draws once the week has begun, because drawing then is exactly what
+ * `handoffSettled`/`HANDOFF_GRACE_MS` exist to stop.
+ *
+ * A cold start records the week as empty only when nothing is recorded for it.
+ * Past the grace hour, an Executive's pick still waiting on a handoff that
+ * never ran — the bot was down, or `closeWeek` failed partway — is honoured
+ * against the hard refusals, because left pending it strands the week: nobody
+ * holds the role, `/sotw view` names the pick, and the rest of the week cannot
+ * be given to anybody else. A week without a pick, or a skipped one, is
+ * recorded as empty. A handoff that claimed its receipt and stopped before
+ * `markHandedOff` is finished without claiming again; one that had already
+ * granted the role is only marked, so nobody is congratulated twice.
  */
 export async function handoffOnBoot(
     client: Client,
@@ -218,21 +293,53 @@ export async function handoffOnBoot(
     if (!sotwEnabled(config)) return;
     try {
         const week = weekWindowFor(now, config);
-        if (await sotwHandedOff(week.start)) {
-            await reassertRole(client, config, now);
-            return;
-        }
-        if (coldStart || handoffSettled({ claimed: false, now, weekStart: week.start })) {
-            if (await claimSotwHandoff(week.start)) {
-                if (!(await findWeek(week.start))) {
-                    await recordEmpty(week.start, "Staff of the Week started mid-week.", null, now);
+        const doc = await findWeek(week.start);
+        const action = bootHandoff({
+            coldStart,
+            claimed: await sotwHandedOff(week.start),
+            handedOff: (doc?.handedOffAt ?? null) !== null,
+            pastGrace: handoffSettled({ claimed: false, now, weekStart: week.start }),
+            week: doc ? { status: doc.status, staffId: doc.staffId?.toHexString() ?? null } : null
+        });
+
+        switch (action.kind) {
+            case "run":
+                await runHandoff(client, config, week, now);
+                return;
+            case "reassert":
+                await reassertRole(client, config, now);
+                return;
+            case "coldStart":
+                if (await claimSotwHandoff(week.start)) {
+                    if (!doc) await recordEmpty(week.start, "Staff of the Week started mid-week.", null, now);
+                    await markHandedOff(week.start, { decision: "coldStart" }, now);
                 }
-                await markHandedOff(week.start, { decision: "coldStart" }, now);
-            }
+                await reassertRole(client, config, now);
+                return;
+        }
+
+        if (action.claim && !(await claimSotwHandoff(week.start))) {
             await reassertRole(client, config, now);
             return;
         }
-        await runHandoff(client, config, week, now);
+        if (action.kind === "pick") {
+            await honourPickMidWeek(client, config, week, doc, now);
+            return;
+        }
+        if (action.kind === "empty") {
+            await recordEmpty(
+                week.start,
+                doc
+                    ? "The handoff did not run before the week began, and there is no draw once it has."
+                    : "Staff of the Week started mid-week.",
+                null,
+                now
+            );
+            await markHandedOff(week.start, { decision: "empty", midWeek: true }, now);
+        } else {
+            await markHandedOff(week.start, { decision: doc?.status ?? null, resumed: !action.claim }, now);
+        }
+        await reassertRole(client, config, now);
     } catch (error) {
         log.error("The Staff of the Week boot handoff failed", error);
     }

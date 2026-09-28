@@ -158,6 +158,57 @@ export function handoffSettled(input: { claimed: boolean; now: Date; weekStart: 
     return input.claimed || input.now.getTime() - input.weekStart.getTime() >= HANDOFF_GRACE_MS;
 }
 
+export interface BootHandoffInput {
+    coldStart: boolean;
+    /** The week's `sotw-handoff` receipt exists. */
+    claimed: boolean;
+    /** The week's document carries `handedOffAt`. */
+    handedOff: boolean;
+    /** `HANDOFF_GRACE_MS` has passed since the week began. */
+    pastGrace: boolean;
+    week: { status: StaffOfWeekStatus; staffId: string | null } | null;
+}
+
+/**
+ * What boot does about the current week. `claim` says whether the receipt is
+ * still to be claimed: false means a handoff claimed it and stopped before
+ * `markHandedOff`, so finishing must not claim again.
+ */
+export type BootHandoff =
+    | { kind: "reassert" }
+    | { kind: "run" }
+    | { kind: "coldStart" }
+    /** Honour the pending pick against hard refusals only. Never draws. */
+    | { kind: "pick"; claim: boolean }
+    /** Record the week as empty. Never draws. */
+    | { kind: "empty"; claim: boolean }
+    /** The week is already decided: mark it handed off, congratulate nobody. */
+    | { kind: "mark"; claim: boolean };
+
+/**
+ * Nothing here ever draws once the week has begun. A pick waiting for a
+ * handoff that did not run (the bot was down, or the close failed partway) is
+ * honoured rather than stranded: left pending, nobody holds the role, `/sotw
+ * view` names the pick, and the rest of the week cannot be given to anybody.
+ */
+export function bootHandoff(input: BootHandoffInput): BootHandoff {
+    const { week } = input;
+    const hasPick = week?.status === "pending" && week.staffId !== null;
+    const undecided = !week || week.status === "pending";
+
+    if (input.claimed) {
+        if (input.handedOff) return { kind: "reassert" };
+        if (hasPick) return { kind: "pick", claim: false };
+        if (undecided) return { kind: "empty", claim: false };
+        return { kind: "mark", claim: false };
+    }
+    if (input.coldStart) return { kind: "coldStart" };
+    if (!input.pastGrace) return { kind: "run" };
+    if (hasPick) return { kind: "pick", claim: true };
+    if (undecided || week.status === "skipped") return { kind: "empty", claim: true };
+    return { kind: "mark", claim: true };
+}
+
 /**
  * Which week `/sotw set` and `/sotw skip` are about. Before the calendar
  * week's handoff has run — the minutes between 00:00 and the 00:05 close — the
