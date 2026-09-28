@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Staff of the Week colour</title>
+<style>
+  :root {
+    --bg: #1e1f22; --panel: #2b2d31; --raised: #313338; --text: #f2f3f5; --muted: #b5bac1;
+    --line: #3f4147; --accent: #66d4cf; --focus: #00a8fc;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f2f3f5; --panel: #ffffff; --raised: #ebedef; --text: #060607; --muted: #4e5058; --line: #d4d7dc; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 "gg sans", "Noto Sans", "Helvetica Neue", Arial, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; display: grid; gap: 16px; }
+  h1 { font-size: 20px; margin: 0; }
+  p { margin: 0; color: var(--muted); }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: grid; gap: 14px; }
+  .styles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .style { border: 2px solid var(--line); background: var(--raised); color: var(--text); border-radius: 10px; padding: 10px; font: inherit; cursor: pointer; display: grid; gap: 6px; justify-items: center; }
+  .style[aria-pressed="true"] { border-color: var(--accent); }
+  .style:disabled { opacity: .4; cursor: not-allowed; }
+  .chip { width: 40px; height: 24px; border-radius: 6px; }
+  .swatches { display: grid; grid-template-columns: repeat(10, 1fr); gap: 6px; }
+  .swatch { aspect-ratio: 1; border-radius: 6px; border: 1px solid rgba(0,0,0,.25); cursor: pointer; padding: 0; }
+  .picker { display: grid; grid-template-columns: 1fr 22px; gap: 10px; }
+  .sv { position: relative; height: 180px; border-radius: 8px; cursor: crosshair; touch-action: none;
+        background: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, transparent); }
+  .hue { writing-mode: vertical-lr; direction: rtl; width: 22px; height: 180px; accent-color: var(--accent); }
+  .knob { position: absolute; width: 14px; height: 14px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px #000; transform: translate(-50%, -50%); pointer-events: none; }
+  .stops { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .stop { border: 2px solid var(--line); border-radius: 8px; padding: 6px 10px; background: var(--raised); color: var(--text); font: inherit; cursor: pointer; display: flex; gap: 8px; align-items: center; }
+  .stop[aria-pressed="true"] { border-color: var(--accent); }
+  input[type=text] { font: 600 15px ui-monospace, SFMono-Regular, Menlo, monospace; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--raised); color: var(--text); width: 120px; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .previews { display: grid; gap: 8px; }
+  .msg { display: flex; gap: 14px; padding: 12px 14px; border-radius: 8px; }
+  .msg.dark { background: #313338; color: #dbdee1; } .msg.light { background: #fff; color: #313338; border: 1px solid #e3e5e8; }
+  .avatar { width: 40px; height: 40px; border-radius: 50%; background: #5865f2; flex: none; object-fit: cover; }
+  .name { font-weight: 700; display: inline-flex; gap: 4px; align-items: center; }
+  .name-text { background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; }
+  .name-text.animated { color: transparent; animation: shimmer 3s linear infinite; }
+  .badge { width: 18px; height: 18px; font-size: 16px; line-height: 18px; }
+  @keyframes shimmer { from { background-position: 0% 0; } to { background-position: 200% 0; } }
+  @media (prefers-reduced-motion: reduce) { .name-text.animated { animation: none; } }
+  .code { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .code output { font: 700 16px ui-monospace, SFMono-Regular, Menlo, monospace; padding: 8px 12px; background: var(--raised); border-radius: 8px; }
+  .primary { background: var(--accent); color: #062b29; border: 0; border-radius: 8px; padding: 9px 16px; font: 700 15px inherit; cursor: pointer; }
+  .hint { font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Your Staff of the Week colour</h1>
+  <p>Choose a colour, copy the code, and paste it into <strong>/settings sotw-colour</strong> with <strong>Enter code</strong>. Nothing leaves this page: your name and picture come from the link you opened.</p>
+
+  <section class="panel" aria-label="Style">
+    <div class="styles" role="group" aria-label="Colour style">
+      <button class="style" data-style="solid" aria-pressed="true"><span class="chip" id="chip-solid"></span>Solid</button>
+      <button class="style" data-style="gradient" aria-pressed="false"><span class="chip" id="chip-gradient"></span>Gradient</button>
+      <button class="style" data-style="holographic" aria-pressed="false"><span class="chip" id="chip-holo"></span>Holographic</button>
+    </div>
+    <p class="hint" id="enhanced-note" hidden>Gradient and holographic are not available on this server yet.</p>
+  </section>
+
+  <section class="panel" aria-label="Colour" id="colour-panel">
+    <div class="stops" id="stops" hidden>
+      <button class="stop" data-stop="0" aria-pressed="true"><span class="chip" id="stop-0" style="width:20px;height:20px"></span>First</button>
+      <button class="stop" data-stop="1" aria-pressed="false"><span class="chip" id="stop-1" style="width:20px;height:20px"></span>Second</button>
+      <button class="stop" id="swap" aria-label="Swap the two colours">⇄ Swap</button>
+    </div>
+    <div class="swatches" id="swatches" role="group" aria-label="Preset colours"></div>
+    <div class="picker">
+      <div class="sv" id="sv" role="slider" aria-label="Saturation and brightness" tabindex="0"><div class="knob" id="knob"></div></div>
+      <input class="hue" id="hue" type="range" min="0" max="360" value="330" aria-label="Hue">
+    </div>
+    <label>Hex <input type="text" id="hex" maxlength="7" spellcheck="false" autocomplete="off"></label>
+  </section>
+
+  <section class="panel" aria-label="Preview">
+    <div class="previews">
+      <div class="msg dark"><img class="avatar" id="avatar-dark" alt=""><div><div class="name"><span class="name-text" id="name-dark">Your name</span><span class="badge" id="badge-dark"></span></div><div>Staff of the Week, reporting for duty.</div></div></div>
+      <div class="msg light"><img class="avatar" id="avatar-light" alt=""><div><div class="name"><span class="name-text" id="name-light">Your name</span><span class="badge" id="badge-light"></span></div><div>Staff of the Week, reporting for duty.</div></div></div>
+    </div>
+  </section>
+
+  <section class="panel" aria-label="Your code">
+    <div class="code"><output id="code"></output><button class="primary" id="copy">Copy</button><span class="hint" id="copied" role="status"></span></div>
+  </section>
+</main>
+
+<script id="sotw-core">
+var SotwCore = (function () {
+  var SOTW_CODE_VERSION = "SOTW1";
+  var HOLOGRAPHIC = { primary: 0xa9c9ff, secondary: 0xffbbec, tertiary: 0xffc3a0 };
+  function hex(value) { return value.toString(16).padStart(6, "0").toUpperCase(); }
+  function formatCode(colour) {
+    if (colour.style === "solid") return SOTW_CODE_VERSION + "-S-" + hex(colour.primary);
+    if (colour.style === "gradient") return SOTW_CODE_VERSION + "-G-" + hex(colour.primary) + "-" + hex(colour.secondary);
+    return SOTW_CODE_VERSION + "-H";
+  }
+  function parseCode(raw) {
+    var value = String(raw || "").trim().toLowerCase();
+    var prefix = SOTW_CODE_VERSION.toLowerCase() + "-";
+    if (value.indexOf(prefix) !== 0) return null;
+    var parts = value.slice(prefix.length).split("-");
+    var six = /^[0-9a-f]{6}$/;
+    if (parts[0] === "s" && parts.length === 2 && six.test(parts[1])) return { style: "solid", primary: parseInt(parts[1], 16) };
+    if (parts[0] === "g" && parts.length === 3 && six.test(parts[1]) && six.test(parts[2])) {
+      return { style: "gradient", primary: parseInt(parts[1], 16), secondary: parseInt(parts[2], 16) };
+    }
+    if (parts[0] === "h" && parts.length === 1) return { style: "holographic" };
+    return null;
+  }
+  function readFragment(hash) {
+    var params = new URLSearchParams(String(hash || "").replace(/^#/, ""));
+    if (params.get("v") !== "1") return null;
+    var code = params.get("c");
+    return {
+      nickname: params.get("n") || "",
+      userId: params.get("u") || "",
+      guildId: params.get("g") || "",
+      avatarHash: params.get("a"),
+      guildAvatar: params.get("ga") === "1",
+      roleId: params.get("r"),
+      iconHash: params.get("i"),
+      emoji: params.get("e"),
+      colour: code ? parseCode(code) : null,
+      enhanced: params.get("x") === "1"
+    };
+  }
+  return { SOTW_CODE_VERSION: SOTW_CODE_VERSION, HOLOGRAPHIC: HOLOGRAPHIC, formatCode: formatCode, parseCode: parseCode, readFragment: readFragment };
+})();
+</script>
+
+<script>
+(function () {
+  var core = SotwCore;
+  var PRESETS = ["#1ABC9C","#2ECC71","#3498DB","#9B59B6","#E91E63","#F1C40F","#E67E22","#E74C3C","#95A5A6","#607D8B",
+                 "#11806A","#1F8B4C","#206694","#71368A","#AD1457","#C27C0E","#A84300","#992D22","#979C9F","#546E7A"];
+  var CDN = "https://cdn.discordapp.com/";
+  var info = core.readFragment(location.hash) || { nickname: "", enhanced: true, colour: null };
+  var state = { style: "solid", stops: [0xff66aa, 0x3366ff], active: 0 };
+  if (info.colour) {
+    state.style = info.colour.style;
+    if (info.colour.style === "solid") state.stops[0] = info.colour.primary;
+    if (info.colour.style === "gradient") state.stops = [info.colour.primary, info.colour.secondary];
+  }
+  var $ = function (id) { return document.getElementById(id); };
+  var css = function (n) { return "#" + n.toString(16).padStart(6, "0"); };
+
+  function hsvToInt(h, s, v) {
+    var f = function (n) { var k = (n + h / 60) % 6; return v - v * s * Math.max(0, Math.min(k, 4 - k, 1)); };
+    return (Math.round(f(5) * 255) << 16) | (Math.round(f(3) * 255) << 8) | Math.round(f(1) * 255);
+  }
+  function intToHsv(n) {
+    var r = (n >> 16 & 255) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
+    var max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min, h = 0;
+    if (d) h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    return { h: (h * 60 + 360) % 360, s: max ? d / max : 0, v: max };
+  }
+
+  function colour() {
+    if (state.style === "solid") return { style: "solid", primary: state.stops[0] };
+    if (state.style === "gradient") return { style: "gradient", primary: state.stops[0], secondary: state.stops[1] };
+    return { style: "holographic" };
+  }
+  function fillFor(c) {
+    if (c.style === "solid") return { color: css(c.primary), image: "none", animated: false };
+    var stops = c.style === "gradient" ? [c.primary, c.secondary, c.primary] : [core.HOLOGRAPHIC.primary, core.HOLOGRAPHIC.secondary, core.HOLOGRAPHIC.tertiary, core.HOLOGRAPHIC.primary];
+    return { color: "transparent", image: "linear-gradient(90deg," + stops.map(css).join(",") + ")", animated: true };
+  }
+
+  function render() {
+    var c = colour();
+    document.querySelectorAll(".style").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.style === state.style)); });
+    $("colour-panel").hidden = state.style === "holographic";
+    $("stops").hidden = state.style !== "gradient";
+    document.querySelectorAll(".stop[data-stop]").forEach(function (b) { b.setAttribute("aria-pressed", String(Number(b.dataset.stop) === state.active)); });
+    $("stop-0").style.background = css(state.stops[0]);
+    $("stop-1").style.background = css(state.stops[1]);
+    var current = state.stops[state.active];
+    var hsv = intToHsv(current);
+    $("sv").style.backgroundColor = css(hsvToInt(hsv.h, 1, 1));
+    $("knob").style.left = (hsv.s * 100) + "%";
+    $("knob").style.top = ((1 - hsv.v) * 100) + "%";
+    if (document.activeElement !== $("hue")) $("hue").value = String(Math.round(hsv.h));
+    if (document.activeElement !== $("hex")) $("hex").value = css(current).toUpperCase();
+    ["dark", "light"].forEach(function (theme) {
+      var el = $("name-" + theme), fill = fillFor(c);
+      el.style.color = fill.color; el.style.backgroundImage = fill.image;
+      el.classList.toggle("animated", fill.animated);
+    });
+    $("code").textContent = core.formatCode(c);
+  }
+
+  function setActive(n) { state.stops[state.active] = n; render(); }
+
+  // Identity from the fragment. Every image is Discord's own CDN.
+  var name = info.nickname || "Your name";
+  ["dark", "light"].forEach(function (theme) {
+    $("name-" + theme).textContent = name;
+    var avatar = $("avatar-" + theme);
+    if (info.avatarHash && info.userId) {
+      avatar.src = info.guildAvatar
+        ? CDN + "guilds/" + info.guildId + "/users/" + info.userId + "/avatars/" + info.avatarHash + ".png?size=80"
+        : CDN + "avatars/" + info.userId + "/" + info.avatarHash + ".png?size=80";
+    } else { avatar.removeAttribute("src"); }
+    var badge = $("badge-" + theme);
+    if (info.roleId && info.iconHash) {
+      var img = document.createElement("img");
+      img.src = CDN + "role-icons/" + info.roleId + "/" + info.iconHash + ".png?size=40";
+      img.alt = ""; img.width = 18; img.height = 18;
+      badge.appendChild(img);
+    } else if (info.emoji) { badge.textContent = info.emoji; }
+  });
+  $("chip-solid").style.background = "#FF66AA";
+  $("chip-gradient").style.background = "linear-gradient(90deg,#FF66AA,#3366FF)";
+  $("chip-holo").style.background = "linear-gradient(90deg,#A9C9FF,#FFBBEC,#FFC3A0)";
+  if (info.enhanced === false) {
+    document.querySelectorAll('.style[data-style="gradient"], .style[data-style="holographic"]').forEach(function (b) { b.disabled = true; });
+    $("enhanced-note").hidden = false;
+    if (state.style !== "solid") state.style = "solid";
+  }
+
+  PRESETS.forEach(function (value) {
+    var b = document.createElement("button");
+    b.className = "swatch"; b.style.background = value; b.setAttribute("aria-label", value);
+    b.addEventListener("click", function () { setActive(parseInt(value.slice(1), 16)); });
+    $("swatches").appendChild(b);
+  });
+  document.querySelectorAll(".style").forEach(function (b) {
+    b.addEventListener("click", function () { state.style = b.dataset.style; state.active = 0; render(); });
+  });
+  document.querySelectorAll(".stop[data-stop]").forEach(function (b) {
+    b.addEventListener("click", function () { state.active = Number(b.dataset.stop); render(); });
+  });
+  $("swap").addEventListener("click", function () { state.stops.reverse(); render(); });
+  $("hue").addEventListener("input", function () {
+    var hsv = intToHsv(state.stops[state.active]);
+    setActive(hsvToInt(Number($("hue").value), hsv.s || 1, hsv.v || 1));
+  });
+  $("hex").addEventListener("input", function () {
+    var v = $("hex").value.trim().replace(/^#/, "");
+    if (/^[0-9a-fA-F]{6}$/.test(v)) setActive(parseInt(v, 16));
+  });
+  function pick(event) {
+    var rect = $("sv").getBoundingClientRect();
+    var s = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+    var v = 1 - Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height));
+    setActive(hsvToInt(Number($("hue").value), s, v));
+  }
+  $("sv").addEventListener("pointerdown", function (e) { $("sv").setPointerCapture(e.pointerId); pick(e); });
+  $("sv").addEventListener("pointermove", function (e) { if (e.buttons) pick(e); });
+  $("sv").addEventListener("keydown", function (e) {
+    var hsv = intToHsv(state.stops[state.active]), step = 0.05;
+    if (e.key === "ArrowRight") hsv.s = Math.min(1, hsv.s + step);
+    else if (e.key === "ArrowLeft") hsv.s = Math.max(0, hsv.s - step);
+    else if (e.key === "ArrowUp") hsv.v = Math.min(1, hsv.v + step);
+    else if (e.key === "ArrowDown") hsv.v = Math.max(0, hsv.v - step);
+    else return;
+    e.preventDefault(); setActive(hsvToInt(hsv.h, hsv.s, hsv.v));
+  });
+  $("copy").addEventListener("click", function () {
+    var text = $("code").textContent;
+    var done = function () { $("copied").textContent = "Copied. Paste it into Enter code."; };
+    if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, function () { $("copied").textContent = "Select the code and copy it."; });
+  });
+  render();
+})();
+</script>
+</body>
+</html>
