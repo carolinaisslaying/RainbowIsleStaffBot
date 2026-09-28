@@ -164,6 +164,8 @@ db.leave.deleteMany({ staffId: id }); // or purge them one by one from the log
 // Take the person out of them instead.
 db.staffOfWeek.updateMany({}, { $pull: { holders: id, removedHolders: id, events: { staffId: id } } });
 db.staffOfWeek.updateMany({ staffId: id }, { $set: { staffId: null } });
+// A draw keeps the pool it drew from on its `drawn` event, by hex id.
+db.staffOfWeek.updateMany({}, { $pull: { "events.$[].detail.pool": { staffId: id.toHexString() } } });
 
 db.weeklyStats.deleteMany({ staffId: id });
 db.shifts.deleteMany({ staffId: id });
@@ -265,6 +267,13 @@ const id = ObjectId("PUT_STAFF_ID_HERE");
     "activityDays"
 ].forEach((name) => print(name, db[name].countDocuments({ staffId: id })));
 print("staff", db.staff.countDocuments({ _id: id }));
+[
+    "holders",
+    "removedHolders",
+    "staffId",
+    "events.staffId"
+].forEach((field) => print(`staffOfWeek.${field}`, db.staffOfWeek.countDocuments({ [field]: id })));
+print("staffOfWeek.events.detail.pool", db.staffOfWeek.countDocuments({ "events.detail.pool.staffId": id.toHexString() }));
 ```
 
 Every count should be zero after a full purge.

@@ -654,15 +654,26 @@ than a week with nobody drawn. The grant itself reads who currently wears the ro
 `membersWithRole` (`services/sotwRole.ts`) — a full public-guild member fetch — rather than trusting
 discord.js's own cache: the public guild holds around 110,000 members and is never fully cached, and
 a cached-only scan let a previous holder who had dropped out of it keep the role after a restart,
-so two members wore it at once. At boot, `handoffOnBoot` treats a boot as a first run once it is a
-cold start or the week is already past `HANDOFF_GRACE_MS` (`handoffSettled`), and in that case
-spends the receipt without drawing and never overwrites a week document that already exists. It used
-to key on "no `staffOfWeek` document exists at all", which let a pick already staged for next week
-get drawn over by a mid-week restart, because a document merely existing didn't yet mean a week had
-been decided. A throw out of `handRoleTo` after the receipt is claimed is caught rather than left to
-abort the run: the handoff still congratulates the holder, posts the notice and marks the week
-handed off, recording `granted: false`, because the receipt is already spent and nothing will retry
-this week if the run stops there.
+so two members wore it at once. At boot, `handoffOnBoot` asks `bootHandoff` (`domain/staffOfWeek.ts`,
+pure and tested), and **nothing it answers ever draws once the week has begun**: that is what
+`handoffSettled`/`HANDOFF_GRACE_MS` exist to stop. It used to key on "no `staffOfWeek` document exists
+at all", which let a pick already staged for next week get drawn over by a mid-week restart. A cold
+start spends the receipt and records the week empty only when no document exists. Past the grace hour
+it used to do the same, which stranded an Executive's pick for a week whose handoff never ran — the
+bot down across the boundary, or `closeWeek` failing partway: the document stayed `pending` for
+ever, nobody held the role, `/sotw view` said "Picked: X", and `grantRestOfWeek` refused because the
+week carried a `staffId`. Now a pending pick is **honoured** against the hard refusals alone, through
+the same `completeHandoff` the boundary uses (grant, role, congratulation, notice); a pick refused
+there leaves the week empty with the pick-failed line on the notice. A pending week without a pick,
+or a skipped one, is recorded empty. A week somebody was already given for the rest of it is only
+marked. **A receipt claimed with `handedOffAt` still null** is a handoff that stopped partway, and is
+finished without claiming again: still `pending`, as above; already `picked` or `random`, only marked
+and the role re-asserted, so nobody is congratulated twice. `grantRestOfWeek` refuses only while
+somebody is actually holding (`isHolding`), never merely because a `staffId` is recorded. A throw out
+of `handRoleTo` after the receipt is claimed is caught rather than left to abort the run: the handoff
+still congratulates the holder, posts the notice and marks the week handed off, recording
+`granted: false`, because the receipt is already spent and nothing will retry this week if the run
+stops there.
 
 **Credited versus removed holders.** A week's document keeps `holders` (everybody ever granted it
 that week) and `removedHolders` (anybody taken off early) rather than overwriting one with the
@@ -710,9 +721,10 @@ its owner puts it — `staffOfWeekColourPickerUrl` just points at it — carryin
 an inline `<script id="sotw-core">`. `test/sotwPicker.test.ts` runs that exact script in a VM context
 against `domain/sotwColour.ts`'s parser and `domain/sotwFragment.ts`'s fragment builder, so the page
 and the bot cannot drift on a code format or a preview fragment without a test catching it, even
-though nothing else in this repo ever executes the page. Twemoji on the page and in every preview
-this bot renders is always loaded `@latest` from jsDelivr, never a pinned version, so a newly drawn
-emoji shows up without a redeploy.
+though nothing else in this repo ever executes the page. The page draws a role's unicode emoji
+natively and loads no Twemoji at all. The bot's previews do load it (`twemojiUrl`,
+`domain/sotwColour.ts`), and any Twemoji URL in the bot is always `@latest` from jsDelivr, never a
+pinned version, so a newly drawn emoji shows up without a redeploy.
 
 **🏆 means Staff of the Week alone**, and only ever appears in `render/emoji.ts` —
 `test/staffOfWeekMark.test.ts` walks every other source file and fails if it finds one. It took the
