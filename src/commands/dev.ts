@@ -1,8 +1,9 @@
 import { SlashCommandBuilder, MessageFlags } from "discord.js";
+import { ObjectId } from "mongodb";
 import type { Command } from "./types.js";
 import { errorCard, noticeCard, scrubConfirmCard } from "../render/cards.js";
 import { defer, respond } from "../discord/respond.js";
-import { findStaffByDiscordId } from "../domain/staff.js";
+import { findStaffByDiscordId, findStaffById, listActiveStaff } from "../domain/staff.js";
 import { previousWeekWindow } from "../domain/weekly.js";
 import {
     currentFortnightIndex,
@@ -10,6 +11,8 @@ import {
     windowForIndex
 } from "../domain/assessments.js";
 import { permittedScrub, scrubPreview } from "../domain/scrub.js";
+import { countMinutesBetween } from "../domain/activity.js";
+import { draw } from "../domain/staffOfWeek.js";
 import { env } from "../config/env.js";
 import { loadConfig } from "../config/guildConfig.js";
 import { configWarnings, staffOfWeekRoleOrder } from "../config/configGuards.js";
@@ -24,6 +27,14 @@ import { log } from "../log.js";
 import { runFortnightAssessment, fortnightSummary } from "../services/assessmentService.js";
 import { rehearseRecap } from "../services/notifications.js";
 import { buildTeamRecap } from "../services/teamRecapService.js";
+import { buildReminder } from "../services/sotwNotices.js";
+import { drawPoolFor } from "../services/sotwHandoff.js";
+import { weekSlots, nameOf } from "../services/sotwContext.js";
+import { previewFor } from "../services/sotwPreviewService.js";
+import { sotwCard, congratsCard } from "../render/sotwCards.js";
+import { pickCongratulation } from "../render/sotwMessages.js";
+import { tryDm } from "../discord/roles.js";
+import { sendOptions } from "../discord/respond.js";
 import { audit } from "../domain/audit.js";
 import { labelWindow } from "../time/format.js";
 import { cmd } from "../discord/commandMentions.js";
@@ -100,6 +111,22 @@ export const devCommand: Command = {
             sub
                 .setName("status")
                 .setDescription("What the bot is doing, and what is stopping it")
+        )
+        .addSubcommand((sub) =>
+            sub
+                .setName("sotw")
+                .setDescription("Preview Staff of the Week. Writes nothing and tells nobody else.")
+                .addStringOption((option) =>
+                    option
+                        .setName("preview")
+                        .setDescription("Which part")
+                        .setRequired(true)
+                        .addChoices(
+                            { name: "reminder", value: "reminder" },
+                            { name: "draw", value: "draw" },
+                            { name: "congrats", value: "congrats" }
+                        )
+                )
         ),
 
     async execute({ client, config, interaction, staff }) {
@@ -151,6 +178,62 @@ export const devCommand: Command = {
                     ].map((warning) => ({ key: String(warning.key), text: warning.text })),
                     dangerousCommands: env.devDangerousCommands
                 })
+            );
+            return;
+        }
+
+        if (sub === "sotw") {
+            await defer(interaction, true);
+            const what = interaction.options.getString("preview", true);
+
+            if (what === "draw") {
+                // If the week closed now: this week's live minutes, eligibility
+                // for next week, one sample draw. Nothing is recorded.
+                const slots = await weekSlots(config);
+                const standings = [];
+                for (const member of await listActiveStaff()) {
+                    standings.push({
+                        staffId: member._id.toHexString(),
+                        minutes: await countMinutesBetween(member._id, slots.current.start, new Date())
+                    });
+                }
+                const pool = await drawPoolFor(client, config, slots.next, standings);
+                const names = [];
+                for (const row of pool) {
+                    const member = await findStaffById(new ObjectId(row.staffId));
+                    names.push(`- **${member ? await nameOf(client, config, member) : row.staffId}** ${row.minutes} min`);
+                }
+                const sample = draw(pool, Math.random);
+                const sampleMember = sample ? await findStaffById(new ObjectId(sample.staffId)) : null;
+                await respond(
+                    interaction,
+                    sotwCard(
+                        "Staff of the Week draw, if the week closed now",
+                        (names.length > 0 ? names.join("\n") : "Nobody would qualify.") +
+                            (sampleMember ? `\n\nOne sample draw: **${await nameOf(client, config, sampleMember)}**.` : "") +
+                            "\n-# Nothing was recorded and nobody was told.",
+                        { ephemeral: true }
+                    )
+                );
+                return;
+            }
+
+            const card =
+                what === "reminder"
+                    ? await buildReminder(client, config)
+                    : congratsCard({
+                          message: pickCongratulation(Math.random),
+                          colourLine: staff.sotwColour
+                              ? "Your colour is on the role."
+                              : `The role has no colour yet — choose one with ${cmd("settings sotw-colour")}.`,
+                          preview: await previewFor(client, config, staff.discordId, staff.sotwColour ?? null)
+                      });
+            const delivered = await tryDm(client, interaction.user.id, sendOptions(card));
+            await respond(
+                interaction,
+                delivered
+                    ? sotwCard("Sent to your DMs", "Nothing was recorded and nobody else was told.", { ephemeral: true })
+                    : errorCard("Your DMs are closed to the bot, so the preview could not be sent.")
             );
             return;
         }
