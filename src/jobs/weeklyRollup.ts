@@ -4,7 +4,8 @@ import {
     hasNoWeeklyRollups,
     missingWeekWindows,
     previousWeekWindow,
-    rebuildWeekForAll
+    rebuildWeekForAll,
+    weekWindowFor
 } from "../domain/weekly.js";
 import { assessFortnight, backfillPlan, closingFortnightIndex } from "../domain/assessments.js";
 import { runFortnightAssessment } from "../services/assessmentService.js";
@@ -15,6 +16,7 @@ import {
 } from "../services/notifications.js";
 import { postTeamRecap } from "../services/teamRecapService.js";
 import { postLeaderboardLog } from "../services/leaderboardLogService.js";
+import { handoffOnBoot, runHandoffSafely } from "../services/sotwHandoff.js";
 import { log } from "../log.js";
 
 /**
@@ -31,6 +33,11 @@ export async function closeWeek(
     const closing = previousWeekWindow(at, config);
     await rebuildWeekForAll(closing, config, at);
     log.info(`Closed week starting ${closing.start.toISOString()}`);
+
+    // Staff of the Week changes hands for the week that has just begun. After
+    // the rollup, because the draw reads the closed week's frozen figures; before
+    // the recap, which names the new holder.
+    await runHandoffSafely(client, config, weekWindowFor(closing.end, config), at);
 
     // The team's week, once. Claimed against a receipt like the fortnight
     // announcement, so a rebuild refreshes the figures without posting again.
@@ -82,6 +89,7 @@ export async function catchUpMissedWeeks(
     const missing = await missingWeekWindows(config, lookbackWeeks, at);
     if (missing.length === 0) {
         log.info("No missing weekly rollups.");
+        await handoffOnBoot(client, config, coldStart, at);
         return;
     }
 
@@ -95,6 +103,12 @@ export async function catchUpMissedWeeks(
         // and shifts, so recomputing it writes the same numbers and tells
         // nobody anything.
         await rebuildWeekForAll(window, config, at);
+
+        // The week that has just closed hands Staff of the Week over before its
+        // recap is posted, as the live close does. Older weeks never do.
+        if (!coldStart && window.end.getTime() === weekWindowFor(at, config).start.getTime()) {
+            await runHandoffSafely(client, config, weekWindowFor(window.end, config), at);
+        }
 
         // The team recap and the leaderboard log follow the same rule as the
         // fortnight announcement: a first boot spends the receipt without
@@ -141,4 +155,6 @@ export async function catchUpMissedWeeks(
             await runFortnightAssessment(client, config, fortnightIndex);
         }
     }
+
+    await handoffOnBoot(client, config, coldStart, at);
 }
