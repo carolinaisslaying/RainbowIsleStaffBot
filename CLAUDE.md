@@ -309,8 +309,8 @@ so an Executive who could change the configuration could name themselves in it, 
 on the command while the buttons check less is the same defect this codebase keeps re-finding.
 
 **One command per subject.** `/shift`, `/leave`, `/stats`, `/warnings`, `/settings`, `/coverage`,
-`/admin`, `/config`, `/dev`. A feature lives under the thing it is about, never under the tier that
-may use it: `/warnings view` and `/warnings issue` sit together although one is for everybody and the
+`/admin`, `/config`, `/dev`, `/sotw`. A feature lives under the thing it is about, never under the
+tier that may use it: `/warnings view` and `/warnings issue` sit together although one is for everybody and the
 other is Executive only. That is what `Command.subcommands` is for — a per-subcommand `tier` and
 `bypassOnboarding`, folded with the command's own by `requirementsFor` (`commands/requirements.ts`),
 where the stricter tier wins. A rule can raise the bar and never lower it, because `Command.tier` is
@@ -328,7 +328,8 @@ which splits `customId` on `:` into `namespace:first:second`. Namespaces in use:
 (`ack` on the member's DM), `conduct` (`withdraw` on the log card), `leave`
 (`approve`/`decline`/`extApprove`/`extDecline`/`end`/`endConfirm`/`endCancel`), `leaveConfirm`,
 `leavePurge`, `tz`,
-`leaderboard`. A pressed button edits its own message in place
+`leaderboard`, `sotw` (`rest`/`next`/`cancel`, each id carrying the staged staffId) and `sotwColour`
+(`code`/`clear`/`save`/`cancel`). A pressed button edits its own message in place
 (`interaction.update` / `deferUpdate` + `editReply`) rather than replying beneath it.
 
 **Time.** Two clocks. `config.accountingTimezone` defines weeks and fortnights for everyone;
@@ -641,6 +642,62 @@ own row on theirs, `(you)` included, and every hidden row on the leaderboard log
 because an eye beside a name reads as "visible". A public copy never admits a hidden row, so it
 never shows one.
 
+**Staff of the Week is one role, owned by the bot.** `staffOfWeekRole` empty turns the whole
+feature off (`sotwEnabled`), which every command, job and handler checks before doing anything. The
+handoff runs inside `closeWeek`, after the week's rollup and before the team recap so the recap can
+name the new holder, and claims `sotw-handoff:<weekStartMs>` before it moves anything — the same
+receipt pattern as the fortnight announcement and the recaps, for the same reason. The draw
+(`drawPool`, `domain/staffOfWeek.ts`) is the closed week's top three who met `weeklyTargetMinutes`
+and may hold it, plus everybody tied with the third, so a tie at the cut never decides who is in;
+pending leave skips the draw entirely, because handing the role to somebody probably away is worse
+than a week with nobody drawn.
+
+**Credited versus removed holders.** A week's document keeps `holders` (everybody ever granted it
+that week) and `removedHolders` (anybody taken off early) rather than overwriting one with the
+other, so the history says what happened rather than just what stands now. `creditedHolders`
+(`domain/staffOfWeek.ts`) is the only reader of the two lists — every other rule, from the two-week
+bar on holding it again to `/sotw view`'s tally, asks it rather than `holders` directly. A removed
+holder is neither barred by having held it (they were taken off, not credited) nor counted as having
+held it (they were on the record, briefly) — `/sotw remove` is a correction, not a week that counts
+against anybody.
+
+**The colour is a preference, not a role setting.** `StaffDoc.sotwColour` is what a member chose on
+their own colour picker, saved whether or not they currently hold the role. `roleColoursFor`
+(`domain/sotwColour.ts`) is the one function every role write goes through — the handoff, a
+rest-of-week grant, a Save while holding, and the boot re-assert — so a server without enhanced role
+colours always gets the nearest thing it can show and `downgraded` always comes from the same place.
+Editing the role's colour by hand in Discord's own settings does not stick: `reassertRole` runs on
+every boot and puts the holder's saved preference straight back, because the preference is the
+source of truth and a colour that could be edited around it would stop meaning anything.
+
+**The nickname exception.** The colour preview and the picker page's link show the public-guild
+nickname rather than going through `staffDisplayName`, because a colour is a thing seen in the
+community server, on a role only the public guild renders — showing the staff-server name there
+would preview a name nobody in that server has ever seen wearing that colour.
+
+**The picker page and the parser.** `site/sotw-colour/index.html` is a static page, hosted wherever
+its owner puts it — `staffOfWeekColourPickerUrl` just points at it — carrying its own colour logic in
+an inline `<script id="sotw-core">`. `test/sotwPicker.test.ts` runs that exact script in a VM context
+against `domain/sotwColour.ts`'s parser and `domain/sotwFragment.ts`'s fragment builder, so the page
+and the bot cannot drift on a code format or a preview fragment without a test catching it, even
+though nothing else in this repo ever executes the page. Twemoji on the page and in every preview
+this bot renders is always loaded `@latest` from jsDelivr, never a pinned version, so a newly drawn
+emoji shows up without a redeploy.
+
+**🏆 means Staff of the Week alone**, and only ever appears in `render/emoji.ts` —
+`test/staffOfWeekMark.test.ts` walks every other source file and fails if it finds one. It took the
+mark the leaderboard's standings used to carry, which moved to 📈, because 🏆 beside a leaderboard row
+read as "this person is winning" when it only ever meant one specific week's holder.
+
+**Late changes are notices, never actions.** `events/sotwMembers.ts` watches the current holder
+alone — leaving the public guild, or a role change that drops them out of Staff tier or promotes
+them to Executive — through `lateCauseFor` and `checkHolderStanding`
+(`services/sotwWatch.ts`), and posts what changed rather than taking the role off itself: an
+Executive decided who holds it, so an Executive decides whether a late disqualification changes
+anything. It is scoped to the holder because the handler sits on `GuildMemberUpdate` for a guild of
+110,000 members, and checking anybody else's roles on every one of those events is work with no
+reader.
+
 **Review charts.** `render/trend.ts` draws two, both pure string functions like the others.
 `trendSvg` plots a member's last six fortnights as bars against a dashed requirement line, because
 "0 of 240" reads identically whether somebody has always been at zero or fell off a cliff, and those
@@ -785,7 +842,8 @@ go to find out why.
 
 **Collections** (`src/db/client.ts`): `staff`, `activityDays`, `shifts`, `weeklyStats`,
 `fortnightAssessments`, `warnings`, `leave`, `demandBuckets`, `guildConfig`, `auditLog`,
-`deliveries`, `uptimeHours`, `fortnightReviews`, `pings`. Indexes are created in the same file.
+`deliveries`, `uptimeHours`, `fortnightReviews`, `pings`, `staffOfWeek`. Indexes are created in the
+same file.
 `demandBuckets` and `uptimeHours` hold no user id and are never in scope for a deletion request.
 `pings` holds message references keyed by record id, never a user id.
 
