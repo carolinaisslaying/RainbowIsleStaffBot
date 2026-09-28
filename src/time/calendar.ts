@@ -170,6 +170,21 @@ export function nextWeekStart(
     return zonedToUtc(addCalendarDays(wall, 7), timeZone);
 }
 
+/**
+ * Start of the week that closed `weeksAgo` weeks before the one containing
+ * `now`: 1 is the week that has just closed. Steps by calendar days, for the
+ * same reason `nextWeekStart` does.
+ */
+export function closedWeekStart(
+    now: Date,
+    weeksAgo: number,
+    timeZone: string,
+    weekStartDay: number
+): Date {
+    const current = wallClockIn(weekStartFor(now, timeZone, weekStartDay), timeZone);
+    return zonedToUtc(addCalendarDays(current, -7 * weeksAgo), timeZone);
+}
+
 /** Exclusive end of the accounting week containing `instant`. */
 export function weekEndFor(
     instant: Date,

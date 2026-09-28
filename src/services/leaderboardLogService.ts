@@ -1,9 +1,9 @@
-import type { Client } from "discord.js";
+import type { Client, SendableChannels } from "discord.js";
 import { collections } from "../db/client.js";
 import type { StaffBotConfig } from "../config/guildConfig.js";
 import type { StaffDoc, WeeklyStatsDoc } from "../db/types.js";
 import type { WeekWindow } from "../domain/weekly.js";
-import { leaderboardVisibility, publicStandings } from "../domain/leaderboard.js";
+import { leaderboardVisibility, logStandings } from "../domain/leaderboard.js";
 import { staffChannel } from "./leaveService.js";
 import { claimLeaderboardLog } from "./notifications.js";
 import { leaderboardCard, type RenderedMessage } from "../render/cards.js";
@@ -20,11 +20,12 @@ import { log } from "../log.js";
  * the week's rollups rather than counted live, so the log agrees with the team
  * recap and with every member's own recap for that week.
  *
- * Always the public view: the card sits in a channel with no reader to make an
- * exception for, so hidden members are left out and counted in the footnote,
- * exactly as the channel copy of `/stats leaderboard` does. No buttons: every
- * row is on the one card, because a record that has to be paged is a record
- * nobody scrolls back through.
+ * An Executive record, in a channel only Executives read, so it lists everybody:
+ * hidden members sit in their real place, marked with the padlock, as they do
+ * on a Lead's copy of `/stats leaderboard`. It used to be the public view, which
+ * left them out and ranked everyone beneath them wrongly. No buttons: every row
+ * is on the one card, because a record that has to be paged is a record nobody
+ * scrolls back through.
  */
 export async function buildLeaderboardLog(
     client: Client,
@@ -54,7 +55,7 @@ export async function buildLeaderboardLog(
         ];
     });
 
-    const { rows, hiddenCount } = publicStandings<{ staff: StaffDoc; rollup: WeeklyStatsDoc }>(
+    const { rows, hiddenCount } = logStandings<{ staff: StaffDoc; rollup: WeeklyStatsDoc }>(
         inputs
     );
 
@@ -72,7 +73,8 @@ export async function buildLeaderboardLog(
             target: config.weeklyTargetMinutes,
             state: row.member.rollup.ringState,
             isViewer: false,
-            onLeave: row.onLeave
+            onLeave: row.onLeave,
+            hidden: row.hidden
         });
     }
 
@@ -87,9 +89,10 @@ export async function buildLeaderboardLog(
         totalMinutes: rows.reduce((sum, row) => sum + row.minutes, 0),
         participants: rows.length,
         footnote: leaderboardVisibility({
-            privileged: false,
+            privileged: true,
             viewerHidden: false,
-            hiddenCount
+            hiddenCount,
+            executiveRecord: true
         }).note
     });
 }
@@ -105,13 +108,8 @@ export async function postLeaderboardLog(
     config: StaffBotConfig,
     week: WeekWindow
 ): Promise<boolean> {
-    if (!config.leaderboardLogChannelId) return false;
-
-    const channel = await staffChannel(client, config, config.leaderboardLogChannelId);
-    if (!channel) {
-        log.warn("leaderboardLogChannelId is set but the channel could not be fetched.");
-        return false;
-    }
+    const channel = await logChannel(client, config);
+    if (!channel) return false;
 
     const card = await buildLeaderboardLog(client, config, week);
     if (!card) return false;
@@ -119,9 +117,7 @@ export async function postLeaderboardLog(
     if (!(await claimLeaderboardLog(week.start))) return false;
 
     try {
-        // Names are display names, but a member with no fetchable name falls
-        // back to a mention, and a record of last week should ping nobody.
-        await channel.send({ ...card, allowedMentions: { parse: [] } });
+        await sendLog(channel, card);
     } catch (error) {
         log.error(
             `The leaderboard log for the week starting ${week.start.toISOString()} could not ` +
@@ -131,4 +127,46 @@ export async function postLeaderboardLog(
         return false;
     }
     return true;
+}
+
+export type ResendResult =
+    | { ok: true; url: string }
+    | { ok: false; reason: "unset" | "channel" | "empty" };
+
+/**
+ * `/admin leaderboard-log`: post a closed week's log again, now. The same card
+ * the week close builds, and no receipt, because the Executive asking for it is
+ * the deliberate act the receipt exists to stand in for. It posts beside the
+ * old copy rather than replacing it: the bot keeps no record of that message.
+ * A failed send throws, so the command can say so to the person who asked.
+ */
+export async function resendLeaderboardLog(
+    client: Client,
+    config: StaffBotConfig,
+    week: WeekWindow
+): Promise<ResendResult> {
+    if (!config.leaderboardLogChannelId) return { ok: false, reason: "unset" };
+    const channel = await logChannel(client, config);
+    if (!channel) return { ok: false, reason: "channel" };
+
+    const card = await buildLeaderboardLog(client, config, week);
+    if (!card) return { ok: false, reason: "empty" };
+
+    const message = await sendLog(channel, card);
+    return { ok: true, url: message.url };
+}
+
+async function logChannel(client: Client, config: StaffBotConfig) {
+    if (!config.leaderboardLogChannelId) return null;
+    const channel = await staffChannel(client, config, config.leaderboardLogChannelId);
+    if (!channel) {
+        log.warn("leaderboardLogChannelId is set but the channel could not be fetched.");
+    }
+    return channel;
+}
+
+function sendLog(channel: SendableChannels, card: RenderedMessage) {
+    // Names are display names, but a member with no fetchable name falls back
+    // to a mention, and a record of a closed week should ping nobody.
+    return channel.send({ ...card, allowedMentions: { parse: [] } });
 }

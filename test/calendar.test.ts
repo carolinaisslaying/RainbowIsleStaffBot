@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+    closedWeekStart,
     completesFortnight,
     fortnightIndexFor,
     fortnightWindow,
@@ -172,5 +173,26 @@ describe("UTC day keys", () => {
             new Date("2026-09-29T00:00:00Z")
         );
         expect(keys).toEqual(["2026-09-28"]);
+    });
+});
+
+describe("closedWeekStart", () => {
+    // Monday 28 September 2026, 13:36 in Auckland (NZDT since the 27th).
+    const now = new Date("2026-09-28T00:36:00Z");
+
+    it("counts one week ago as the week that has just closed", () => {
+        // Monday 21 September, 00:00 NZST.
+        expect(closedWeekStart(now, 1, "Pacific/Auckland", 1).toISOString()).toBe(
+            "2026-09-20T12:00:00.000Z"
+        );
+    });
+
+    it("walks back across the daylight saving change without drifting", () => {
+        // Monday 14 September, 00:00 NZST: the 21st's week held no change, the
+        // current one did, and a fixed 7 × 24h step from the current week's
+        // start would land an hour late.
+        expect(closedWeekStart(now, 2, "Pacific/Auckland", 1).toISOString()).toBe(
+            "2026-09-13T12:00:00.000Z"
+        );
     });
 });

@@ -15,8 +15,11 @@ import {
 } from "../domain/assessments.js";
 import { runFortnightAssessment, fortnightSummary } from "../services/assessmentService.js";
 import { audit } from "../domain/audit.js";
-import { weekStartFor, nextWeekStart, DAY_MS } from "../time/calendar.js";
+import { resendLeaderboardLog } from "../services/leaderboardLogService.js";
+import { weekStartFor, nextWeekStart, closedWeekStart, DAY_MS } from "../time/calendar.js";
 import { labelWindow } from "../time/format.js";
+import { cmd } from "../discord/commandMentions.js";
+import { log } from "../log.js";
 
 export const adminCommand: Command = {
     tier: "executive",
@@ -44,6 +47,19 @@ export const adminCommand: Command = {
                     option
                         .setName("fortnight")
                         .setDescription("Fortnight index. Defaults to the last closed one.")
+                        .setRequired(false)
+                )
+        )
+        .addSubcommand((sub) =>
+            sub
+                .setName("leaderboard-log")
+                .setDescription("Post a closed week's leaderboard to the log channel again")
+                .addIntegerOption((option) =>
+                    option
+                        .setName("weeks_ago")
+                        .setDescription("1 is the week that has just closed. Defaults to 1.")
+                        .setMinValue(1)
+                        .setMaxValue(104)
                         .setRequired(false)
                 )
         )
@@ -165,6 +181,70 @@ export const adminCommand: Command = {
                             ? "The card is up and marked as a rehearsal. Nobody was DMed and " +
                               "the fortnight can still be announced for real later."
                             : "The review card is up. An Executive decides each outcome."),
+                    { ephemeral: true }
+                )
+            );
+            return;
+        }
+
+        if (sub === "leaderboard-log") {
+            await defer(interaction, true);
+
+            const weeksAgo = interaction.options.getInteger("weeks_ago") ?? 1;
+            const start = closedWeekStart(
+                new Date(),
+                weeksAgo,
+                config.accountingTimezone,
+                config.weekStartDay
+            );
+            const week = {
+                start,
+                end: nextWeekStart(start, config.accountingTimezone, config.weekStartDay)
+            };
+            const label = labelWindow(week.start, week.end, config.accountingTimezone);
+
+            let result;
+            try {
+                result = await resendLeaderboardLog(client, config, week);
+            } catch (error) {
+                log.error(`Resending the leaderboard log for ${label} failed`, error);
+                await respond(
+                    interaction,
+                    errorCard(`The leaderboard for ${label} could not be posted. Nothing was sent.`)
+                );
+                return;
+            }
+
+            if (!result.ok) {
+                await respond(
+                    interaction,
+                    errorCard(
+                        result.reason === "unset"
+                            ? "No leaderboard log channel is set. Choose one in " +
+                                  `${cmd("config view", interaction.guildId)} first.`
+                            : result.reason === "channel"
+                              ? "The leaderboard log channel could not be reached. Check it " +
+                                "still exists and the bot can post there."
+                              : `There are no figures for the week of ${label}. Run ` +
+                                `${cmd("admin recompute", interaction.guildId)} to rebuild ` +
+                                "that week, then try again."
+                    )
+                );
+                return;
+            }
+
+            await audit("admin.leaderboardLog", {
+                actorId: interaction.user.id,
+                detail: { weekStart: week.start.toISOString(), weeksAgo }
+            });
+
+            await respond(
+                interaction,
+                noticeCard(
+                    "Leaderboard posted again",
+                    `The week of ${label} is in the log channel: ${result.url}\n\n` +
+                        "The earlier copy is still there. Delete it by hand if you no longer " +
+                        "want it.",
                     { ephemeral: true }
                 )
             );

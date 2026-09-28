@@ -228,7 +228,8 @@ reply stays in the channel until somebody deletes it by hand.
 ## Posted weekly cards are not in the database
 
 The leaderboard log (`leaderboardLogChannelId`) posts each closed week's
-standings, by display name, and the team recap (`recapChannelId`) can name the
+standings, by display name and including members hidden from the leaderboard,
+and the team recap (`recapChannelId`) can name the
 member with the longest run of weeks. Neither message is recorded anywhere the
 bot can find again, so a purge leaves them in place. If a request covers them,
 edit or delete those messages in Discord by hand. Clearing the member's

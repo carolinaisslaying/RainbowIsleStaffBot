@@ -614,14 +614,19 @@ posting, otherwise one member's DM. Neither claims a receipt, so the real ones s
 each closed week's standings to `leaderboardLogChannelId` once, beside the team recap and on the
 same rules: read from that week's rollups rather than counted live, built before its receipt
 (`claimLeaderboardLog`), spent without posting on a cold start, a failed send logged rather than
-retried. It is always the public view — `publicStandings` (`domain/leaderboard.ts`) drops hidden
-members and returns how many, and the footnote comes from `leaderboardVisibility` like every other
-copy. Every row is on one card with no buttons: `leaderboardCard` splits rows into text displays of
+retried. **It is an Executive record, so it lists everybody.** The channel is Executive-only, and
+the log used to be the public view, which left hidden members out and ranked everyone beneath them
+wrongly, for readers who see hidden rows everywhere else anyway. `logStandings`
+(`domain/leaderboard.ts`) ranks everyone and flags the hidden in their real place with 🔒, and the
+footnote comes from `leaderboardVisibility` (`executiveRecord: true`) like every other copy.
+`/admin leaderboard-log weeks_ago:` posts a closed week again through the same builder and claims
+no receipt, because the Executive asking is the deliberate act the receipt stands in for; it posts
+beside the old copy, which the bot has no record of. Every row is on one card with no buttons: `leaderboardCard` splits rows into text displays of
 25 to stay under the 4000 character limit, and a single page draws no paging row. Sent with
 `allowedMentions: { parse: [] }`, because a name that cannot be fetched falls back to a mention.
 
 **A hidden row carries 🔒 (`EMOJI.hidden`) wherever it is drawn**: a Lead's copy, and the member's
-own row on theirs, `(you)` included. It replaced the word "(hidden)". A padlock rather than an eye,
+own row on theirs, `(you)` included, and every hidden row on the leaderboard log. It replaced the word "(hidden)". A padlock rather than an eye,
 because an eye beside a name reads as "visible". A public copy never admits a hidden row, so it
 never shows one.
 
