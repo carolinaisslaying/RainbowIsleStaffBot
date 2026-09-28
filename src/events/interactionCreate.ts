@@ -410,7 +410,7 @@ async function routeButton(client: Client, interaction: import("discord.js").But
         return;
     }
     if (namespace === "sotw") {
-        await handleSotwButton(client, config, interaction, first);
+        await handleSotwButton(client, config, interaction, first, second);
         return;
     }
     if (namespace === "leave") {

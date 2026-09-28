@@ -102,17 +102,24 @@ export async function handRoleTo(
     return { granted, colour };
 }
 
+/**
+ * True once the role is confirmed off: the member no longer holds it, or they
+ * were never found to hold it in the first place. False only when the role
+ * could not be fetched, or Discord refused the removal — the caller has
+ * something to warn about either way.
+ */
 export async function takeRoleFrom(
     client: Client,
     config: StaffBotConfig,
     holder: StaffDoc,
     reason: string
-): Promise<void> {
+): Promise<boolean> {
     const found = await sotwRole(client, config);
-    if (!found) return;
+    if (!found) return false;
     const member = await fetchMember(client, config.publicGuildId, holder.discordId);
-    if (member) await removeRole(member, found.role.id, reason, holder._id);
+    const removed = member ? await removeRole(member, found.role.id, reason, holder._id) : true;
     await applyRoleColour(client, config, null, reason);
+    return removed;
 }
 
 export async function staffOfWeekRoleFacts(

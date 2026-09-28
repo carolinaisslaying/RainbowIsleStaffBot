@@ -40,10 +40,12 @@ describe("the reminder", () => {
 });
 
 describe("the week choice", () => {
-    it("offers the rest of this week and next week", () => {
-        const body = json(weekChoiceCard({ name: "Robin", currentLabel: "this", nextLabel: "next" }));
-        expect(body).toContain("sotw:rest");
-        expect(body).toContain("sotw:next");
+    it("offers the rest of this week and next week, carrying the staffId so a stale card cannot act on somebody else's pick", () => {
+        const body = json(
+            weekChoiceCard({ staffId: "64f000000000000000000001", name: "Robin", currentLabel: "this", nextLabel: "next" })
+        );
+        expect(body).toContain("sotw:rest:64f000000000000000000001");
+        expect(body).toContain("sotw:next:64f000000000000000000001");
         expect(body).toContain("sotw:cancel");
     });
 });

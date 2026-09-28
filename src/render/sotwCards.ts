@@ -60,7 +60,19 @@ export function reminderCard(input: {
     };
 }
 
-export function weekChoiceCard(input: { name: string; currentLabel: string; nextLabel: string }): RenderedMessage {
+/**
+ * `staffId` rides in the Rest/Next customIds so a second `/sotw set` for
+ * somebody else, run while this card is still sitting there, cannot have its
+ * pick honoured by a press on the stale card: `handleSotwButton` refuses
+ * unless the id on the button matches what is actually staged. Cancel needs
+ * no id — it clears whatever is staged, stale or not.
+ */
+export function weekChoiceCard(input: {
+    staffId: string;
+    name: string;
+    currentLabel: string;
+    nextLabel: string;
+}): RenderedMessage {
     const container = new ContainerBuilder()
         .setAccentColor(COLOUR.staffOfWeek)
         .addTextDisplayComponents(
@@ -73,8 +85,14 @@ export function weekChoiceCard(input: { name: string; currentLabel: string; next
         )
         .addActionRowComponents(
             new ActionRowBuilder<ButtonBuilder>().addComponents(
-                new ButtonBuilder().setCustomId("sotw:rest").setLabel("Rest of this week").setStyle(ButtonStyle.Success),
-                new ButtonBuilder().setCustomId("sotw:next").setLabel("Next week").setStyle(ButtonStyle.Primary),
+                new ButtonBuilder()
+                    .setCustomId(`sotw:rest:${input.staffId}`)
+                    .setLabel("Rest of this week")
+                    .setStyle(ButtonStyle.Success),
+                new ButtonBuilder()
+                    .setCustomId(`sotw:next:${input.staffId}`)
+                    .setLabel("Next week")
+                    .setStyle(ButtonStyle.Primary),
                 new ButtonBuilder().setCustomId("sotw:cancel").setLabel("Cancel").setStyle(ButtonStyle.Secondary)
             )
         );

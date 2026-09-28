@@ -66,6 +66,20 @@ export function takeSet(
     return { staffId: entry.staffId, reason: entry.reason };
 }
 
+/**
+ * Reads without consuming, so a card can be checked against what is staged
+ * before deciding whether to take it — a stale card naming somebody else's
+ * pick must not eat the pick a fresher card is still waiting on.
+ */
+export function peekSet(
+    actorId: string,
+    now = Date.now()
+): { staffId: string; reason: string | null } | null {
+    const entry = pendingSets.get(actorId);
+    if (!entry || entry.expiresAt <= now) return null;
+    return { staffId: entry.staffId, reason: entry.reason };
+}
+
 /** Test seam. */
 export function resetSotwStaging(): void {
     staged.clear();

@@ -58,6 +58,7 @@ export async function offerOrSet(
 
     stageSet(actorId, subject._id.toHexString(), reason);
     return weekChoiceCard({
+        staffId: subject._id.toHexString(),
         name: await nameOf(client, config, subject),
         currentLabel: label(config, slots.current),
         nextLabel: label(config, slots.next)
@@ -184,7 +185,7 @@ export async function removeHolder(
     if (!holder) return errorCard("Nobody holds Staff of the Week right now.");
 
     await recordRemoval(holder.week.start, holder.staff._id, actorId, reason, now);
-    await takeRoleFrom(client, config, holder.staff, `Staff of the Week removed: ${reason}`.slice(0, 500));
+    const roleTaken = await takeRoleFrom(client, config, holder.staff, `Staff of the Week removed: ${reason}`.slice(0, 500));
     await audit("sotw.remove", { actorId, targetStaffId: holder.staff._id, detail: { weekStart: holder.week.start, reason } });
 
     const name = await nameOf(client, config, holder.staff);
@@ -196,7 +197,8 @@ export async function removeHolder(
     return sotwCard(
         "Staff of the Week removed",
         `**${name}** no longer holds it. They are not barred from the next two weeks, and this week ` +
-            "is not counted as theirs. Pick somebody for the rest of the week with the set command.",
+            "is not counted as theirs. Pick somebody for the rest of the week with the set command." +
+            (roleTaken ? "" : `\n${EMOJI.warning} The role could not be taken off in the community server.`),
         { ephemeral: true }
     );
 }

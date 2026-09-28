@@ -3,6 +3,7 @@ import {
     STAGE_TTL_MS,
     clearStaged,
     noteRoleWrite,
+    peekSet,
     resetSotwStaging,
     roleWriteCooldown,
     stageColour,
@@ -48,5 +49,16 @@ describe("a pending set", () => {
     it("expires", () => {
         stageSet("exec", "abc", null, 0);
         expect(takeSet("exec", STAGE_TTL_MS)).toBeNull();
+    });
+
+    it("can be checked without being consumed, so a stale card's mismatch never eats a fresher pick", () => {
+        stageSet("exec", "first", "Reason one", 0);
+        expect(peekSet("exec", 1)).toEqual({ staffId: "first", reason: "Reason one" });
+        // A second /sotw set replaces what is staged for that Executive.
+        stageSet("exec", "second", "Reason two", 2);
+        expect(peekSet("exec", 3)).toEqual({ staffId: "second", reason: "Reason two" });
+        // Peeking never consumes: the real take still sees it and only once.
+        expect(takeSet("exec", 4)).toEqual({ staffId: "second", reason: "Reason two" });
+        expect(peekSet("exec", 5)).toBeNull();
     });
 });
