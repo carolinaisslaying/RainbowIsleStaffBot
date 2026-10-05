@@ -188,8 +188,10 @@ export async function runFortnightAssessment(
                     `Requirement met.${reduced}`
                   : `Fortnight ${label}. You recorded **${formatMinutes(assessment.totalMinutes)}**, ` +
                     `under your requirement of ${assessment.requiredMinutes} minutes.${reduced} ` +
-                    "Fortnights under the requirement go to the Executives for review. If " +
-                    "something has been getting in the way, let one of them know.";
+                    (assessment.excludedAsExecutive
+                        ? "Executives are not put in the fortnight review, so nothing more happens."
+                        : "Fortnights under the requirement go to the Executives for review. If " +
+                          "something has been getting in the way, let one of them know.");
 
         const delivered = await sendFortnightOutcome(
             client,
