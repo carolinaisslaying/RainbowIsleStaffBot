@@ -53,6 +53,46 @@ export function inReviewQueue(assessment: {
     return assessment.status === "below" && assessment.excludedAsExecutive !== true;
 }
 
+/**
+ * The one-line tally `/admin assess` and `/dev rehearse` reply with. "Below"
+ * counts everybody under the requirement, so the Executives left out of the
+ * queue are named in it, or the reply says 4 where the header says 2.
+ */
+export function assessmentSummaryLine(summary: {
+    met: number;
+    below: number;
+    exempt: number;
+    total: number;
+    executivesNotReviewed: number;
+}): string {
+    const executives =
+        summary.executivesNotReviewed === 0
+            ? ""
+            : ` (${summary.executivesNotReviewed} ` +
+              `${summary.executivesNotReviewed === 1 ? "Executive" : "Executives"} not reviewed)`;
+    return (
+        `${summary.met} met, ${summary.below} below${executives}, ` +
+        `${summary.exempt} exempt, ${summary.total} assessed.`
+    );
+}
+
+/**
+ * Whether a run of the assessment writes `excludedAsExecutive`, and what.
+ *
+ * Undefined leaves the stored value alone. The flag is fixed by the first
+ * *real* write: a row nobody has written yet takes this run's answer, and so
+ * does a row only a rehearsal has written, because a rehearsal run partway
+ * through a fortnight checks roles before the close. A real row keeps what it
+ * has, so re-running a fortnight after a promotion never moves its queue.
+ */
+export function executiveFlagToWrite(
+    existing: { rehearsal?: boolean } | null,
+    excluded: boolean
+): boolean | undefined {
+    if (existing && existing.rehearsal !== true) return undefined;
+    return excluded;
+}
+
 export interface RowFacts {
     outcome: ReviewOutcome | null;
     /** No longer in the server, or the staff record is inactive. */

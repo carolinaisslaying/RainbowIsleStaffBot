@@ -18,7 +18,7 @@ import {
     type LeaveSpan
 } from "./leaveDays.js";
 import { listActiveStaff } from "./staff.js";
-import { excludedAsExecutive } from "./review.js";
+import { excludedAsExecutive, executiveFlagToWrite } from "./review.js";
 import { weekWindowFor, type WeekWindow } from "./weekly.js";
 import { audit } from "./audit.js";
 
@@ -209,7 +209,7 @@ export async function saveAssessment(
     computation: AssessmentComputation,
     rehearsal = false,
     leaveChangedAt: Date | null = null,
-    excludedAsExecutive = false
+    executiveFlag?: boolean
 ): Promise<FortnightAssessmentDoc> {
     const result = await collections.fortnightAssessments().findOneAndUpdate(
         { staffId: computation.staffId, fortnightIndex: computation.fortnightIndex },
@@ -228,6 +228,8 @@ export async function saveAssessment(
                 status: computation.status,
                 heldForLeave: computation.heldForLeave,
                 ...(leaveChangedAt ? { leaveChangedAt } : {}),
+                // Undefined leaves the stored flag alone: see executiveFlagToWrite.
+                ...(executiveFlag === undefined ? {} : { excludedAsExecutive: executiveFlag }),
                 // A real run promotes a rehearsal's row to real. See above.
                 ...rehearsalUpdate(rehearsal).set
             },
@@ -237,9 +239,6 @@ export async function saveAssessment(
                 fortnightIndex: computation.fortnightIndex,
                 weeklyTargetMinutes: computation.weeklyTargetMinutes,
                 minimumLeaveDays: computation.minimumLeaveDays,
-                // Snapshotted like the rules: whoever holds the role later,
-                // this fortnight's queue was decided when it was first assessed.
-                excludedAsExecutive,
                 ...(leaveChangedAt ? {} : { leaveChangedAt: null }),
                 reviewedBy: null,
                 reviewOutcome: null,
@@ -275,7 +274,7 @@ export async function findAssessmentFor(
  * Assess every active staff member for the fortnight that just closed.
  *
  * `executives` is the Discord ids of whoever holds an Executive role now, and
- * only matters to a row written for the first time: see `excludedAsExecutive`.
+ * only matters to a row no real run has written yet: see `executiveFlagToWrite`.
  */
 export async function assessFortnight(
     index: number,
@@ -300,10 +299,13 @@ export async function assessFortnight(
                 computation,
                 rehearsal,
                 null,
-                excludedAsExecutive({
-                    isExecutive: executives.has(member.discordId),
-                    reviewExecutives: config.reviewExecutives
-                })
+                executiveFlagToWrite(
+                    existing,
+                    excludedAsExecutive({
+                        isExecutive: executives.has(member.discordId),
+                        reviewExecutives: config.reviewExecutives
+                    })
+                )
             )
         );
     }

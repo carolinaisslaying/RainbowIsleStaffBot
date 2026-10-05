@@ -1,4 +1,5 @@
 import { SlashCommandBuilder, MessageFlags } from "discord.js";
+import { assessmentSummaryLine } from "../domain/review.js";
 import type { Command } from "./types.js";
 import { errorCard, noticeCard, scrubConfirmCard } from "../render/cards.js";
 import { defer, respond } from "../discord/respond.js";
@@ -187,8 +188,7 @@ export const devCommand: Command = {
                 noticeCard(
                     `Fortnight ${index} rehearsed`,
                     `${labelWindow(window.week1Start, window.end, config.accountingTimezone)}\n` +
-                        `${summary.met} met, ${summary.below} below, ${summary.exempt} exempt, ` +
-                        `${summary.total} assessed.\n\n` +
+                        `${assessmentSummaryLine(summary)}\n\n` +
                         "The cards are up and marked as a rehearsal. Nobody outside the " +
                         "deployment administrators was messaged, nothing counts against " +
                         "anyone, and the fortnight can still be announced for real later.\n\n" +

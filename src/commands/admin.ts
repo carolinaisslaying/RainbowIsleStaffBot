@@ -1,4 +1,5 @@
 import { SlashCommandBuilder } from "discord.js";
+import { assessmentSummaryLine } from "../domain/review.js";
 import type { Command } from "./types.js";
 import { EMOJI } from "../render/emoji.js";
 import { errorCard, noticeCard } from "../render/cards.js";
@@ -216,8 +217,7 @@ export const adminCommand: Command = {
                         ? `Fortnight ${index} rehearsed`
                         : `Fortnight ${index} assessed`,
                     `${labelWindow(window.week1Start, window.end, config.accountingTimezone)}\n` +
-                        `${summary.met} met, ${summary.below} below, ${summary.exempt} exempt, ` +
-                        `${summary.total} assessed.\n\n` +
+                        `${assessmentSummaryLine(summary)}\n\n` +
                         (plan === "rehearse"
                             ? "The card is up and marked as a rehearsal. Nobody was DMed and " +
                               "the fortnight can still be announced for real later."

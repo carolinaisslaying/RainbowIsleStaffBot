@@ -357,15 +357,18 @@ keyed by index remembers where the header is.
 **Executives are assessed but not reviewed.** Their rank outranks the requirement in practice, so
 every Executive row was dismissed — a ping, a reminder and a modal per fortnight for a foregone
 decision. `assessFortnight` is handed the Discord ids holding an Executive role in the public guild
-(`currentExecutives`, roles only, a failed fetch reads as not one) and stores `excludedAsExecutive`
-in `$setOnInsert`, so a promotion, demotion or config change never moves a past fortnight's queue.
+(`currentExecutives`, roles only, a failed fetch reads as not one) and stores `excludedAsExecutive`.
+The first real run fixes it (`executiveFlagToWrite`): a rehearsal's answer is replaced, because a
+mid-fortnight rehearsal checks roles before the close, and a real row is never rewritten, so a
+promotion, demotion or config change never moves a past fortnight's queue.
 `belowThresholdFor` drops those rows, which takes them out of the header, rows, bulk paths, pings,
 reminder and repost at once; `inReviewQueue` (`domain/review.ts`) is the same rule, used by leave
 reassessment. The header's spread chart leaves them off too, or it would show more people below
 the line than the header counts, and the header says how many were left out
 (`executivesNotReviewedLine`), as a count and never a name. Their own DM, when below, says they are
 not reviewed instead of sending them to the Executives. That is the whole reach: their figures,
-rings and stats are untouched. `reviewExecutives` (default off) puts them back for fortnights assessed afterwards.
+rings and stats are untouched. `/admin assess` and `/dev rehearse` name them inside their "below"
+count (`assessmentSummaryLine`), or the reply reads 4 where the header reads 2. `reviewExecutives` (default off) puts them back for fortnights assessed afterwards.
 
 **A review can be moved without being re-run.** `/admin assess repost: true` (`repostReviewQueue`)
 deletes the header and every row card and posts them again from the records, so a queue can sit

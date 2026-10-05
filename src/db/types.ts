@@ -116,11 +116,12 @@ export interface FortnightAssessmentDoc {
      */
     heldForLeave: boolean;
     /**
-     * They held an Executive role when the fortnight was first assessed and
+     * They held an Executive role when the fortnight was assessed and
      * `reviewExecutives` was off, so their row is kept out of the review
-     * channel. Snapshotted on first write like the targets: a later promotion,
-     * demotion or config change does not move a past fortnight's queue.
-     * Absent reads as reviewed, which is what every earlier row was.
+     * channel. Fixed by the first real run (a rehearsal's answer is replaced):
+     * a later promotion, demotion or config change does not move a past
+     * fortnight's queue. Absent reads as reviewed, which is what every earlier
+     * row was.
      */
     excludedAsExecutive?: boolean;
     /** When a leave change last reassessed this fortnight after it closed. */

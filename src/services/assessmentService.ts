@@ -634,6 +634,7 @@ export async function fortnightSummary(index: number): Promise<{
     met: number;
     below: number;
     exempt: number;
+    executivesNotReviewed: number;
     assessments: FortnightAssessmentDoc[];
 }> {
     const assessments = await assessmentsForFortnight(index);
@@ -642,6 +643,9 @@ export async function fortnightSummary(index: number): Promise<{
         met: assessments.filter((entry) => entry.status === "met").length,
         below: assessments.filter((entry) => entry.status === "below").length,
         exempt: assessments.filter((entry) => entry.status === "exempt").length,
+        executivesNotReviewed: assessments.filter(
+            (entry) => entry.status === "below" && entry.excludedAsExecutive === true
+        ).length,
         assessments
     };
 }
