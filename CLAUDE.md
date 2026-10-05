@@ -434,7 +434,10 @@ run created the document — and `/dev rehearse` is always a rehearsal, so readi
 before it closed branded every row of it for ever. The real run afterwards refreshed the figures,
 claimed the announcement and DMed the roster over documents that still said they were not real, so
 every warning it issued counted against nobody, reached nobody but Executives, and the fortnight was
-filtered out of the member's own history. Nothing said so. **Every read that feeds a real decision
+filtered out of the member's own history. Nothing said so. `rehearsalUpdate` hands back both
+halves of that upsert, because MongoDB refuses an update naming one path in `$set` and `$setOnInsert`
+at once: the real run carried the flag in both, so every real assessment threw on its first row and
+the first fortnight went unannounced, while rehearsals named it once and worked. **Every read that feeds a real decision
 filters rehearsals out** —
 `assessmentHistory` and `warningsFor` do it in the query, which is where it belongs: one missed
 filter puts a rehearsal warning on somebody's real record. A rehearsal exercises the real write

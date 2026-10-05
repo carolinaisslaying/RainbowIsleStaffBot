@@ -178,11 +178,23 @@ export async function computeAssessment(
  * fortnight was filtered out of `assessmentHistory`, `warningsFor` and
  * `/settings export`. Nothing said so.
  *
+ * Both halves of the update come from here, because MongoDB refuses one that
+ * names a path in `$set` and `$setOnInsert` at once. The real run used to carry
+ * `rehearsal: false` in both, so every real assessment threw on its first row
+ * and the first fortnight went unannounced; a rehearsal named it once and
+ * worked, which is how it went unnoticed. A real run's `$set` also covers the
+ * insert, so `$setOnInsert` only ever needs the flag for a rehearsal.
+ *
  * Pure, and separate, because the asymmetry is the rule and it is worth being
  * able to state it without a database.
  */
-export function rehearsalUpdate(rehearsal: boolean): { rehearsal: false } | Record<string, never> {
-    return rehearsal ? {} : { rehearsal: false };
+export function rehearsalUpdate(rehearsal: boolean): {
+    set: { rehearsal?: false };
+    setOnInsert: { rehearsal?: true };
+} {
+    return rehearsal
+        ? { set: {}, setOnInsert: { rehearsal: true } }
+        : { set: { rehearsal: false }, setOnInsert: {} };
 }
 
 /**
@@ -215,7 +227,7 @@ export async function saveAssessment(
                 heldForLeave: computation.heldForLeave,
                 ...(leaveChangedAt ? { leaveChangedAt } : {}),
                 // A real run promotes a rehearsal's row to real. See above.
-                ...rehearsalUpdate(rehearsal)
+                ...rehearsalUpdate(rehearsal).set
             },
             $setOnInsert: {
                 _id: new ObjectId(),
@@ -230,7 +242,7 @@ export async function saveAssessment(
                 reviewNote: null,
                 reviewChannelId: null,
                 reviewMessageId: null,
-                rehearsal
+                ...rehearsalUpdate(rehearsal).setOnInsert
             }
         },
         { upsert: true, returnDocument: "after" }
