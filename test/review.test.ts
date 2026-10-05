@@ -4,6 +4,8 @@ import {
     activeWarningCount,
     reopenNotifies,
     decisionPermitted,
+    excludedAsExecutive,
+    inReviewQueue,
     priorOutcomesLine,
     queueCounts,
     queueHeadline,
@@ -334,5 +336,22 @@ describe("who hears about a reopened decision", () => {
 
     it("says nothing when there was no decision to withdraw", () => {
         expect(reopenNotifies(null)).toBe(false);
+    });
+});
+
+describe("Executives and the review queue", () => {
+    it("leaves an Executive out unless the deployment reviews them", () => {
+        expect(excludedAsExecutive({ isExecutive: true, reviewExecutives: false })).toBe(true);
+        expect(excludedAsExecutive({ isExecutive: true, reviewExecutives: true })).toBe(false);
+        expect(excludedAsExecutive({ isExecutive: false, reviewExecutives: false })).toBe(false);
+        expect(excludedAsExecutive({ isExecutive: false, reviewExecutives: true })).toBe(false);
+    });
+
+    it("queues a row only when it is below and not left out", () => {
+        expect(inReviewQueue({ status: "below" })).toBe(true);
+        expect(inReviewQueue({ status: "below", excludedAsExecutive: false })).toBe(true);
+        expect(inReviewQueue({ status: "below", excludedAsExecutive: true })).toBe(false);
+        expect(inReviewQueue({ status: "met" })).toBe(false);
+        expect(inReviewQueue({ status: "exempt" })).toBe(false);
     });
 });

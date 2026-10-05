@@ -354,6 +354,16 @@ not be finished. `domain/review.ts` holds the rules as pure functions (`rowButto
 `decisionPermitted`, `activeWarningCount`, `queueHeadline`, `reminderDue`), and `fortnightReviews`
 keyed by index remembers where the header is.
 
+**Executives are assessed but not reviewed.** Their rank outranks the requirement in practice, so
+every Executive row was dismissed — a ping, a reminder and a modal per fortnight for a foregone
+decision. `assessFortnight` is handed the Discord ids holding an Executive role in the public guild
+(`currentExecutives`, roles only, a failed fetch reads as not one) and stores `excludedAsExecutive`
+in `$setOnInsert`, so a promotion, demotion or config change never moves a past fortnight's queue.
+`belowThresholdFor` drops those rows, which takes them out of the header, rows, bulk paths, pings,
+reminder and repost at once; `inReviewQueue` (`domain/review.ts`) is the same rule, used by leave
+reassessment. That is the whole reach: their figures, DMs, rings, stats and the header's spread chart
+are untouched. `reviewExecutives` (default off) puts them back for fortnights assessed afterwards.
+
 **A review can be moved without being re-run.** `/admin assess repost: true` (`repostReviewQueue`)
 deletes the header and every row card and posts them again from the records, so a queue can sit
 below something posted after it. Nothing is recomputed and nobody is DMed or pinged: pings replying

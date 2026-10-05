@@ -38,6 +38,7 @@ export interface StaffBotConfig {
     amberThresholdPercent: number;
     softRingsEnabled: boolean;
     assessmentDryRun: boolean;
+    reviewExecutives: boolean;
     warningExpiryDays: number;
     reviewReminderDays: number;
 
@@ -251,6 +252,14 @@ export const CONFIG_KEYS: Record<keyof StaffBotConfig, KeySpec> = {
         group: "targets",
         consequence: "Reviews are rehearsals: cards post, nobody is DMed, nothing is issued"
     },
+    reviewExecutives: {
+        kind: "boolean",
+        description:
+            "Put Executives under the requirement in the fortnight review. Decided when a fortnight closes",
+        target: "plain",
+        importance: "optional",
+        group: "targets"
+    },
     warningExpiryDays: {
         kind: "number",
         description: "Days an activity warning counts toward the total. Conduct warnings do not expire",
@@ -391,6 +400,9 @@ export const DEFAULT_CONFIG: StaffBotConfig = {
     amberThresholdPercent: 75,
     softRingsEnabled: true,
     assessmentDryRun: false,
+    // Off: an Executive's rank outranks the requirement in practice, so their
+    // rows were only ever dismissed. Their figures are still assessed.
+    reviewExecutives: false,
     // Activity warnings only. Conduct warnings (Caution/Misconduct) never
     // expire and have no config key of their own to ship a default for.
     warningExpiryDays: 180,

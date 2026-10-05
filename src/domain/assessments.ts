@@ -18,6 +18,7 @@ import {
     type LeaveSpan
 } from "./leaveDays.js";
 import { listActiveStaff } from "./staff.js";
+import { excludedAsExecutive } from "./review.js";
 import { weekWindowFor, type WeekWindow } from "./weekly.js";
 import { audit } from "./audit.js";
 
@@ -207,7 +208,8 @@ export function rehearsalUpdate(rehearsal: boolean): {
 export async function saveAssessment(
     computation: AssessmentComputation,
     rehearsal = false,
-    leaveChangedAt: Date | null = null
+    leaveChangedAt: Date | null = null,
+    excludedAsExecutive = false
 ): Promise<FortnightAssessmentDoc> {
     const result = await collections.fortnightAssessments().findOneAndUpdate(
         { staffId: computation.staffId, fortnightIndex: computation.fortnightIndex },
@@ -235,6 +237,9 @@ export async function saveAssessment(
                 fortnightIndex: computation.fortnightIndex,
                 weeklyTargetMinutes: computation.weeklyTargetMinutes,
                 minimumLeaveDays: computation.minimumLeaveDays,
+                // Snapshotted like the rules: whoever holds the role later,
+                // this fortnight's queue was decided when it was first assessed.
+                excludedAsExecutive,
                 ...(leaveChangedAt ? {} : { leaveChangedAt: null }),
                 reviewedBy: null,
                 reviewOutcome: null,
@@ -266,11 +271,17 @@ export async function findAssessmentFor(
     return collections.fortnightAssessments().findOne({ staffId, fortnightIndex: index });
 }
 
-/** Assess every active staff member for the fortnight that just closed. */
+/**
+ * Assess every active staff member for the fortnight that just closed.
+ *
+ * `executives` is the Discord ids of whoever holds an Executive role now, and
+ * only matters to a row written for the first time: see `excludedAsExecutive`.
+ */
 export async function assessFortnight(
     index: number,
     config: StaffBotConfig,
-    rehearsal = false
+    rehearsal = false,
+    executives: ReadonlySet<string> = new Set()
 ): Promise<FortnightAssessmentDoc[]> {
     const staff = await listActiveStaff();
     const saved: FortnightAssessmentDoc[] = [];
@@ -284,7 +295,17 @@ export async function assessFortnight(
             config,
             existing ? rulesOf(existing) : rulesFrom(config)
         );
-        saved.push(await saveAssessment(computation, rehearsal));
+        saved.push(
+            await saveAssessment(
+                computation,
+                rehearsal,
+                null,
+                excludedAsExecutive({
+                    isExecutive: executives.has(member.discordId),
+                    reviewExecutives: config.reviewExecutives
+                })
+            )
+        );
     }
     await audit("assessment.run", {
         detail: { fortnightIndex: index, assessed: saved.length }
@@ -382,10 +403,14 @@ export async function assessmentsForFortnight(
         .toArray();
 }
 
+/**
+ * The fortnight's review queue: everyone below, less the Executives left out
+ * of it (`inReviewQueue` is the same rule without a database).
+ */
 export async function belowThresholdFor(index: number): Promise<FortnightAssessmentDoc[]> {
     return collections
         .fortnightAssessments()
-        .find({ fortnightIndex: index, status: "below" })
+        .find({ fortnightIndex: index, status: "below", excludedAsExecutive: { $ne: true } })
         .sort({ totalMinutes: 1 })
         .toArray();
 }

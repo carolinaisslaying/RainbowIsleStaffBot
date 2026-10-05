@@ -115,6 +115,14 @@ export interface FortnightAssessmentDoc {
      * that if approved. The row offers no Warn until the leave is decided.
      */
     heldForLeave: boolean;
+    /**
+     * They held an Executive role when the fortnight was first assessed and
+     * `reviewExecutives` was off, so their row is kept out of the review
+     * channel. Snapshotted on first write like the targets: a later promotion,
+     * demotion or config change does not move a past fortnight's queue.
+     * Absent reads as reviewed, which is what every earlier row was.
+     */
+    excludedAsExecutive?: boolean;
     /** When a leave change last reassessed this fortnight after it closed. */
     leaveChangedAt: Date | null;
     reviewedBy: ObjectId | null;

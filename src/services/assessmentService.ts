@@ -32,7 +32,8 @@ import {
     rememberHeader,
     unremindedReviews
 } from "../domain/reviewQueue.js";
-import { findStaffById } from "../domain/staff.js";
+import { findStaffById, listActiveStaff } from "../domain/staff.js";
+import { fetchPublicMember, tierOf } from "../domain/permissions.js";
 import { staffChannel } from "./leaveService.js";
 import { pingExecutives, pingKey, resolvePing, resolvePingsReplyingTo } from "./pings.js";
 import {
@@ -98,6 +99,25 @@ async function priorOutcomesFor(
 
 
 /**
+ * The Discord ids of active staff holding an Executive role in the public
+ * server right now, for `assessFortnight` to snapshot. Roles only: a seeded
+ * admin without the role is reviewed like anybody else. A member who cannot be
+ * fetched is left out, which reviews them.
+ */
+export async function currentExecutives(
+    client: Client,
+    config: StaffBotConfig
+): Promise<Set<string>> {
+    const executives = new Set<string>();
+    if (config.reviewExecutives) return executives;
+    for (const staff of await listActiveStaff()) {
+        const member = await fetchPublicMember(client, config, staff.discordId);
+        if (tierOf(member, config) === "executive") executives.add(staff.discordId);
+    }
+    return executives;
+}
+
+/**
  * Run the assessment for a closed fortnight and post the review card.
  *
  * What it is allowed to *say* is decided once, up front, by `announcementPlan`.
@@ -124,7 +144,12 @@ export async function runFortnightAssessment(
         return "silent";
     }
 
-    const assessments = await assessFortnight(index, config, dryRun);
+    const assessments = await assessFortnight(
+        index,
+        config,
+        dryRun,
+        await currentExecutives(client, config)
+    );
     const window = windowForIndex(index, config);
     const label = labelWindow(window.week1Start, window.end, config.accountingTimezone);
 

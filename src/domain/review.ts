@@ -25,6 +25,34 @@ export const OUTCOME_LABEL: Record<ReviewOutcome, string> = {
     dismissed: "Dismissed"
 };
 
+/**
+ * Whether somebody is left out of the review channel for being an Executive.
+ *
+ * Their rank outranks the requirement in practice, so every Executive row the
+ * queue ever drew was dismissed: a ping, a reminder and a modal a fortnight to
+ * reach a decision that was never in doubt. Decided once, when the fortnight
+ * is first assessed, and stored on the assessment. Not knowing someone's roles
+ * reads as not an Executive, so a failed lookup reviews them rather than
+ * waiving them.
+ */
+export function excludedAsExecutive(options: {
+    isExecutive: boolean;
+    reviewExecutives: boolean;
+}): boolean {
+    return options.isExecutive && !options.reviewExecutives;
+}
+
+/**
+ * Whether an assessment belongs in the fortnight review channel. The query in
+ * `belowThresholdFor` is the same rule; this is it without a database.
+ */
+export function inReviewQueue(assessment: {
+    status: string;
+    excludedAsExecutive?: boolean;
+}): boolean {
+    return assessment.status === "below" && assessment.excludedAsExecutive !== true;
+}
+
 export interface RowFacts {
     outcome: ReviewOutcome | null;
     /** No longer in the server, or the staff record is inactive. */
