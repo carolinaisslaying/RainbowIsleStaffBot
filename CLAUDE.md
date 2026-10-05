@@ -266,6 +266,13 @@ is a wall, not an escalation.
 (`render/cards.ts`) drops blank lines before any `#`/`##`/`###` line through `tightenHeadings`, so
 every card gets it whatever its strings end in. Subtext (`-#`) and plain paragraphs keep theirs.
 
+**Somebody's own words are quoted on every line.** Discord ends a blockquote at the first line
+without `> `, so a reason typed in paragraphs had its first line quoted and the rest read as the
+card's own words. Every reason and note goes through `quote()` (`render/cards.ts`), never a bare
+`> ${reason}`. A one-line `**Why:** ${reason}` had the same fault in another form, a second
+paragraph running on into the next sentence, so the label sits on its own line with the reason
+quoted beneath it.
+
 **Emoji come from the colour, not from the call site.** `render/emoji.ts` maps each `COLOUR` value
 to one mark and `noticeCard` prefixes the title with it, so the forty-odd cards that already declare
 their state by accent get the matching emoji for free and the two cannot drift. Two pairs of roles
@@ -346,6 +353,13 @@ the whole message — deciding one member took everybody else's buttons with the
 not be finished. `domain/review.ts` holds the rules as pure functions (`rowButtons`,
 `decisionPermitted`, `activeWarningCount`, `queueHeadline`, `reminderDue`), and `fortnightReviews`
 keyed by index remembers where the header is.
+
+**A review can be moved without being re-run.** `/admin assess repost: true` (`repostReviewQueue`)
+deletes the header and every row card and posts them again from the records, so a queue can sit
+below something posted after it. Nothing is recomputed and nobody is DMed or pinged: pings replying
+to the old cards are deleted with them (`resolvePingsReplyingTo`, matched on what each reply points
+at, because a row can carry a `warning:` ping as well as its `row:` one) and not reposted. Without
+`repost`, an announced fortnight refreshes its figures and leaves the channel alone.
 
 **A warning says whether it arrived.** `tryDm` returns a boolean and every caller now reads it: `WarningDoc.deliveredAt`/`deliveryFailedAt` record what happened and
 `deliveryState` (`domain/review.ts`) turns them into the row's line. "Not yet acknowledged" used to
