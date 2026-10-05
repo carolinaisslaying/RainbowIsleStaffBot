@@ -362,9 +362,10 @@ in `$setOnInsert`, so a promotion, demotion or config change never moves a past 
 `belowThresholdFor` drops those rows, which takes them out of the header, rows, bulk paths, pings,
 reminder and repost at once; `inReviewQueue` (`domain/review.ts`) is the same rule, used by leave
 reassessment. The header's spread chart leaves them off too, or it would show more people below
-the line than the header counts. Their own DM, when below, says they are not reviewed instead of
-sending them to the Executives. That is the whole reach: their figures, rings and stats are
-untouched. `reviewExecutives` (default off) puts them back for fortnights assessed afterwards.
+the line than the header counts, and the header says how many were left out
+(`executivesNotReviewedLine`), as a count and never a name. Their own DM, when below, says they are
+not reviewed instead of sending them to the Executives. That is the whole reach: their figures,
+rings and stats are untouched. `reviewExecutives` (default off) puts them back for fortnights assessed afterwards.
 
 **A review can be moved without being re-run.** `/admin assess repost: true` (`repostReviewQueue`)
 deletes the header and every row card and posts them again from the records, so a queue can sit

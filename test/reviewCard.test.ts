@@ -127,14 +127,15 @@ describe("what each state draws", () => {
 });
 
 describe("the header", () => {
-    const header = (remaining: number, rehearsal = false) =>
+    const header = (remaining: number, rehearsal = false, executivesNotReviewed?: number) =>
         JSON.stringify(
             reviewHeaderCard({
                 fortnightIndex: 4,
                 windowLabel: "12 Oct to 25 Oct",
                 headline: `2 members are below. ${remaining} still to decide.`,
                 remaining,
-                rehearsal
+                rehearsal,
+                executivesNotReviewed
             }).components[0]
         );
 
@@ -149,5 +150,12 @@ describe("the header", () => {
 
     it("says a rehearsal only messages Executives", () => {
         expect(header(2, true)).toContain("only Executives are messaged");
+    });
+
+    it("counts Executives left out of the queue, without naming them", () => {
+        expect(header(2, false, 1)).toContain("1 Executive below the requirement is not reviewed");
+        expect(header(2, false, 2)).toContain("2 Executives below the requirement are not reviewed");
+        expect(header(2, false, 0)).not.toContain("not reviewed");
+        expect(header(2)).not.toContain("not reviewed");
     });
 });

@@ -567,6 +567,20 @@ export interface ReviewHeaderInput {
     rehearsal: boolean;
     /** How the whole team did this fortnight. Omitted when nobody was assessed. */
     spread?: { png: Buffer; alt: string } | null;
+    /** Executives below the requirement and left out of the queue. Absent reads as none. */
+    executivesNotReviewed?: number;
+}
+
+/**
+ * The header's line for Executives left out of the queue, or null for none.
+ * A count and never a name: the queue is shorter than the shortfall, and the
+ * channel should say so without saying who.
+ */
+export function executivesNotReviewedLine(count: number): string | null {
+    if (count <= 0) return null;
+    return count === 1
+        ? "-# 1 Executive below the requirement is not reviewed."
+        : `-# ${count} Executives below the requirement are not reviewed.`;
 }
 
 /**
@@ -574,12 +588,14 @@ export interface ReviewHeaderInput {
  * top is the count that is actually left.
  */
 export function reviewHeaderCard(input: ReviewHeaderInput): RenderedMessage {
+    const executives = executivesNotReviewedLine(input.executivesNotReviewed ?? 0);
     const container = new ContainerBuilder()
         .setAccentColor(input.remaining > 0 ? COLOUR.pending : COLOUR.settled)
         .addTextDisplayComponents(
             text(
                 `## ${input.remaining > 0 ? "⏳" : "📁"} Fortnight review\n` +
                     `${input.windowLabel}\n${input.headline}\n` +
+                    (executives ? `${executives}\n` : "") +
                     (input.rehearsal
                         ? "-# **Rehearsal.** Every decision below is recorded against a " +
                           "throwaway record and only Executives are messaged. Turn off the " +

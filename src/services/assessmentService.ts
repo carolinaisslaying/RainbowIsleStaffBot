@@ -332,6 +332,9 @@ export async function refreshQueueHeader(
         headline: queueHeadline(counts),
         remaining: counts.remaining,
         rehearsal: options.rehearsal ?? false,
+        executivesNotReviewed: everyone.filter(
+            (entry) => entry.status === "below" && entry.excludedAsExecutive === true
+        ).length,
         spread:
             spreadEntries.length > 0
                 ? {
