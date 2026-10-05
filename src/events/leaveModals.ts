@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import type { StaffBotConfig } from "../config/guildConfig.js";
 import type { StaffDoc } from "../db/types.js";
 import { findLeave, pendingOrApprovedLeaveFor } from "../domain/leave.js";
-import { errorCard, leaveInterpretationCard, noticeCard } from "../render/cards.js";
+import { errorCard, quote, leaveInterpretationCard, noticeCard } from "../render/cards.js";
 import {
     FIELD_END,
     FIELD_REASON,
@@ -346,7 +346,7 @@ export async function handleLeaveWithdrawModal(
                 : `Your leave from ${ts(leave.startDate, "f")} to ${ts(leave.endDate, "f")} ` +
                   "won't start. Your staff roles were never removed, so nothing changes: " +
                   "your activity keeps counting as usual.") +
-                (reason ? `\n\n**What you told the Executives:** ${reason}` : "") +
+                (reason ? `\n\n**What you told the Executives**\n${quote(reason)}` : "") +
                 "\n\nYour leave card in the leave channel now says it was cancelled.",
             { colour: COLOUR.settled, ephemeral: true }
         )

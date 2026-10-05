@@ -37,7 +37,8 @@ import {
     errorCard,
     noticeCard,
     reviewBulkProgressCard,
-    warningDmCard
+    warningDmCard,
+    quote
 } from "../render/cards.js";
 import {
     FIELD_REASON,
@@ -458,7 +459,7 @@ async function applyDecision(
                             ? " and the warning it carried has been withdrawn. It stays on " +
                               "your record marked as withdrawn, and no longer counts against you."
                             : ".") +
-                        `\n\n**Why:** ${reason}\n\n` +
+                        `\n\n**Why**\n${quote(reason)}\n\n` +
                         "The fortnight is back with the Executives to decide again.",
                     { colour: COLOUR.settled }
                 )
@@ -542,7 +543,7 @@ async function applyDecision(
                           "Fortnight excused",
                           `Fortnight ${label}. Your activity was under your fortnight requirement, and ` +
                               `an Executive has excused it. Nothing goes on your record.\n\n` +
-                              `**Why:** ${reason}`,
+                              `**Why**\n${quote(reason)}`,
                           { colour: COLOUR.approved }
                       )
                   });
@@ -566,7 +567,7 @@ async function applyDecision(
         title: `${outcome[0].toUpperCase()}${outcome.slice(1)}`,
         body:
             `<@${subject?.discordId ?? "unknown"}>, fortnight ${label}.\n\n` +
-            `**Reason:** ${reason}\n\n` +
+            `**Reason**\n${quote(reason)}\n\n` +
             deliveryLine({ action, attempted, messaged, rehearsal }),
         colour: action === "warn" ? COLOUR.activityWarning : COLOUR.approved
     };
