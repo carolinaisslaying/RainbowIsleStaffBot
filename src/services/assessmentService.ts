@@ -309,8 +309,16 @@ export async function refreshQueueHeader(
     // this fortnight was assessed by. Somebody whose leave lowered theirs is
     // left off the chart rather than drawn against a line that is not theirs.
     const fullRequirement = fullRequirementOf(everyone, config);
+    // Executives left out of the queue are left off the chart too, or it
+    // shows more people below the line than the header counts.
     const spreadEntries = everyone
-        .filter((entry) => entry.status !== "exempt" && !entry.week1Exempt && !entry.week2Exempt)
+        .filter(
+            (entry) =>
+                entry.status !== "exempt" &&
+                !entry.week1Exempt &&
+                !entry.week2Exempt &&
+                entry.excludedAsExecutive !== true
+        )
         .map((entry) => ({
             minutes: entry.totalMinutes,
             below: entry.status === "below"

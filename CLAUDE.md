@@ -361,8 +361,9 @@ decision. `assessFortnight` is handed the Discord ids holding an Executive role 
 in `$setOnInsert`, so a promotion, demotion or config change never moves a past fortnight's queue.
 `belowThresholdFor` drops those rows, which takes them out of the header, rows, bulk paths, pings,
 reminder and repost at once; `inReviewQueue` (`domain/review.ts`) is the same rule, used by leave
-reassessment. That is the whole reach: their figures, DMs, rings, stats and the header's spread chart
-are untouched. `reviewExecutives` (default off) puts them back for fortnights assessed afterwards.
+reassessment. The header's spread chart leaves them off too, or it would show more people below
+the line than the header counts. That is the whole reach: their figures, DMs, rings and stats are
+untouched. `reviewExecutives` (default off) puts them back for fortnights assessed afterwards.
 
 **A review can be moved without being re-run.** `/admin assess repost: true` (`repostReviewQueue`)
 deletes the header and every row card and posts them again from the records, so a queue can sit
