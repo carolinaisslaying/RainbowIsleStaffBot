@@ -46,7 +46,7 @@ export const adminCommand: Command = {
         .addSubcommand((sub) =>
             sub
                 .setName("assess")
-                .setDescription("Re-run a fortnight assessment and repost the review card")
+                .setDescription("Re-run a fortnight assessment, or repost its review card as it stands")
                 .addIntegerOption((option) =>
                     option
                         .setName("fortnight")
