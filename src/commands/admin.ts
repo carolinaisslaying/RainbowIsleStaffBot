@@ -13,7 +13,11 @@ import {
     fortnightIndexForWeek,
     windowForIndex
 } from "../domain/assessments.js";
-import { runFortnightAssessment, fortnightSummary } from "../services/assessmentService.js";
+import {
+    runFortnightAssessment,
+    fortnightSummary,
+    repostReviewQueue
+} from "../services/assessmentService.js";
 import { audit } from "../domain/audit.js";
 import { resendLeaderboardLog } from "../services/leaderboardLogService.js";
 import { weekStartFor, nextWeekStart, closedWeekStart, DAY_MS } from "../time/calendar.js";
@@ -47,6 +51,14 @@ export const adminCommand: Command = {
                     option
                         .setName("fortnight")
                         .setDescription("Fortnight index. Defaults to the last closed one.")
+                        .setRequired(false)
+                )
+                .addBooleanOption((option) =>
+                    option
+                        .setName("repost")
+                        .setDescription(
+                            "Only delete the review card and post it again, as it stands. Nobody is DMed or pinged."
+                        )
                         .setRequired(false)
                 )
         )
@@ -139,6 +151,35 @@ export const adminCommand: Command = {
                 await respond(
                     interaction,
                     errorCard("That fortnight has not closed yet. Pass an index to force it.")
+                );
+                return;
+            }
+
+            if (interaction.options.getBoolean("repost") === true) {
+                const rows = await repostReviewQueue(client, config, index);
+                if (rows === null) {
+                    await respond(
+                        interaction,
+                        errorCard(`Fortnight ${index} has no review card to repost.`)
+                    );
+                    return;
+                }
+
+                await audit("admin.repost", {
+                    actorId: interaction.user.id,
+                    detail: { fortnightIndex: index, rows }
+                });
+
+                await respond(
+                    interaction,
+                    noticeCard(
+                        `Fortnight ${index} reposted`,
+                        `${labelWindow(window.week1Start, window.end, config.accountingTimezone)}\n` +
+                            `The review card and its ${rows} ${rows === 1 ? "row were" : "rows were"} ` +
+                            "deleted and posted again as they stand. Nothing was recomputed, and " +
+                            "nobody was DMed or pinged.",
+                        { ephemeral: true }
+                    )
                 );
                 return;
             }

@@ -34,7 +34,7 @@ import {
 } from "../domain/reviewQueue.js";
 import { findStaffById } from "../domain/staff.js";
 import { staffChannel } from "./leaveService.js";
-import { pingExecutives, pingKey, resolvePing } from "./pings.js";
+import { pingExecutives, pingKey, resolvePing, resolvePingsReplyingTo } from "./pings.js";
 import {
     reviewHeaderCard,
     reviewRowMessage,
@@ -784,4 +784,51 @@ export async function deleteReviewMessages(
     }
 
     return removed;
+}
+
+/**
+ * Delete a fortnight's review from the channel and post it again, as it stands.
+ *
+ * For moving a queue below something posted after it. Nothing is recomputed,
+ * nobody is DMed, and no ping is sent: the cards are redrawn from the records,
+ * so every decision, reason and acknowledgement comes back exactly as it was.
+ * Pings replying to the old cards are deleted with them rather than reposted.
+ *
+ * Returns null when the fortnight has never been posted, so there is nothing
+ * to move.
+ */
+export async function repostReviewQueue(
+    client: Client,
+    config: StaffBotConfig,
+    index: number
+): Promise<number | null> {
+    const review = await findReview(index);
+    if (!review) return null;
+
+    const rows = await belowThresholdFor(index);
+    const cards = new Map<string, Set<string>>();
+    const note = (channelId: string, messageId: string): void => {
+        const ids = cards.get(channelId) ?? new Set<string>();
+        ids.add(messageId);
+        cards.set(channelId, ids);
+    };
+    note(review.headerChannelId, review.headerMessageId);
+    for (const row of rows) {
+        if (row.reviewChannelId && row.reviewMessageId) note(row.reviewChannelId, row.reviewMessageId);
+    }
+    for (const [channelId, ids] of cards) {
+        await resolvePingsReplyingTo(client, channelId, ids);
+    }
+
+    // With no rows below, `deleteReviewMessages` has no fortnight to find the
+    // header through, so it is passed a stand-in carrying only the index.
+    await deleteReviewMessages(
+        client,
+        rows.length > 0 ? rows : [{ fortnightIndex: index } as FortnightAssessmentDoc]
+    );
+
+    // A fortnight that was only ever rehearsed is reposted as one.
+    const rehearsal = rows.length > 0 && rows.every((row) => row.rehearsal === true);
+    await postReviewQueue(client, config, index, { rehearsal });
+    return rows.length;
 }
