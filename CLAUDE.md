@@ -691,11 +691,14 @@ receipt pattern as the fortnight announcement and the recaps, for the same reaso
 (`drawPool`, `domain/staffOfWeek.ts`) is the closed week's top three who met `weeklyTargetMinutes`
 and may hold it, plus everybody tied with the third, so a tie at the cut never decides who is in;
 pending leave skips the draw entirely, because handing the role to somebody probably away is worse
-than a week with nobody drawn. The grant itself reads who currently wears the role with
-`membersWithRole` (`services/sotwRole.ts`) — a full public-guild member fetch — rather than trusting
-discord.js's own cache: the public guild holds around 110,000 members and is never fully cached, and
-a cached-only scan let a previous holder who had dropped out of it keep the role after a restart,
-so two members wore it at once. At boot, `handoffOnBoot` asks `bootHandoff` (`domain/staffOfWeek.ts`,
+than a week with nobody drawn. The grant finds who wears the role from the bot's own record (`possibleWearers`,
+`services/sotwRole.ts`): everybody on the role in the last six weeks (`recentRoleHolderIds`), each
+fetched by id, plus whoever discord.js already has cached with it. **Never a fetch of the whole
+public guild.** That is a gateway request Discord rate-limits per guild, and `reconcileOnBoot` spends
+it seconds earlier, so the handoff after a restart was refused and gave the role to nobody. A
+cached-only scan is not enough either: the guild holds around 110,000 members and is never fully
+cached, and a previous holder who had dropped out of the cache kept the role, so two members wore it
+at once. A failure taking the role off somebody else never stops the holder being given it. At boot, `handoffOnBoot` asks `bootHandoff` (`domain/staffOfWeek.ts`,
 pure and tested), and **nothing it answers ever draws once the week has begun**: that is what
 `handoffSettled`/`HANDOFF_GRACE_MS` exist to stop. It used to key on "no `staffOfWeek` document exists
 at all", which let a pick already staged for next week get drawn over by a mid-week restart. A cold

@@ -2,14 +2,18 @@ import { GuildFeature, type Client, type Guild, type Role } from "discord.js";
 import type { StaffBotConfig } from "../config/guildConfig.js";
 import type { SotwColour, StaffDoc } from "../db/types.js";
 import { roleColoursFor, type RoleColourWrite } from "../domain/sotwColour.js";
-import { addRole, fetchMember, membersWithRole, removeRole } from "../discord/roles.js";
+import type { GuildMember } from "discord.js";
+import { addRole, fetchMember, removeRole } from "../discord/roles.js";
+import { findStaffById } from "../domain/staff.js";
+import { recentRoleHolderIds } from "../domain/staffOfWeekStore.js";
 import { audit } from "../domain/audit.js";
 import { colouredRoleAbove, type RoleOrderFacts } from "../config/configGuards.js";
 import { log } from "../log.js";
 
 /**
  * The bot owns the Staff of the Week role: who wears it and what colour it is.
- * Anyone given it by hand loses it at the next handoff or boot, and a colour
+ * Anyone given it by hand loses it at the next handoff or boot once Discord
+ * has shown them to the bot, and a colour
  * edited in Discord's settings is put back, because the holder's saved
  * preference is the source of truth.
  */
@@ -71,14 +75,32 @@ export async function applyRoleColour(
 }
 
 /**
- * Give the role to `holder` alone, in their colour, or to nobody. Every member
- * wearing it who is not the holder loses it, however they came by it.
+ * Who might be wearing the role: everybody the bot recorded on it in recent
+ * weeks, fetched one by one, plus whoever discord.js already has cached with
+ * it (somebody given it by hand, once they have been seen).
  *
- * `membersWithRole` fetches the guild's members before filtering, rather than
- * reading `role.members` off discord.js's own cache: the public guild holds
- * around 110,000 members and is never fully cached, so after a restart the
- * previous holder was often missing from the cache and kept the role while
- * the new one was also given it.
+ * Never a fetch of the whole community server. That is a gateway request
+ * Discord rate-limits per guild, and boot's own reconciliation spends it
+ * seconds earlier, so the handoff after a restart was refused and gave the
+ * role to nobody. Reading `role.members` alone is not enough either: the
+ * guild is never fully cached, so after a restart the previous holder was
+ * often missing and kept the role. The bot's own record is what closes that.
+ */
+async function possibleWearers(client: Client, config: StaffBotConfig, role: Role): Promise<GuildMember[]> {
+    const wearers = new Map<string, GuildMember>(role.members.map((member) => [member.id, member]));
+    for (const staffId of await recentRoleHolderIds()) {
+        const staff = await findStaffById(staffId);
+        if (!staff || wearers.has(staff.discordId)) continue;
+        const member = await fetchMember(client, config.publicGuildId, staff.discordId);
+        if (member?.roles.cache.has(role.id)) wearers.set(member.id, member);
+    }
+    return [...wearers.values()];
+}
+
+/**
+ * Give the role to `holder` alone, in their colour, or to nobody. Every member
+ * the bot can find wearing it who is not the holder loses it. A failure taking
+ * it off somebody else never stops the holder being given it.
  */
 export async function handRoleTo(
     client: Client,
@@ -89,10 +111,13 @@ export async function handRoleTo(
     const found = await sotwRole(client, config);
     if (!found) return { granted: false, colour: { ok: false, downgraded: false, colours: null } };
 
-    const wearers = await membersWithRole(client, config, found.role.id);
-    for (const member of wearers) {
-        if (holder && member.id === holder.discordId) continue;
-        await removeRole(member, found.role.id, reason);
+    try {
+        for (const member of await possibleWearers(client, config, found.role)) {
+            if (holder && member.id === holder.discordId) continue;
+            await removeRole(member, found.role.id, reason);
+        }
+    } catch (error) {
+        log.warn("Could not check who else wears the Staff of the Week role", error);
     }
 
     const colour = await applyRoleColour(client, config, holder?.sotwColour ?? null, reason);

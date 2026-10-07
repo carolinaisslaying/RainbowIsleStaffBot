@@ -166,9 +166,9 @@ async function completeHandoff(
 
     const label = labelWindow(week.start, week.end, config.accountingTimezone);
     // The receipt is already claimed, so a throw here must not swallow the
-    // congratulation, the notice and `markHandedOff` that follow — a full
-    // guild member fetch (`membersWithRole`, inside `handRoleTo`) has no catch
-    // of its own, and a spent receipt means nothing would ever retry this week.
+    // congratulation, the notice and `markHandedOff` that follow — a Discord
+    // call inside `handRoleTo` can still throw, and a spent receipt means
+    // nothing would ever retry this week.
     let role: { granted: boolean; colour: ColourWrite };
     try {
         role = await handRoleTo(client, config, holder, `Staff of the Week for ${label}`);

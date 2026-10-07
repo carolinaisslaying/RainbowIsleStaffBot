@@ -66,6 +66,27 @@ export async function recentWeeks(before: Date, limit: number): Promise<StaffOfW
         .toArray();
 }
 
+/**
+ * Everybody the bot has recorded on the role in its most recent weeks —
+ * holders, picks and removed holders alike — so a handoff can take the role
+ * off whoever had it without fetching all of the community server's members.
+ */
+export async function recentRoleHolderIds(limit = 6): Promise<ObjectId[]> {
+    const docs = await collections
+        .staffOfWeek()
+        .find({}, { projection: { staffId: 1, holders: 1, removedHolders: 1 } })
+        .sort({ weekStart: -1 })
+        .limit(limit)
+        .toArray();
+    const seen = new Map<string, ObjectId>();
+    for (const doc of docs) {
+        for (const id of [doc.staffId, ...(doc.holders ?? []), ...(doc.removedHolders ?? [])]) {
+            if (id) seen.set(id.toHexString(), id);
+        }
+    }
+    return [...seen.values()];
+}
+
 export async function weeksHeldBy(staffId: ObjectId): Promise<StaffOfWeekDoc[]> {
     return collections.staffOfWeek().find({ holders: staffId }).sort({ weekStart: 1 }).toArray();
 }
