@@ -4,93 +4,309 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="dark">
 <title>Staff of the Week colour</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Ctext y=%27.9em%27 font-size=%2790%27%3E%F0%9F%8F%86%3C/text%3E%3C/svg%3E">
 <style>
+  /* Discord's own surfaces, sampled from the role editor. */
   :root {
-    --bg: #1e1f22; --panel: #2b2d31; --raised: #313338; --text: #f2f3f5; --muted: #b5bac1;
-    --line: #3f4147; --accent: #66d4cf; --focus: #00a8fc;
-  }
-  @media (prefers-color-scheme: light) {
-    :root { --bg: #f2f3f5; --panel: #ffffff; --raised: #ebedef; --text: #060607; --muted: #4e5058; --line: #d4d7dc; }
+    --bg: #1b1b1f;
+    --raised: #232328;
+    --well: #121214;
+    --input: #1a1a1e;
+    --line: #2e2f35;
+    --line-strong: #3b3c43;
+    --text: #fbfbfb;
+    --text-normal: #dfe0e2;
+    --muted: #9b9ca3;
+    --blurple: #5865f2;
+    --blurple-hover: #4752c4;
+    --green: #248046;
+    --green-hover: #1a6334;
+    --focus: #00a8fc;
+    --radius-s: 4px;
+    --radius-m: 8px;
+    --radius-l: 12px;
+    --font: "gg sans", "Noto Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 "gg sans", "Noto Sans", "Helvetica Neue", Arial, sans-serif; }
-  main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; display: grid; gap: 16px; }
-  h1 { font-size: 20px; margin: 0; }
-  p { margin: 0; color: var(--muted); }
-  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: grid; gap: 14px; }
-  .styles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-  .style { border: 2px solid var(--line); background: var(--raised); color: var(--text); border-radius: 10px; padding: 10px; font: inherit; cursor: pointer; display: grid; gap: 6px; justify-items: center; }
-  .style[aria-pressed="true"] { border-color: var(--accent); }
-  .style:disabled { opacity: .4; cursor: not-allowed; }
-  .chip { width: 40px; height: 24px; border-radius: 6px; }
-  .swatches { display: grid; grid-template-columns: repeat(10, 1fr); gap: 6px; }
-  .swatch { aspect-ratio: 1; border-radius: 6px; border: 1px solid rgba(0,0,0,.25); cursor: pointer; padding: 0; }
-  .picker { display: grid; grid-template-columns: 1fr 22px; gap: 10px; }
-  .sv { position: relative; height: 180px; border-radius: 8px; cursor: crosshair; touch-action: none;
-        background: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, transparent); }
-  .hue { writing-mode: vertical-lr; direction: rtl; width: 22px; height: 180px; accent-color: var(--accent); }
-  .knob { position: absolute; width: 14px; height: 14px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px #000; transform: translate(-50%, -50%); pointer-events: none; }
-  .stops { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .stop { border: 2px solid var(--line); border-radius: 8px; padding: 6px 10px; background: var(--raised); color: var(--text); font: inherit; cursor: pointer; display: flex; gap: 8px; align-items: center; }
-  .stop[aria-pressed="true"] { border-color: var(--accent); }
-  input[type=text] { font: 600 15px ui-monospace, SFMono-Regular, Menlo, monospace; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--raised); color: var(--text); width: 120px; }
-  button:focus-visible, input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-  .previews { display: grid; gap: 8px; }
-  .msg { display: flex; gap: 14px; padding: 12px 14px; border-radius: 8px; }
-  .msg.dark { background: #313338; color: #dbdee1; } .msg.light { background: #fff; color: #313338; border: 1px solid #e3e5e8; }
-  .avatar { width: 40px; height: 40px; border-radius: 50%; background: #5865f2; flex: none; object-fit: cover; }
-  .name { font-weight: 700; display: inline-flex; gap: 4px; align-items: center; }
-  .name-text { background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; }
-  .name-text.animated { color: transparent; animation: shimmer 3s linear infinite; }
-  .badge { width: 18px; height: 18px; font-size: 16px; line-height: 18px; }
+  [hidden] { display: none !important; }
+  html { background: var(--bg); }
+  body {
+    margin: 0; min-height: 100vh; background: var(--bg); color: var(--text-normal);
+    font: 16px/1.375 var(--font); -webkit-font-smoothing: antialiased;
+  }
+  button { font: inherit; color: inherit; }
+  button:focus-visible, input:focus-visible, [tabindex]:focus-visible {
+    outline: 2px solid var(--focus); outline-offset: 2px;
+  }
+
+  main { max-width: 660px; margin: 0 auto; padding: 40px 16px 136px; }
+
+  .intro { margin-bottom: 32px; }
+  h1 { margin: 0 0 8px; color: var(--text); font-size: 24px; line-height: 30px; font-weight: 700; }
+  .intro p { margin: 0; color: var(--muted); font-size: 15px; max-width: 60ch; }
+  .intro strong { color: var(--text-normal); font-weight: 600; }
+
+  section + section { margin-top: 32px; padding-top: 32px; border-top: 1px solid var(--line); }
+  h2 { margin: 0 0 4px; color: var(--text); font-size: 18px; line-height: 24px; font-weight: 600; }
+  .desc { margin: 0 0 16px; color: var(--muted); font-size: 15px; }
+  .hint { margin: 12px 0 0; color: var(--muted); font-size: 14px; }
+
+  /* Role style: three small previews, the way Discord offers them. */
+  .styles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+  .style {
+    padding: 0; border: 2px solid transparent; border-radius: var(--radius-m);
+    background: var(--well); cursor: pointer; overflow: hidden; text-align: left;
+    transition: border-color .12s ease;
+  }
+  .style:hover:not(:disabled) { border-color: var(--line-strong); }
+  .style[aria-checked="true"] { border-color: var(--blurple); }
+  .style:disabled { cursor: not-allowed; }
+  .style:disabled .style-sample { opacity: .35; }
+  .style-sample { display: flex; gap: 10px; align-items: center; padding: 14px 0 14px 12px; white-space: nowrap; overflow: hidden; }
+  .style-sample .avatar { width: 36px; height: 36px; font-size: 15px; }
+  .style-sample .lines { min-width: 0; line-height: 20px; }
+  .style-sample .name { font-size: 15px; }
+  .style-sample .says { color: var(--text-normal); font-size: 15px; }
+  .style-label {
+    display: block; padding: 6px 8px; background: #26262b; color: var(--muted);
+    font-size: 14px; font-weight: 500; text-align: center;
+  }
+  .style[aria-checked="true"] .style-label { background: #2f2f35; color: var(--text); }
+  .style:disabled .style-label::after { content: " · not on this server"; }
+
+  /* Role colour */
+  .colour-area { position: relative; }
+  .row { display: flex; gap: 16px; align-items: flex-start; }
+  .tile {
+    position: relative; flex: none; border: 0; padding: 0; cursor: pointer;
+    border-radius: var(--radius-s); box-shadow: inset 0 0 0 1px rgba(255,255,255,.08);
+  }
+  .tile-custom { width: 88px; height: 64px; }
+  .tile-custom .pencil { position: absolute; top: 5px; right: 5px; width: 14px; height: 14px; }
+  .tile-gradient { width: 196px; height: 64px; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; cursor: default; }
+  .tile .check { position: absolute; inset: 0; margin: auto; width: 26px; height: 26px; }
+
+  .dropper {
+    width: 40px; height: 40px; border-radius: 50%; border: 2px solid #fff; cursor: pointer;
+    display: grid; place-items: center; padding: 0; box-shadow: 0 1px 4px rgba(0,0,0,.3);
+    transition: transform .12s ease;
+  }
+  .dropper:hover { transform: scale(1.06); }
+  .dropper[aria-expanded="true"] { box-shadow: 0 0 0 3px rgba(255,255,255,.35); }
+  .dropper svg { width: 18px; height: 18px; }
+
+  .swatches { display: grid; grid-template-columns: repeat(10, 24px); gap: 12px 9px; }
+  .swatch {
+    width: 24px; height: 24px; border-radius: 50%; border: 0; padding: 0; cursor: pointer;
+    display: grid; place-items: center; transition: transform .1s ease;
+  }
+  .swatch:hover { transform: scale(1.12); }
+  .presets { display: grid; grid-template-columns: repeat(6, 50px); gap: 8px 10px; }
+  .pill {
+    width: 50px; height: 26px; border-radius: 13px; border: 0; padding: 0; cursor: pointer;
+    display: grid; place-items: center; transition: transform .1s ease;
+  }
+  .pill:hover { transform: scale(1.06); }
+  .swatch svg, .pill svg { width: 16px; height: 16px; visibility: hidden; }
+  .swatch[aria-checked="true"] svg, .pill[aria-checked="true"] svg { visibility: visible; }
+
+  .holo-tile {
+    display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: var(--radius-m);
+    background: var(--raised); color: var(--muted); font-size: 15px;
+  }
+  .holo-tile .chip { flex: none; width: 88px; height: 40px; border-radius: var(--radius-s); }
+
+  /* The picker: a square, a hue bar and a hex box, as Discord draws it. */
+  .popover {
+    position: absolute; z-index: 10; width: 280px; padding: 16px; border-radius: var(--radius-m);
+    background: #212126; border: 1px solid var(--line-strong);
+    box-shadow: 0 8px 24px rgba(0,0,0,.45);
+  }
+  .sv {
+    position: relative; height: 170px; border-radius: var(--radius-s); cursor: crosshair; touch-action: none;
+    background: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, transparent);
+  }
+  .knob {
+    position: absolute; width: 12px; height: 12px; border-radius: 50%; border: 2px solid #fff;
+    box-shadow: 0 0 0 1px rgba(0,0,0,.5); transform: translate(-50%, -50%); pointer-events: none;
+  }
+  .hue {
+    -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 22px; margin: 14px 0 0;
+    background: transparent; cursor: pointer;
+  }
+  .hue::-webkit-slider-runnable-track {
+    height: 8px; border-radius: 4px;
+    background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+  }
+  .hue::-moz-range-track {
+    height: 8px; border-radius: 4px;
+    background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+  }
+  .hue::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 10px; height: 20px; margin-top: -6px; border-radius: 3px;
+    background: #fff; border: 0; box-shadow: 0 0 0 1px rgba(0,0,0,.35), 0 1px 3px rgba(0,0,0,.4);
+  }
+  .hue::-moz-range-thumb {
+    width: 10px; height: 20px; border-radius: 3px; background: #fff; border: 0;
+    box-shadow: 0 0 0 1px rgba(0,0,0,.35), 0 1px 3px rgba(0,0,0,.4);
+  }
+  .hex {
+    display: flex; align-items: center; gap: 4px; margin-top: 14px; padding: 0 12px; height: 40px;
+    border-radius: var(--radius-m); background: var(--input); border: 1px solid var(--line);
+    color: var(--muted);
+  }
+  .hex:focus-within { border-color: var(--blurple); }
+  .hex input {
+    flex: 1; min-width: 0; border: 0; background: transparent; color: var(--text); font: 16px var(--font);
+    outline: none; text-transform: lowercase;
+  }
+
+  /* Preview: one message per Discord theme. */
+  .previews { border-radius: var(--radius-m); overflow: hidden; border: 1px solid var(--line); }
+  .msg { display: flex; gap: 16px; padding: 14px 16px; }
+  .msg.ash { background: #2c2d32; --stamp: #949ba4; color: #dbdee1; }
+  .msg.dark { background: #1a1a1e; --stamp: #949ba4; color: #dbdee1; }
+  .msg.onyx { background: #000; --stamp: #8c8d94; color: #d4d5d9; }
+  .light-block { background: #fbfbfb; }
+  .msg.light { --stamp: #5c5e66; color: #313338; }
+  .light-note { margin: 0; padding: 0 16px 12px; color: #5c5e66; font-size: 13px; }
+  .avatar {
+    flex: none; width: 40px; height: 40px; border-radius: 50%; object-fit: cover;
+    background: var(--blurple); color: #fff; display: grid; place-items: center;
+    font-weight: 600; font-size: 17px; overflow: hidden;
+  }
+  .lines { min-width: 0; }
+  .head { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .name { font-weight: 500; font-size: 16px; line-height: 22px; }
+  .name.fancy { color: transparent; -webkit-background-clip: text; background-clip: text; background-size: 100% 100%; }
+  .name.holo { background-size: 200% 100%; animation: shimmer 4s linear infinite; }
+  .light .name.fancy, .light-block .name.fancy { filter: brightness(.78) saturate(1.15); }
+  .badge { display: inline-grid; place-items: center; width: 20px; height: 20px; font-size: 17px; line-height: 1; }
+  .badge img { width: 20px; height: 20px; }
+  .stamp { margin-left: 4px; color: var(--stamp); font-size: 12px; line-height: 22px; }
+  .says { font-size: 16px; line-height: 22px; }
   @keyframes shimmer { from { background-position: 0% 0; } to { background-position: 200% 0; } }
-  @media (prefers-reduced-motion: reduce) { .name-text.animated { animation: none; } }
-  .code { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .code output { font: 700 16px ui-monospace, SFMono-Regular, Menlo, monospace; padding: 8px 12px; background: var(--raised); border-radius: 8px; }
-  .primary { background: var(--accent); color: #062b29; border: 0; border-radius: 8px; padding: 9px 16px; font: 700 15px inherit; cursor: pointer; }
-  .hint { font-size: 13px; }
+
+  /* Docked like Discord's "unsaved changes" bar, because that is the moment
+     the person is ready to take the result away. */
+  .dock {
+    position: fixed; left: 0; right: 0; bottom: 16px; padding: 0 16px; pointer-events: none;
+  }
+  .dock-bar {
+    max-width: 628px; margin: 0 auto; pointer-events: auto;
+    display: flex; align-items: center; gap: 12px; padding: 10px 10px 10px 16px;
+    border-radius: var(--radius-m); background: #232629; box-shadow: 0 6px 20px rgba(0,0,0,.45);
+  }
+  .dock-text { flex: 1; min-width: 0; }
+  .dock-label { display: block; color: var(--muted); font-size: 13px; line-height: 16px; }
+  .dock-code {
+    display: block; color: var(--text); font: 600 16px/22px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; user-select: all;
+  }
+  .copy {
+    flex: none; height: 38px; padding: 0 18px; border: 0; border-radius: var(--radius-m);
+    background: var(--green); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer;
+    transition: background-color .12s ease;
+  }
+  .copy:hover { background: var(--green-hover); }
+  .copy.done { background: var(--blurple); }
+
+  .footnote { margin: 24px 0 0; color: var(--muted); font-size: 13px; }
+
+  @media (max-width: 600px) {
+    main { padding-top: 28px; }
+    .styles { gap: 8px; }
+    .style-sample { padding: 10px 0 10px 8px; gap: 8px; }
+    .style-sample .avatar { width: 28px; height: 28px; font-size: 13px; }
+    .style-sample .name, .style-sample .says { font-size: 13px; }
+    .style-label { font-size: 13px; }
+    .style:disabled .style-label::after { content: ""; }
+    .row { flex-direction: column; }
+    .tile-custom { width: 100%; height: 48px; }
+    .tile-gradient { width: 100%; }
+    .swatches { grid-template-columns: repeat(10, minmax(0, 1fr)); width: 100%; gap: 10px 6px; }
+    .swatch { width: 100%; height: auto; aspect-ratio: 1; }
+    .presets { grid-template-columns: repeat(6, minmax(0, 1fr)); width: 100%; }
+    .pill { width: 100%; }
+    .popover { width: auto; left: 0 !important; right: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .name.holo { animation: none; }
+    * { transition: none !important; }
+  }
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-check" viewBox="0 0 24 24"><path fill="#fff" d="M21.7 5.3a1 1 0 0 1 0 1.4l-12 12a1 1 0 0 1-1.4 0l-6-6a1 1 0 1 1 1.4-1.4L9 16.58l11.3-11.3a1 1 0 0 1 1.4 0Z"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24"><path fill="#fff" d="m13.96 5.46 4.58 4.58a1 1 0 0 0 1.42 0l1.38-1.38a2 2 0 0 0 0-2.82l-3.18-3.18a2 2 0 0 0-2.82 0l-1.38 1.38a1 1 0 0 0 0 1.42ZM2.11 20.16l.73-4.22a3 3 0 0 1 .83-1.61l7.87-7.87a1 1 0 0 1 1.42 0l4.58 4.58a1 1 0 0 1 0 1.42l-7.87 7.87a3 3 0 0 1-1.6.83l-4.23.73a1.5 1.5 0 0 1-1.73-1.73Z"/></symbol>
+  <symbol id="i-dropper" viewBox="0 0 24 24"><path fill="#fff" d="M21.04 2.96a3.3 3.3 0 0 0-4.66 0l-2.6 2.6-.7-.7a1 1 0 0 0-1.42 1.42l.71.7-7.5 7.5a3 3 0 0 0-.84 1.7l-.3 2.06-.94.94a1.5 1.5 0 0 0 2.12 2.12l.94-.94 2.06-.3a3 3 0 0 0 1.7-.84l7.5-7.5.7.71a1 1 0 0 0 1.42-1.42l-.7-.7 2.6-2.6a3.3 3.3 0 0 0 0-4.66ZM8.25 18.3a1 1 0 0 1-.57.28l-1.6.23.23-1.6a1 1 0 0 1 .28-.57l7.5-7.5 1.66 1.66-7.5 7.5Z"/></symbol>
+</svg>
+
 <main>
-  <h1>Your Staff of the Week colour</h1>
-  <p>Choose a colour, copy the code, and paste it into <strong>/settings sotw-colour</strong> with <strong>Enter code</strong>. Nothing leaves this page: your name and picture come from the link you opened.</p>
+  <header class="intro">
+    <h1>Your Staff of the Week colour</h1>
+    <p>Choose how your name looks while you are Staff of the Week, then copy the code and paste it into <strong>Enter code</strong> in <strong>/settings sotw-colour</strong>.</p>
+  </header>
 
-  <section class="panel" aria-label="Style">
-    <div class="styles" role="group" aria-label="Colour style">
-      <button class="style" data-style="solid" aria-pressed="true"><span class="chip" id="chip-solid"></span>Solid</button>
-      <button class="style" data-style="gradient" aria-pressed="false"><span class="chip" id="chip-gradient"></span>Gradient</button>
-      <button class="style" data-style="holographic" aria-pressed="false"><span class="chip" id="chip-holo"></span>Holographic</button>
-    </div>
-    <p class="hint" id="enhanced-note" hidden>Gradient and holographic are not available on this server yet.</p>
+  <section aria-labelledby="style-heading">
+    <h2 id="style-heading">Role style</h2>
+    <div class="styles" role="radiogroup" aria-labelledby="style-heading" id="styles"></div>
+    <p class="hint" id="enhanced-note" hidden>This server cannot show gradient or holographic roles yet, so only solid colours are available.</p>
   </section>
 
-  <section class="panel" aria-label="Colour" id="colour-panel">
-    <div class="stops" id="stops" hidden>
-      <button class="stop" data-stop="0" aria-pressed="true"><span class="chip" id="stop-0" style="width:20px;height:20px"></span>First</button>
-      <button class="stop" data-stop="1" aria-pressed="false"><span class="chip" id="stop-1" style="width:20px;height:20px"></span>Second</button>
-      <button class="stop" id="swap" aria-label="Swap the two colours">⇄ Swap</button>
+  <section aria-labelledby="colour-heading">
+    <h2 id="colour-heading">Role colour</h2>
+    <p class="desc">Your name shows the colour of the highest role you have, so this applies while Staff of the Week is your top coloured role.</p>
+    <div class="colour-area" id="colour-area">
+      <div class="row" id="solid-row">
+        <button class="tile tile-custom" id="custom" aria-haspopup="dialog" aria-expanded="false" aria-label="Custom colour">
+          <svg class="pencil" aria-hidden="true"><use href="#i-pencil"/></svg>
+          <svg class="check" aria-hidden="true"><use href="#i-check"/></svg>
+        </button>
+        <div class="swatches" id="swatches" role="radiogroup" aria-label="Discord colours"></div>
+      </div>
+      <div class="row" id="gradient-row" hidden>
+        <div class="tile tile-gradient" id="gradient-tile">
+          <button class="dropper" id="drop-0" aria-haspopup="dialog" aria-expanded="false" aria-label="Edit the first colour"><svg aria-hidden="true"><use href="#i-dropper"/></svg></button>
+          <button class="dropper" id="drop-1" aria-haspopup="dialog" aria-expanded="false" aria-label="Edit the second colour"><svg aria-hidden="true"><use href="#i-dropper"/></svg></button>
+        </div>
+        <div class="presets" id="presets" role="radiogroup" aria-label="Discord gradients"></div>
+      </div>
+      <div class="holo-tile" id="holo-row" hidden>
+        <span class="chip" id="holo-chip"></span>
+        <span>Holographic uses Discord's own colours, so there is nothing else to choose.</span>
+      </div>
+
+      <div class="popover" id="popover" role="dialog" aria-label="Colour picker" hidden>
+        <div class="sv" id="sv" role="slider" tabindex="0" aria-label="Saturation and brightness" aria-valuetext=""><div class="knob" id="knob"></div></div>
+        <input class="hue" id="hue" type="range" min="0" max="359" value="330" aria-label="Hue">
+        <label class="hex"><span aria-hidden="true">#</span><input type="text" id="hex" maxlength="7" spellcheck="false" autocomplete="off" aria-label="Hex colour"></label>
+      </div>
     </div>
-    <div class="swatches" id="swatches" role="group" aria-label="Preset colours"></div>
-    <div class="picker">
-      <div class="sv" id="sv" role="slider" aria-label="Saturation and brightness" tabindex="0"><div class="knob" id="knob"></div></div>
-      <input class="hue" id="hue" type="range" min="0" max="360" value="330" aria-label="Hue">
-    </div>
-    <label>Hex <input type="text" id="hex" maxlength="7" spellcheck="false" autocomplete="off"></label>
   </section>
 
-  <section class="panel" aria-label="Preview">
-    <div class="previews">
-      <div class="msg dark"><img class="avatar" id="avatar-dark" alt=""><div><div class="name"><span class="name-text" id="name-dark">Your name</span><span class="badge" id="badge-dark"></span></div><div>Staff of the Week, reporting for duty.</div></div></div>
-      <div class="msg light"><img class="avatar" id="avatar-light" alt=""><div><div class="name"><span class="name-text" id="name-light">Your name</span><span class="badge" id="badge-light"></span></div><div>Staff of the Week, reporting for duty.</div></div></div>
-    </div>
+  <section aria-labelledby="preview-heading">
+    <h2 id="preview-heading">Preview</h2>
+    <p class="desc">How your name looks in each of Discord's themes.</p>
+    <div class="previews" id="previews"></div>
   </section>
 
-  <section class="panel" aria-label="Your code">
-    <div class="code"><output id="code"></output><button class="primary" id="copy">Copy</button><span class="hint" id="copied" role="status"></span></div>
-  </section>
+  <p class="footnote">Nothing you choose leaves this page. Your name and picture come from the link you opened.</p>
 </main>
+
+<div class="dock">
+  <div class="dock-bar">
+    <div class="dock-text">
+      <span class="dock-label" id="dock-label">Your code</span>
+      <output class="dock-code" id="code"></output>
+    </div>
+    <button class="copy" id="copy">Copy code</button>
+  </div>
+  <span id="copied" role="status" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)"></span>
+</div>
 
 <script id="sotw-core">
 var SotwCore = (function () {
@@ -139,18 +355,44 @@ var SotwCore = (function () {
 <script>
 (function () {
   var core = SotwCore;
-  var PRESETS = ["#1ABC9C","#2ECC71","#3498DB","#9B59B6","#E91E63","#F1C40F","#E67E22","#E74C3C","#95A5A6","#607D8B",
-                 "#11806A","#1F8B4C","#206694","#71368A","#AD1457","#C27C0E","#A84300","#992D22","#979C9F","#546E7A"];
+
+  // Discord's own presets, in Discord's order.
+  var SOLIDS = [0x1abc9c, 0x2ecc71, 0x3498db, 0x9b59b6, 0xe91e63, 0xf1c40f, 0xe67e22, 0xe74c3c, 0x95a5a6, 0x607d8b,
+                0x11806a, 0x1f8b4c, 0x206694, 0x71368a, 0xad1457, 0xc27c0e, 0xa84300, 0x992d22, 0x979c9f, 0x546e7a];
+  var GRADIENTS = [
+    ["Fire", 0xaa3b3b, 0xff4848], ["Gold dust", 0xd4843d, 0xffde90], ["Emerald", 0x369876, 0x71ff9e],
+    ["Diamond", 0x4cadd0, 0xb2f9ff], ["Blurple", 0x9e6bff, 0x9fc1ff], ["Cupid", 0xff5dd6, 0xff9cbf],
+    ["Rose gold", 0x907575, 0xffcec6], ["Desert", 0x9b8666, 0xffe1b4], ["Moss", 0x749472, 0xb3e1b9],
+    ["Platinum", 0x8799ae, 0xf1f7ff], ["Plum", 0x826bc2, 0xb7a7f1], ["Rose", 0x965f7f, 0xffaadc]
+  ];
+  var THEMES = [["ash", "Ash"], ["dark", "Dark"], ["onyx", "Onyx"], ["light", "Light"]];
   var CDN = "https://cdn.discordapp.com/";
+  var H = core.HOLOGRAPHIC;
+
   var info = core.readFragment(location.hash) || { nickname: "", enhanced: true, colour: null };
-  var state = { style: "solid", stops: [0xff66aa, 0x3366ff], active: 0 };
+  // Each style keeps its own choice, so trying another style and coming back
+  // loses nothing.
+  var state = { style: "solid", solid: 0xe91e63, gradient: [0x9e6bff, 0x9fc1ff], editing: null };
   if (info.colour) {
     state.style = info.colour.style;
-    if (info.colour.style === "solid") state.stops[0] = info.colour.primary;
-    if (info.colour.style === "gradient") state.stops = [info.colour.primary, info.colour.secondary];
+    if (info.colour.style === "solid") state.solid = info.colour.primary;
+    if (info.colour.style === "gradient") state.gradient = [info.colour.primary, info.colour.secondary];
   }
+  if (info.enhanced === false) state.style = "solid";
+
   var $ = function (id) { return document.getElementById(id); };
   var css = function (n) { return "#" + n.toString(16).padStart(6, "0"); };
+  var el = function (tag, cls, text) {
+    var node = document.createElement(tag);
+    if (cls) node.className = cls;
+    if (text) node.textContent = text;
+    return node;
+  };
+  var svgUse = function (id) {
+    var ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg"), use = document.createElementNS(ns, "use");
+    svg.setAttribute("aria-hidden", "true"); use.setAttribute("href", "#" + id); svg.appendChild(use);
+    return svg;
+  };
 
   function hsvToInt(h, s, v) {
     var f = function (n) { var k = (n + h / 60) % 6; return v - v * s * Math.max(0, Math.min(k, 4 - k, 1)); };
@@ -162,113 +404,277 @@ var SotwCore = (function () {
     if (d) h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
     return { h: (h * 60 + 360) % 360, s: max ? d / max : 0, v: max };
   }
+  // A light colour gets a dark check, as Discord does on its pale presets.
+  function isLight(n) { return ((n >> 16 & 255) * 299 + (n >> 8 & 255) * 587 + (n & 255) * 114) / 1000 > 186; }
 
   function colour() {
-    if (state.style === "solid") return { style: "solid", primary: state.stops[0] };
-    if (state.style === "gradient") return { style: "gradient", primary: state.stops[0], secondary: state.stops[1] };
+    if (state.style === "solid") return { style: "solid", primary: state.solid };
+    if (state.style === "gradient") return { style: "gradient", primary: state.gradient[0], secondary: state.gradient[1] };
     return { style: "holographic" };
   }
-  function fillFor(c) {
-    if (c.style === "solid") return { color: css(c.primary), image: "none", animated: false };
-    var stops = c.style === "gradient" ? [c.primary, c.secondary, c.primary] : [core.HOLOGRAPHIC.primary, core.HOLOGRAPHIC.secondary, core.HOLOGRAPHIC.tertiary, core.HOLOGRAPHIC.primary];
-    return { color: "transparent", image: "linear-gradient(90deg," + stops.map(css).join(",") + ")", animated: true };
+
+  // How a name is painted for a given style, using that style's current choice.
+  function paint(node, style) {
+    node.classList.remove("fancy", "holo");
+    if (style === "solid") {
+      node.style.color = css(state.solid); node.style.backgroundImage = "none";
+      return;
+    }
+    var stops = style === "gradient" ? state.gradient : [H.primary, H.secondary, H.tertiary, H.primary];
+    node.classList.add("fancy");
+    if (style === "holographic") node.classList.add("holo");
+    node.style.color = "";
+    node.style.backgroundImage = "linear-gradient(90deg," + stops.map(css).join(",") + ")";
+  }
+
+  // Identity from the fragment. Every image is Discord's own CDN.
+  var name = info.nickname || "Your name";
+  var avatarUrl = info.avatarHash && info.userId
+    ? (info.guildAvatar
+        ? CDN + "guilds/" + info.guildId + "/users/" + info.userId + "/avatars/" + info.avatarHash + ".png?size=80"
+        : CDN + "avatars/" + info.userId + "/" + info.avatarHash + ".png?size=80")
+    : null;
+  var stamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  function avatar() {
+    if (avatarUrl) {
+      var img = el("img", "avatar"); img.src = avatarUrl; img.alt = "";
+      return img;
+    }
+    var initial = el("span", "avatar", Array.from(name.trim())[0] || "?");
+    initial.setAttribute("aria-hidden", "true");
+    return initial;
+  }
+  function badge() {
+    var span = el("span", "badge");
+    if (info.roleId && info.iconHash) {
+      var img = el("img"); img.src = CDN + "role-icons/" + info.roleId + "/" + info.iconHash + ".png?size=40"; img.alt = "";
+      span.appendChild(img);
+    } else if (info.emoji) {
+      span.textContent = info.emoji;
+    } else {
+      return null;
+    }
+    return span;
+  }
+
+  // Role style cards.
+  var styleNames = [];
+  [["solid", "Solid"], ["gradient", "Gradient"], ["holographic", "Holographic"]].forEach(function (pair) {
+    var b = el("button", "style");
+    b.setAttribute("role", "radio"); b.dataset.style = pair[0];
+    var sample = el("span", "style-sample"); sample.setAttribute("aria-hidden", "true");
+    sample.appendChild(avatar());
+    var lines = el("span", "lines"), nm = el("span", "name", name);
+    lines.appendChild(nm); lines.appendChild(el("br")); lines.appendChild(el("span", "says", "Staff of the Week"));
+    sample.appendChild(lines);
+    b.appendChild(sample); b.appendChild(el("span", "style-label", pair[1]));
+    b.setAttribute("aria-label", pair[1]);
+    if (info.enhanced === false && pair[0] !== "solid") b.disabled = true;
+    b.addEventListener("click", function () { state.style = pair[0]; closePicker(); render(); });
+    $("styles").appendChild(b);
+    styleNames.push({ node: nm, style: pair[0] });
+  });
+  if (info.enhanced === false) $("enhanced-note").hidden = false;
+
+  // Solid presets.
+  SOLIDS.forEach(function (value) {
+    var b = el("button", "swatch");
+    b.style.background = css(value);
+    b.setAttribute("role", "radio"); b.setAttribute("aria-label", css(value));
+    b.dataset.value = String(value);
+    var check = svgUse("i-check");
+    if (isLight(value)) check.style.filter = "invert(1)";
+    b.appendChild(check);
+    b.addEventListener("click", function () { state.solid = value; closePicker(); render(); });
+    $("swatches").appendChild(b);
+  });
+
+  // Gradient presets: drawn top to bottom, as Discord draws its swatches.
+  GRADIENTS.forEach(function (g) {
+    var b = el("button", "pill");
+    b.style.background = "linear-gradient(" + css(g[1]) + "," + css(g[2]) + ")";
+    b.setAttribute("role", "radio"); b.setAttribute("aria-label", g[0]);
+    b.dataset.a = String(g[1]); b.dataset.b = String(g[2]);
+    b.appendChild(svgUse("i-check"));
+    b.addEventListener("click", function () { state.gradient = [g[1], g[2]]; closePicker(); render(); });
+    $("presets").appendChild(b);
+  });
+
+  $("holo-chip").style.background = "linear-gradient(90deg," + [H.primary, H.secondary, H.tertiary].map(css).join(",") + ")";
+
+  // Preview rows, one per theme.
+  var previewNames = [];
+  function message(theme, label) {
+    var row = el("div", "msg " + theme);
+    row.setAttribute("aria-label", label + " theme");
+    row.appendChild(avatar());
+    var lines = el("div", "lines"), head = el("div", "head"), nm = el("span", "name", name);
+    head.appendChild(nm);
+    var b = badge(); if (b) head.appendChild(b);
+    head.appendChild(el("span", "stamp", stamp));
+    lines.appendChild(head);
+    lines.appendChild(el("div", "says", "Staff of the Week, reporting for duty."));
+    row.appendChild(lines);
+    previewNames.push(nm);
+    return row;
+  }
+  THEMES.forEach(function (t) {
+    if (t[0] !== "light") { $("previews").appendChild(message(t[0], t[1])); return; }
+    var block = el("div", "light-block");
+    block.appendChild(message("light", t[1]));
+    var note = el("p", "light-note", "In light mode, Discord darkens gradient names so they stay readable.");
+    note.id = "light-note";
+    block.appendChild(note);
+    $("previews").appendChild(block);
+  });
+
+  // The picker, shared by the custom tile and both droppers.
+  var hue = 0;
+  function editingValue() { return state.editing === "solid" ? state.solid : state.gradient[state.editing]; }
+  function setEditing(n) {
+    if (state.editing === "solid") state.solid = n; else state.gradient[state.editing] = n;
+    render();
+  }
+  function anchorFor(which) { return which === "solid" ? $("custom") : $("drop-" + which); }
+
+  function openPicker(which) {
+    if (state.editing === which) { closePicker(); return; }
+    closePicker();
+    state.editing = which;
+    hue = intToHsv(editingValue()).h;
+    var anchor = anchorFor(which), area = $("colour-area"), pop = $("popover");
+    anchor.setAttribute("aria-expanded", "true");
+    pop.hidden = false;
+    var a = anchor.getBoundingClientRect(), box = area.getBoundingClientRect();
+    pop.style.top = (a.bottom - box.top + 8) + "px";
+    pop.style.left = Math.max(0, Math.min(a.left - box.left, box.width - pop.offsetWidth)) + "px";
+    render();
+    $("sv").focus();
+  }
+  function closePicker(restoreFocus) {
+    if (state.editing === null) return;
+    var anchor = anchorFor(state.editing);
+    anchor.setAttribute("aria-expanded", "false");
+    state.editing = null;
+    $("popover").hidden = true;
+    if (restoreFocus) anchor.focus();
   }
 
   function render() {
     var c = colour();
-    document.querySelectorAll(".style").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.style === state.style)); });
-    $("colour-panel").hidden = state.style === "holographic";
-    $("stops").hidden = state.style !== "gradient";
-    document.querySelectorAll(".stop[data-stop]").forEach(function (b) { b.setAttribute("aria-pressed", String(Number(b.dataset.stop) === state.active)); });
-    $("stop-0").style.background = css(state.stops[0]);
-    $("stop-1").style.background = css(state.stops[1]);
-    var current = state.stops[state.active];
-    var hsv = intToHsv(current);
-    $("sv").style.backgroundColor = css(hsvToInt(hsv.h, 1, 1));
-    $("knob").style.left = (hsv.s * 100) + "%";
-    $("knob").style.top = ((1 - hsv.v) * 100) + "%";
-    if (document.activeElement !== $("hue")) $("hue").value = String(Math.round(hsv.h));
-    if (document.activeElement !== $("hex")) $("hex").value = css(current).toUpperCase();
-    ["dark", "light"].forEach(function (theme) {
-      var el = $("name-" + theme), fill = fillFor(c);
-      el.style.color = fill.color; el.style.backgroundImage = fill.image;
-      el.classList.toggle("animated", fill.animated);
+
+    document.querySelectorAll(".style").forEach(function (b) {
+      b.setAttribute("aria-checked", String(b.dataset.style === state.style));
     });
+    styleNames.forEach(function (entry) { paint(entry.node, entry.style); });
+
+    $("solid-row").hidden = state.style !== "solid";
+    $("gradient-row").hidden = state.style !== "gradient";
+    $("holo-row").hidden = state.style !== "holographic";
+
+    var isPreset = SOLIDS.indexOf(state.solid) !== -1;
+    $("custom").style.background = isPreset ? "#2b2c31" : css(state.solid);
+    $("custom").querySelector(".check").style.visibility = isPreset ? "hidden" : "visible";
+    $("custom").querySelector(".check").style.filter = isLight(state.solid) ? "invert(1)" : "";
+    document.querySelectorAll(".swatch").forEach(function (b) {
+      b.setAttribute("aria-checked", String(Number(b.dataset.value) === state.solid));
+    });
+
+    var g = state.gradient;
+    $("gradient-tile").style.background = "linear-gradient(90deg," + css(g[0]) + "," + css(g[1]) + ")";
+    $("drop-0").style.background = css(g[0]);
+    $("drop-1").style.background = css(g[1]);
+    document.querySelectorAll(".pill").forEach(function (b) {
+      b.setAttribute("aria-checked", String(Number(b.dataset.a) === g[0] && Number(b.dataset.b) === g[1]));
+    });
+
+    previewNames.forEach(function (node) { paint(node, state.style); });
+    $("light-note").hidden = state.style === "solid";
+
+    if (state.editing !== null) {
+      var current = editingValue(), hsv = intToHsv(current);
+      if (hsv.s > 0 && hsv.v > 0) hue = hsv.h;
+      $("sv").style.backgroundColor = css(hsvToInt(hue, 1, 1));
+      $("knob").style.left = (hsv.s * 100) + "%";
+      $("knob").style.top = ((1 - hsv.v) * 100) + "%";
+      $("knob").style.background = css(current);
+      $("sv").setAttribute("aria-valuetext", css(current));
+      if (document.activeElement !== $("hue")) $("hue").value = String(Math.round(hue));
+      if (document.activeElement !== $("hex")) $("hex").value = css(current).slice(1);
+    }
+
     $("code").textContent = core.formatCode(c);
   }
 
-  function setActive(n) { state.stops[state.active] = n; render(); }
+  $("custom").addEventListener("click", function () { openPicker("solid"); });
+  $("drop-0").addEventListener("click", function () { openPicker(0); });
+  $("drop-1").addEventListener("click", function () { openPicker(1); });
 
-  // Identity from the fragment. Every image is Discord's own CDN.
-  var name = info.nickname || "Your name";
-  ["dark", "light"].forEach(function (theme) {
-    $("name-" + theme).textContent = name;
-    var avatar = $("avatar-" + theme);
-    if (info.avatarHash && info.userId) {
-      avatar.src = info.guildAvatar
-        ? CDN + "guilds/" + info.guildId + "/users/" + info.userId + "/avatars/" + info.avatarHash + ".png?size=80"
-        : CDN + "avatars/" + info.userId + "/" + info.avatarHash + ".png?size=80";
-    } else { avatar.removeAttribute("src"); }
-    var badge = $("badge-" + theme);
-    if (info.roleId && info.iconHash) {
-      var img = document.createElement("img");
-      img.src = CDN + "role-icons/" + info.roleId + "/" + info.iconHash + ".png?size=40";
-      img.alt = ""; img.width = 18; img.height = 18;
-      badge.appendChild(img);
-    } else if (info.emoji) { badge.textContent = info.emoji; }
-  });
-  $("chip-solid").style.background = "#FF66AA";
-  $("chip-gradient").style.background = "linear-gradient(90deg,#FF66AA,#3366FF)";
-  $("chip-holo").style.background = "linear-gradient(90deg,#A9C9FF,#FFBBEC,#FFC3A0)";
-  if (info.enhanced === false) {
-    document.querySelectorAll('.style[data-style="gradient"], .style[data-style="holographic"]').forEach(function (b) { b.disabled = true; });
-    $("enhanced-note").hidden = false;
-    if (state.style !== "solid") state.style = "solid";
-  }
-
-  PRESETS.forEach(function (value) {
-    var b = document.createElement("button");
-    b.className = "swatch"; b.style.background = value; b.setAttribute("aria-label", value);
-    b.addEventListener("click", function () { setActive(parseInt(value.slice(1), 16)); });
-    $("swatches").appendChild(b);
-  });
-  document.querySelectorAll(".style").forEach(function (b) {
-    b.addEventListener("click", function () { state.style = b.dataset.style; state.active = 0; render(); });
-  });
-  document.querySelectorAll(".stop[data-stop]").forEach(function (b) {
-    b.addEventListener("click", function () { state.active = Number(b.dataset.stop); render(); });
-  });
-  $("swap").addEventListener("click", function () { state.stops.reverse(); render(); });
   $("hue").addEventListener("input", function () {
-    var hsv = intToHsv(state.stops[state.active]);
-    setActive(hsvToInt(Number($("hue").value), hsv.s || 1, hsv.v || 1));
+    hue = Number($("hue").value);
+    var hsv = intToHsv(editingValue());
+    setEditing(hsvToInt(hue, hsv.s || 1, hsv.v || 1));
   });
   $("hex").addEventListener("input", function () {
     var v = $("hex").value.trim().replace(/^#/, "");
-    if (/^[0-9a-fA-F]{6}$/.test(v)) setActive(parseInt(v, 16));
+    if (/^[0-9a-fA-F]{6}$/.test(v)) setEditing(parseInt(v, 16));
   });
   function pick(event) {
     var rect = $("sv").getBoundingClientRect();
     var s = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
     var v = 1 - Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height));
-    setActive(hsvToInt(Number($("hue").value), s, v));
+    setEditing(hsvToInt(hue, s, v));
   }
   $("sv").addEventListener("pointerdown", function (e) { $("sv").setPointerCapture(e.pointerId); pick(e); });
   $("sv").addEventListener("pointermove", function (e) { if (e.buttons) pick(e); });
   $("sv").addEventListener("keydown", function (e) {
-    var hsv = intToHsv(state.stops[state.active]), step = 0.05;
+    var hsv = intToHsv(editingValue()), step = 0.05;
     if (e.key === "ArrowRight") hsv.s = Math.min(1, hsv.s + step);
     else if (e.key === "ArrowLeft") hsv.s = Math.max(0, hsv.s - step);
     else if (e.key === "ArrowUp") hsv.v = Math.min(1, hsv.v + step);
     else if (e.key === "ArrowDown") hsv.v = Math.max(0, hsv.v - step);
     else return;
-    e.preventDefault(); setActive(hsvToInt(hsv.h, hsv.s, hsv.v));
+    e.preventDefault(); setEditing(hsvToInt(hue, hsv.s, hsv.v));
   });
+
+  document.addEventListener("pointerdown", function (e) {
+    if (state.editing === null) return;
+    if ($("popover").contains(e.target) || anchorFor(state.editing).contains(e.target)) return;
+    closePicker();
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && state.editing !== null) { e.preventDefault(); closePicker(true); }
+  });
+  window.addEventListener("resize", function () { closePicker(); });
+
+  var resetCopy = null;
   $("copy").addEventListener("click", function () {
     var text = $("code").textContent;
-    var done = function () { $("copied").textContent = "Copied. Paste it into Enter code."; };
-    if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, function () { $("copied").textContent = "Select the code and copy it."; });
+    var done = function () {
+      $("copy").textContent = "Copied";
+      $("copy").classList.add("done");
+      $("dock-label").textContent = "Paste it into Enter code";
+      $("copied").textContent = "Copied. Paste it into Enter code in /settings sotw-colour.";
+      clearTimeout(resetCopy);
+      resetCopy = setTimeout(function () {
+        $("copy").textContent = "Copy code";
+        $("copy").classList.remove("done");
+        $("dock-label").textContent = "Your code";
+      }, 2400);
+    };
+    var fallback = function () {
+      var range = document.createRange();
+      range.selectNodeContents($("code"));
+      var selection = window.getSelection();
+      selection.removeAllRanges(); selection.addRange(range);
+      $("dock-label").textContent = "Selected. Copy it with your keyboard";
+      $("copied").textContent = "The code is selected. Copy it with your keyboard.";
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback);
+    else fallback();
   });
+
   render();
 })();
 </script>
