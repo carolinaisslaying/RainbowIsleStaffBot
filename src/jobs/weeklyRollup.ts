@@ -8,7 +8,7 @@ import {
     weekWindowFor
 } from "../domain/weekly.js";
 import { assessFortnight, backfillPlan, closingFortnightIndex } from "../domain/assessments.js";
-import { runFortnightAssessment } from "../services/assessmentService.js";
+import { currentExecutives, runFortnightAssessment } from "../services/assessmentService.js";
 import {
     claimFortnightAnnouncement,
     claimLeaderboardLog,
@@ -142,7 +142,12 @@ export async function catchUpMissedWeeks(
         if (plan === "seed") {
             // Store the figures, then spend the fortnight's one announcement
             // without making it, so it is never announced later either.
-            await assessFortnight(fortnightIndex, config);
+            await assessFortnight(
+                fortnightIndex,
+                config,
+                false,
+                await currentExecutives(client, config)
+            );
             await claimFortnightAnnouncement(fortnightIndex);
             log.info(
                 `Fortnight ${fortnightIndex} assessed on a first boot; nobody notified, ` +

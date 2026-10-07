@@ -1,4 +1,5 @@
 import { SlashCommandBuilder } from "discord.js";
+import { assessmentSummaryLine } from "../domain/review.js";
 import type { Command } from "./types.js";
 import { EMOJI } from "../render/emoji.js";
 import { errorCard, noticeCard } from "../render/cards.js";
@@ -13,7 +14,11 @@ import {
     fortnightIndexForWeek,
     windowForIndex
 } from "../domain/assessments.js";
-import { runFortnightAssessment, fortnightSummary } from "../services/assessmentService.js";
+import {
+    runFortnightAssessment,
+    fortnightSummary,
+    repostReviewQueue
+} from "../services/assessmentService.js";
 import { audit } from "../domain/audit.js";
 import { resendLeaderboardLog } from "../services/leaderboardLogService.js";
 import { weekStartFor, nextWeekStart, closedWeekStart, DAY_MS } from "../time/calendar.js";
@@ -42,11 +47,19 @@ export const adminCommand: Command = {
         .addSubcommand((sub) =>
             sub
                 .setName("assess")
-                .setDescription("Re-run a fortnight assessment and repost the review card")
+                .setDescription("Re-run a fortnight assessment, or repost its review card as it stands")
                 .addIntegerOption((option) =>
                     option
                         .setName("fortnight")
                         .setDescription("Fortnight index. Defaults to the last closed one.")
+                        .setRequired(false)
+                )
+                .addBooleanOption((option) =>
+                    option
+                        .setName("repost")
+                        .setDescription(
+                            "Only delete the review card and post it again, as it stands. Nobody is DMed or pinged."
+                        )
                         .setRequired(false)
                 )
         )
@@ -143,6 +156,35 @@ export const adminCommand: Command = {
                 return;
             }
 
+            if (interaction.options.getBoolean("repost") === true) {
+                const rows = await repostReviewQueue(client, config, index);
+                if (rows === null) {
+                    await respond(
+                        interaction,
+                        errorCard(`Fortnight ${index} has no review card to repost.`)
+                    );
+                    return;
+                }
+
+                await audit("admin.repost", {
+                    actorId: interaction.user.id,
+                    detail: { fortnightIndex: index, rows }
+                });
+
+                await respond(
+                    interaction,
+                    noticeCard(
+                        `Fortnight ${index} reposted`,
+                        `${labelWindow(window.week1Start, window.end, config.accountingTimezone)}\n` +
+                            `The review card and its ${rows} ${rows === 1 ? "row were" : "rows were"} ` +
+                            "deleted and posted again as they stand. Nothing was recomputed, and " +
+                            "nobody was DMed or pinged.",
+                        { ephemeral: true }
+                    )
+                );
+                return;
+            }
+
             // Always the real thing. Rehearsing lives on /dev, so there is no
             // flag here to leave in the wrong position.
             const plan = await runFortnightAssessment(client, config, index);
@@ -175,8 +217,7 @@ export const adminCommand: Command = {
                         ? `Fortnight ${index} rehearsed`
                         : `Fortnight ${index} assessed`,
                     `${labelWindow(window.week1Start, window.end, config.accountingTimezone)}\n` +
-                        `${summary.met} met, ${summary.below} below, ${summary.exempt} exempt, ` +
-                        `${summary.total} assessed.\n\n` +
+                        `${assessmentSummaryLine(summary)}\n\n` +
                         (plan === "rehearse"
                             ? "The card is up and marked as a rehearsal. Nobody was DMed and " +
                               "the fortnight can still be announced for real later."

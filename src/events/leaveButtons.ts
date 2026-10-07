@@ -21,7 +21,7 @@ import {
     leaveCardFor,
     rememberLeaveCard
 } from "../services/leaveService.js";
-import { errorCard, leaveEndConfirmCard, noticeCard } from "../render/cards.js";
+import { errorCard, quote, leaveEndConfirmCard, noticeCard } from "../render/cards.js";
 import { deferOntoOwnCard, respond, sendOptions } from "../discord/respond.js";
 import { FIELD_REASON, leaveEndModal } from "../render/modals.js";
 import { audit } from "../domain/audit.js";
@@ -326,7 +326,7 @@ export async function handleLeaveEndModal(
             noticeCard(
                 "Leave cancelled",
                 "The leave will not start. Their staff roles were never removed, and they " +
-                    `have been told it is off.\n\n**Why:** ${reason}\n\n` +
+                    `have been told it is off.\n\n**Why**\n${quote(reason)}\n\n` +
                     "The request card in this channel now shows the outcome.",
                 { colour: COLOUR.settled }
             )
@@ -352,7 +352,7 @@ export async function handleLeaveEndModal(
                   "cancelled: their staff roles are restored and they have been told they are " +
                   "back."
                 : "Their staff roles are restored and they have been told they are back.") +
-                `\n\n**Why:** ${reason}\n\nThe request card in this channel now shows the outcome.`,
+                `\n\n**Why**\n${quote(reason)}\n\nThe request card in this channel now shows the outcome.`,
             { colour: COLOUR.approved }
         )
     );

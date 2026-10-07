@@ -266,6 +266,13 @@ is a wall, not an escalation.
 (`render/cards.ts`) drops blank lines before any `#`/`##`/`###` line through `tightenHeadings`, so
 every card gets it whatever its strings end in. Subtext (`-#`) and plain paragraphs keep theirs.
 
+**Somebody's own words are quoted on every line.** Discord ends a blockquote at the first line
+without `> `, so a reason typed in paragraphs had its first line quoted and the rest read as the
+card's own words. Every reason and note goes through `quote()` (`render/cards.ts`), never a bare
+`> ${reason}`. A one-line `**Why:** ${reason}` had the same fault in another form, a second
+paragraph running on into the next sentence, so the label sits on its own line with the reason
+quoted beneath it.
+
 **Emoji come from the colour, not from the call site.** `render/emoji.ts` maps each `COLOUR` value
 to one mark and `noticeCard` prefixes the title with it, so the forty-odd cards that already declare
 their state by accent get the matching emoji for free and the two cannot drift. Two pairs of roles
@@ -347,6 +354,29 @@ the whole message — deciding one member took everybody else's buttons with the
 not be finished. `domain/review.ts` holds the rules as pure functions (`rowButtons`,
 `decisionPermitted`, `activeWarningCount`, `queueHeadline`, `reminderDue`), and `fortnightReviews`
 keyed by index remembers where the header is.
+
+**Executives are assessed but not reviewed.** Their rank outranks the requirement in practice, so
+every Executive row was dismissed — a ping, a reminder and a modal per fortnight for a foregone
+decision. `assessFortnight` is handed the Discord ids holding an Executive role in the public guild
+(`currentExecutives`, roles only, a failed fetch reads as not one) and stores `excludedAsExecutive`.
+The first real run fixes it (`executiveFlagToWrite`): a rehearsal's answer is replaced, because a
+mid-fortnight rehearsal checks roles before the close, and a real row is never rewritten, so a
+promotion, demotion or config change never moves a past fortnight's queue.
+`belowThresholdFor` drops those rows, which takes them out of the header, rows, bulk paths, pings,
+reminder and repost at once; `inReviewQueue` (`domain/review.ts`) is the same rule, used by leave
+reassessment. The header's spread chart leaves them off too, or it would show more people below
+the line than the header counts, and the header says how many were left out
+(`executivesNotReviewedLine`), as a count and never a name. Their own DM, when below, says they are
+not reviewed instead of sending them to the Executives. That is the whole reach: their figures,
+rings and stats are untouched. `/admin assess` and `/dev rehearse` name them inside their "below"
+count (`assessmentSummaryLine`), or the reply reads 4 where the header reads 2. `reviewExecutives` (default off) puts them back for fortnights assessed afterwards.
+
+**A review can be moved without being re-run.** `/admin assess repost: true` (`repostReviewQueue`)
+deletes the header and every row card and posts them again from the records, so a queue can sit
+below something posted after it. Nothing is recomputed and nobody is DMed or pinged: pings replying
+to the old cards are deleted with them (`resolvePingsReplyingTo`, matched on what each reply points
+at, because a row can carry a `warning:` ping as well as its `row:` one) and not reposted. Without
+`repost`, an announced fortnight refreshes its figures and leaves the channel alone.
 
 **A warning says whether it arrived.** `tryDm` returns a boolean and every caller now reads it: `WarningDoc.deliveredAt`/`deliveryFailedAt` record what happened and
 `deliveryState` (`domain/review.ts`) turns them into the row's line. "Not yet acknowledged" used to
@@ -435,7 +465,10 @@ run created the document — and `/dev rehearse` is always a rehearsal, so readi
 before it closed branded every row of it for ever. The real run afterwards refreshed the figures,
 claimed the announcement and DMed the roster over documents that still said they were not real, so
 every warning it issued counted against nobody, reached nobody but Executives, and the fortnight was
-filtered out of the member's own history. Nothing said so. **Every read that feeds a real decision
+filtered out of the member's own history. Nothing said so. `rehearsalUpdate` hands back both
+halves of that upsert, because MongoDB refuses an update naming one path in `$set` and `$setOnInsert`
+at once: the real run carried the flag in both, so every real assessment threw on its first row and
+the first fortnight went unannounced, while rehearsals named it once and worked. **Every read that feeds a real decision
 filters rehearsals out** —
 `assessmentHistory` and `warningsFor` do it in the query, which is where it belongs: one missed
 filter puts a rehearsal warning on somebody's real record. A rehearsal exercises the real write

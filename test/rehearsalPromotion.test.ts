@@ -16,13 +16,17 @@ import { rehearsalUpdate } from "../src/domain/assessments.js";
  */
 describe("what a run does to a row's rehearsal flag", () => {
     it("promotes a rehearsal's row when the real run arrives", () => {
-        expect(rehearsalUpdate(false)).toEqual({ rehearsal: false });
+        expect(rehearsalUpdate(false).set).toEqual({ rehearsal: false });
     });
 
     it("leaves a real row alone when a rehearsal runs over it", () => {
         // The $set carries nothing, so $setOnInsert stays the only writer of
         // the flag and the existing document keeps whatever it already said.
-        expect(rehearsalUpdate(true)).toEqual({});
+        expect(rehearsalUpdate(true).set).toEqual({});
+    });
+
+    it("marks a row a rehearsal only by creating it", () => {
+        expect(rehearsalUpdate(true).setOnInsert).toEqual({ rehearsal: true });
     });
 
     it("never sets the flag true from an update", () => {
@@ -30,7 +34,20 @@ describe("what a run does to a row's rehearsal flag", () => {
         // `rehearsal: true` into $set, rehearsing an announced fortnight would
         // silently void everybody's real warnings for it.
         for (const rehearsal of [true, false]) {
-            expect(Object.values(rehearsalUpdate(rehearsal))).not.toContain(true);
+            expect(Object.values(rehearsalUpdate(rehearsal).set)).not.toContain(true);
+        }
+    });
+
+    it("never names the flag in both halves of one update", () => {
+        // MongoDB refuses an update that writes one path from $set and
+        // $setOnInsert at once ("would create a conflict at 'rehearsal'"). The
+        // real run carried it in both, so every real assessment threw on its
+        // first row and the first fortnight was never announced. Rehearsals
+        // carried it in one and worked, which is why nothing caught it.
+        for (const rehearsal of [true, false]) {
+            const { set, setOnInsert } = rehearsalUpdate(rehearsal);
+            const both = Object.keys(set).filter((key) => key in setOnInsert);
+            expect(both).toEqual([]);
         }
     });
 });

@@ -69,6 +69,19 @@ export function tightenHeadings(value: string): string {
     return value.replace(/\n{2,}(?=#{1,3} )/g, "\n");
 }
 
+/**
+ * Quote somebody's own words. Discord ends a blockquote at the first line
+ * without its `> `, so a reason typed in paragraphs had its first line quoted
+ * and the rest printed as if the card were saying it.
+ */
+export function quote(value: string): string {
+    return value
+        .trim()
+        .split(/\r?\n/)
+        .map((line) => `> ${line}`)
+        .join("\n");
+}
+
 export function text(value: string): TextDisplayBuilder {
     return new TextDisplayBuilder().setContent(tightenHeadings(value));
 }
@@ -498,7 +511,7 @@ export function reviewRowCard(row: ReviewRowInput): ContainerBuilder {
     if (row.outcome && row.decidedLine) {
         container.addSeparatorComponents(separator());
         const settled = [`${emojiForColour(colour)} **${row.decidedLine}**`];
-        if (row.reason) settled.push(`> ${row.reason}`);
+        if (row.reason) settled.push(quote(row.reason));
         if (row.acknowledgedLine) settled.push(`-# ${row.acknowledgedLine}`);
         if (row.rehearsal) {
             settled.push("-# Rehearsal. Nothing was recorded against them and nobody was told.");
@@ -567,6 +580,20 @@ export interface ReviewHeaderInput {
     rehearsal: boolean;
     /** How the whole team did this fortnight. Omitted when nobody was assessed. */
     spread?: { png: Buffer; alt: string } | null;
+    /** Executives below the requirement and left out of the queue. Absent reads as none. */
+    executivesNotReviewed?: number;
+}
+
+/**
+ * The header's line for Executives left out of the queue, or null for none.
+ * A count and never a name: the queue is shorter than the shortfall, and the
+ * channel should say so without saying who.
+ */
+export function executivesNotReviewedLine(count: number): string | null {
+    if (count <= 0) return null;
+    return count === 1
+        ? "-# 1 Executive below the requirement is not reviewed."
+        : `-# ${count} Executives below the requirement are not reviewed.`;
 }
 
 /**
@@ -574,12 +601,14 @@ export interface ReviewHeaderInput {
  * top is the count that is actually left.
  */
 export function reviewHeaderCard(input: ReviewHeaderInput): RenderedMessage {
+    const executives = executivesNotReviewedLine(input.executivesNotReviewed ?? 0);
     const container = new ContainerBuilder()
         .setAccentColor(input.remaining > 0 ? COLOUR.pending : COLOUR.settled)
         .addTextDisplayComponents(
             text(
                 `## ${input.remaining > 0 ? "⏳" : "📁"} Fortnight review\n` +
                     `${input.windowLabel}\n${input.headline}\n` +
+                    (executives ? `${executives}\n` : "") +
                     (input.rehearsal
                         ? "-# **Rehearsal.** Every decision below is recorded against a " +
                           "throwaway record and only Executives are messaged. Turn off the " +
@@ -717,7 +746,7 @@ export function warningDmCard(input: {
                     `Fortnight ${input.windowLabel}. You recorded ` +
                     `**${input.totalMinutes} of ${input.requiredMinutes} activity minutes**, ` +
                     `**${shortfall}** under your fortnight requirement.\n\n` +
-                    `**Why**\n> ${input.reason}\n\n` +
+                    `**Why**\n${quote(input.reason)}\n\n` +
                     "If you think this is wrong, or something was going on that we should " +
                     "know about, contact an Executive."
             )
@@ -782,7 +811,7 @@ function warningRowLines(row: WarningRow): string {
             ? []
             : [tierConsequenceLine(row.permanent ? 0 : row.lifetimeDays)]),
         `-# Issued by ${row.issuedBy}`,
-        `> ${row.note}`
+        quote(row.note)
     ];
 
     if (row.withdrawn) {
@@ -791,7 +820,7 @@ function warningRowLines(row: WarningRow): string {
         // unreadable to anybody asking what happened.
         lines.push(
             `-# Withdrawn ${ts(row.withdrawn.at, "R")} by ${row.withdrawn.by}` +
-                (row.withdrawn.reason ? `\n> ${row.withdrawn.reason}` : "")
+                (row.withdrawn.reason ? `\n${quote(row.withdrawn.reason)}` : "")
         );
     } else {
         lines.push(`-# ${row.acknowledged ? "Acknowledged" : "Not acknowledged"}`);
@@ -1084,7 +1113,7 @@ export function reviewBulkProgressCard(input: {
                             `${input.movedOn === 1 ? "it was" : "they were"} left alone.`
                     ]
                   : []),
-              ...(input.reason ? ["", `**Recorded against each:** ${input.reason}`] : [])
+              ...(input.reason ? ["", `**Recorded against each**\n${quote(input.reason)}`] : [])
           ]
         : [
               `${bar}`,
@@ -1277,7 +1306,7 @@ export function leaveRequestCard(options: {
                         .map(
                             (event) =>
                                 `- ${event.mark} ${event.text} · ${ts(event.at, "R")}` +
-                                (event.note ? `\n> ${event.note.split("\n").join("\n> ")}` : "")
+                                (event.note ? `\n${quote(event.note)}` : "")
                         )
                         .join("\n") +
                     (purged ? "\n-# The record is gone. The audit log keeps what it held." : "")
@@ -1301,7 +1330,7 @@ export function leaveRequestCard(options: {
                     `Back **${ts(extension.endDate, "f")}** instead of ` +
                     `${ts(options.endDate, "f")}, ` +
                     `${formatDays(extension.endDate.getTime() - options.endDate.getTime())} longer.\n` +
-                    `> ${extension.reason.split("\n").join("\n> ")}\n\n` +
+                    `${quote(extension.reason)}\n\n` +
                     (extension.effectLines.length > 0
                         ? `${extension.effectLines.join("\n")}\n\n`
                         : "") +
@@ -1454,7 +1483,7 @@ export function leaveCancelledCard(options: {
         "Leave cancelled",
         `**Your leave has been cancelled** by <@${options.cancelledBy}> before it started. ` +
             `It was booked from ${ts(options.startDate, "D")} to ${ts(options.endDate, "D")}.\n\n` +
-            `**Why:** ${options.reason}\n\n` +
+            `**Why**\n${quote(options.reason)}\n\n` +
             "Your staff roles were never removed, so nothing changes: your activity keeps " +
             "counting as usual.\n\n" +
             `If you still need the time, ask again with ${cmd("leave request", options.guildId)}, ` +
@@ -1789,7 +1818,7 @@ export function warningLogCard(input: {
     const stateLine = input.withdrawn
         ? `${EMOJI.purge} **Withdrawn** ${ts(input.withdrawn.at, "R")} by ` +
           `${input.withdrawn.by}. It no longer counts against them.\n` +
-          `> ${input.withdrawn.reason.split("\n").join("\n> ")}`
+          quote(input.withdrawn.reason)
         : input.delivery === "failed"
           ? "❗ **Never delivered.** Their direct messages are closed, so they have not seen " +
             "this. It is still on their record."
@@ -1815,7 +1844,7 @@ export function warningLogCard(input: {
             : [tierConsequenceLine(input.permanent ? 0 : input.lifetimeDays)]),
         `-# Issued ${ts(input.issuedAt, "F")} by ${input.issuedBy}`,
         "",
-        `> ${input.reason.split("\n").join("\n> ")}`,
+        quote(input.reason),
         "",
         stateLine,
         ...(input.coveredByLeaveAt && !input.withdrawn
@@ -1870,7 +1899,7 @@ export function conductWarnDmCard(input: {
                 `${tierTitle(input.tier)}\n` +
                     `${input.issuedBy} has given you a warning.\n\n` +
                     `${input.consequence}\n\n` +
-                    `**What happened**\n> ${input.reason.split("\n").join("\n> ")}\n\n` +
+                    `**What happened**\n${quote(input.reason)}\n\n` +
                     "If you disagree, contact an Executive."
             )
         )

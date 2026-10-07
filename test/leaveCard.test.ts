@@ -158,7 +158,7 @@ describe("leave cancelled before it started", () => {
     });
 
     it("tells them why", () => {
-        expect(json).toContain("**Why:** Short-staffed that week.");
+        expect(json).toContain("**Why**\\n> Short-staffed that week.");
     });
 
     it("quotes the booked dates, start before end", () => {

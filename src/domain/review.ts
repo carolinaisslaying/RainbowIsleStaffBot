@@ -25,6 +25,74 @@ export const OUTCOME_LABEL: Record<ReviewOutcome, string> = {
     dismissed: "Dismissed"
 };
 
+/**
+ * Whether somebody is left out of the review channel for being an Executive.
+ *
+ * Their rank outranks the requirement in practice, so every Executive row the
+ * queue ever drew was dismissed: a ping, a reminder and a modal a fortnight to
+ * reach a decision that was never in doubt. Decided once, when the fortnight
+ * is first assessed, and stored on the assessment. Not knowing someone's roles
+ * reads as not an Executive, so a failed lookup reviews them rather than
+ * waiving them.
+ */
+export function excludedAsExecutive(options: {
+    isExecutive: boolean;
+    reviewExecutives: boolean;
+}): boolean {
+    return options.isExecutive && !options.reviewExecutives;
+}
+
+/**
+ * Whether an assessment belongs in the fortnight review channel. The query in
+ * `belowThresholdFor` is the same rule; this is it without a database.
+ */
+export function inReviewQueue(assessment: {
+    status: string;
+    excludedAsExecutive?: boolean;
+}): boolean {
+    return assessment.status === "below" && assessment.excludedAsExecutive !== true;
+}
+
+/**
+ * The one-line tally `/admin assess` and `/dev rehearse` reply with. "Below"
+ * counts everybody under the requirement, so the Executives left out of the
+ * queue are named in it, or the reply says 4 where the header says 2.
+ */
+export function assessmentSummaryLine(summary: {
+    met: number;
+    below: number;
+    exempt: number;
+    total: number;
+    executivesNotReviewed: number;
+}): string {
+    const executives =
+        summary.executivesNotReviewed === 0
+            ? ""
+            : ` (${summary.executivesNotReviewed} ` +
+              `${summary.executivesNotReviewed === 1 ? "Executive" : "Executives"} not reviewed)`;
+    return (
+        `${summary.met} met, ${summary.below} below${executives}, ` +
+        `${summary.exempt} exempt, ${summary.total} assessed.`
+    );
+}
+
+/**
+ * Whether a run of the assessment writes `excludedAsExecutive`, and what.
+ *
+ * Undefined leaves the stored value alone. The flag is fixed by the first
+ * *real* write: a row nobody has written yet takes this run's answer, and so
+ * does a row only a rehearsal has written, because a rehearsal run partway
+ * through a fortnight checks roles before the close. A real row keeps what it
+ * has, so re-running a fortnight after a promotion never moves its queue.
+ */
+export function executiveFlagToWrite(
+    existing: { rehearsal?: boolean } | null,
+    excluded: boolean
+): boolean | undefined {
+    if (existing && existing.rehearsal !== true) return undefined;
+    return excluded;
+}
+
 export interface RowFacts {
     outcome: ReviewOutcome | null;
     /** No longer in the server, or the staff record is inactive. */

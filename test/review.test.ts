@@ -4,6 +4,10 @@ import {
     activeWarningCount,
     reopenNotifies,
     decisionPermitted,
+    assessmentSummaryLine,
+    excludedAsExecutive,
+    executiveFlagToWrite,
+    inReviewQueue,
     priorOutcomesLine,
     queueCounts,
     queueHeadline,
@@ -334,5 +338,59 @@ describe("who hears about a reopened decision", () => {
 
     it("says nothing when there was no decision to withdraw", () => {
         expect(reopenNotifies(null)).toBe(false);
+    });
+});
+
+describe("Executives and the review queue", () => {
+    it("leaves an Executive out unless the deployment reviews them", () => {
+        expect(excludedAsExecutive({ isExecutive: true, reviewExecutives: false })).toBe(true);
+        expect(excludedAsExecutive({ isExecutive: true, reviewExecutives: true })).toBe(false);
+        expect(excludedAsExecutive({ isExecutive: false, reviewExecutives: false })).toBe(false);
+        expect(excludedAsExecutive({ isExecutive: false, reviewExecutives: true })).toBe(false);
+    });
+
+    it("queues a row only when it is below and not left out", () => {
+        expect(inReviewQueue({ status: "below" })).toBe(true);
+        expect(inReviewQueue({ status: "below", excludedAsExecutive: false })).toBe(true);
+        expect(inReviewQueue({ status: "below", excludedAsExecutive: true })).toBe(false);
+        expect(inReviewQueue({ status: "met" })).toBe(false);
+        expect(inReviewQueue({ status: "exempt" })).toBe(false);
+    });
+});
+
+describe("the Executive flag on a stored assessment", () => {
+    it("is written by the first run of either kind", () => {
+        expect(executiveFlagToWrite(null, true)).toBe(true);
+        expect(executiveFlagToWrite(null, false)).toBe(false);
+    });
+
+    it("is replaced when only a rehearsal has written the row", () => {
+        // Rehearsed on day 8 as a Lead, promoted on day 10: the close decides.
+        expect(executiveFlagToWrite({ rehearsal: true }, true)).toBe(true);
+        expect(executiveFlagToWrite({ rehearsal: true }, false)).toBe(false);
+    });
+
+    it("is left alone once a real run has written the row", () => {
+        expect(executiveFlagToWrite({ rehearsal: false }, true)).toBeUndefined();
+        expect(executiveFlagToWrite({}, true)).toBeUndefined();
+    });
+});
+
+describe("the assessment summary line", () => {
+    const base = { met: 5, below: 4, exempt: 1, total: 10 };
+
+    it("names the Executives inside the below count", () => {
+        expect(assessmentSummaryLine({ ...base, executivesNotReviewed: 2 })).toBe(
+            "5 met, 4 below (2 Executives not reviewed), 1 exempt, 10 assessed."
+        );
+        expect(assessmentSummaryLine({ ...base, executivesNotReviewed: 1 })).toContain(
+            "(1 Executive not reviewed)"
+        );
+    });
+
+    it("reads as before when nobody was left out", () => {
+        expect(assessmentSummaryLine({ ...base, executivesNotReviewed: 0 })).toBe(
+            "5 met, 4 below, 1 exempt, 10 assessed."
+        );
     });
 });

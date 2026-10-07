@@ -17,7 +17,7 @@ import {
     upsertWarningCard
 } from "../services/conductService.js";
 import { pingKey, resolvePing } from "../services/pings.js";
-import { errorCard, noticeCard } from "../render/cards.js";
+import { errorCard, quote, noticeCard } from "../render/cards.js";
 import {
     CONDUCT_WITHDRAW_MODAL,
     FIELD_REASON,
@@ -116,7 +116,7 @@ export async function handleConductWarnModal(
         noticeCard(
             `${TIER_STYLE[rawTier].label} issued`,
             `**${name}** (<@${subjectDiscordId}>)\n\n` +
-                `**Why:** ${reason}\n\n` +
+                `**Why**\n${quote(reason)}\n\n` +
                 "It does not expire.\n\n" +
                 (delivered
                     ? "They have the message."
@@ -227,7 +227,7 @@ export async function handleConductWithdrawModal(
               ...noticeCard(
                   "An Executive has withdrawn a warning against you",
                   "It no longer counts against you.\n\n" +
-                      `**Why:** ${reason}\n\n` +
+                      `**Why**\n${quote(reason)}\n\n` +
                       "-# Your record still lists it, marked as withdrawn.",
                   { colour: COLOUR.settled }
               )
@@ -242,7 +242,7 @@ export async function handleConductWithdrawModal(
         interaction,
         noticeCard(
             "Withdrawn",
-            `It no longer counts against them.\n\n**Why:** ${reason}\n\n` +
+            `It no longer counts against them.\n\n**Why**\n${quote(reason)}\n\n` +
                 "-# Their record keeps both reasons, yours and the one it was issued for.\n\n" +
                 (told
                     ? "They have the message."

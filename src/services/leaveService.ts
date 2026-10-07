@@ -24,7 +24,8 @@ import {
     leaveCancelledCard,
     leaveRequestCard,
     noticeCard,
-    type RenderedMessage
+    type RenderedMessage,
+    quote
 } from "../render/cards.js";
 import { leaveHistory } from "../render/leaveHistory.js";
 import { leaveTermsText } from "../render/leaveTerms.js";
@@ -529,7 +530,7 @@ function welcomeBackCard(options: {
         endedBy.kind === "executive"
             ? `**Your leave has been ended early** by <@${endedBy.discordId}>. ` +
               `You were booked back ${ts(leave.endDate, "D")}; you are back as of now.\n` +
-              `**Why:** ${endedBy.reason}`
+              `**Why**\n${quote(endedBy.reason)}`
             : endedBy.kind === "member"
               ? "**Your leave is closed** because you ended it."
               : `**Your leave is over.** It ran its full course and closed ` +

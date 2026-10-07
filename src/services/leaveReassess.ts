@@ -16,6 +16,7 @@ import { fortnightsTouching, type LeaveSpan } from "../domain/leaveDays.js";
 import { rebuildWeek } from "../domain/weekly.js";
 import { findStaffById } from "../domain/staff.js";
 import { audit } from "../domain/audit.js";
+import { inReviewQueue } from "../domain/review.js";
 import { refreshQueueHeader, rowAttention, upsertReviewRow } from "./assessmentService.js";
 import { upsertWarningCard } from "./conductService.js";
 import { pingExecutives, pingKey, resolvePing } from "./pings.js";
@@ -138,8 +139,9 @@ async function reassessOne(
     // A row is only ever drawn for a fortnight that was once below. One that
     // never was has no card to correct, and posting one to say "nothing to
     // decide" would be noise.
+    // An Executive left out of the queue never gets one either.
     const hasRow = Boolean(after.reviewMessageId);
-    if (after.status === "below" || hasRow) {
+    if (inReviewQueue(after) || hasRow) {
         await upsertReviewRow(client, config, after, index, false);
     }
 

@@ -91,3 +91,40 @@ export async function resolvePing(client: Client, key: string): Promise<void> {
         log.debug(`Could not delete the ping for ${key}`, error);
     }
 }
+
+/**
+ * Delete every outstanding ping that replies to one of these messages.
+ *
+ * For a card about to be deleted and posted again: the ping would be left as a
+ * reply to nothing. Matched on what each reply points at rather than by key,
+ * because a review row can carry a `row:` ping and, when its warning has no
+ * log card, a `warning:` one.
+ */
+export async function resolvePingsReplyingTo(
+    client: Client,
+    channelId: string,
+    messageIds: Set<string>
+): Promise<void> {
+    const pings = await collections.pings().find({ channelId }).toArray();
+    if (pings.length === 0 || messageIds.size === 0) return;
+
+    let channel;
+    try {
+        channel = await client.channels.fetch(channelId);
+    } catch (error) {
+        log.debug(`Could not fetch channel ${channelId} to clear its pings`, error);
+        return;
+    }
+    if (!channel?.isTextBased()) return;
+
+    for (const ping of pings) {
+        try {
+            const message = await channel.messages.fetch(ping.messageId);
+            const target = message.reference?.messageId;
+            if (target && messageIds.has(target)) await resolvePing(client, ping._id);
+        } catch {
+            // The ping itself is gone, so it is not replying to anything.
+            await collections.pings().deleteOne({ _id: ping._id });
+        }
+    }
+}

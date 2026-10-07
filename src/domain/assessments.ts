@@ -18,6 +18,7 @@ import {
     type LeaveSpan
 } from "./leaveDays.js";
 import { listActiveStaff } from "./staff.js";
+import { excludedAsExecutive, executiveFlagToWrite } from "./review.js";
 import { weekWindowFor, type WeekWindow } from "./weekly.js";
 import { audit } from "./audit.js";
 
@@ -178,11 +179,23 @@ export async function computeAssessment(
  * fortnight was filtered out of `assessmentHistory`, `warningsFor` and
  * `/settings export`. Nothing said so.
  *
+ * Both halves of the update come from here, because MongoDB refuses one that
+ * names a path in `$set` and `$setOnInsert` at once. The real run used to carry
+ * `rehearsal: false` in both, so every real assessment threw on its first row
+ * and the first fortnight went unannounced; a rehearsal named it once and
+ * worked, which is how it went unnoticed. A real run's `$set` also covers the
+ * insert, so `$setOnInsert` only ever needs the flag for a rehearsal.
+ *
  * Pure, and separate, because the asymmetry is the rule and it is worth being
  * able to state it without a database.
  */
-export function rehearsalUpdate(rehearsal: boolean): { rehearsal: false } | Record<string, never> {
-    return rehearsal ? {} : { rehearsal: false };
+export function rehearsalUpdate(rehearsal: boolean): {
+    set: { rehearsal?: false };
+    setOnInsert: { rehearsal?: true };
+} {
+    return rehearsal
+        ? { set: {}, setOnInsert: { rehearsal: true } }
+        : { set: { rehearsal: false }, setOnInsert: {} };
 }
 
 /**
@@ -195,7 +208,8 @@ export function rehearsalUpdate(rehearsal: boolean): { rehearsal: false } | Reco
 export async function saveAssessment(
     computation: AssessmentComputation,
     rehearsal = false,
-    leaveChangedAt: Date | null = null
+    leaveChangedAt: Date | null = null,
+    executiveFlag?: boolean
 ): Promise<FortnightAssessmentDoc> {
     const result = await collections.fortnightAssessments().findOneAndUpdate(
         { staffId: computation.staffId, fortnightIndex: computation.fortnightIndex },
@@ -214,8 +228,10 @@ export async function saveAssessment(
                 status: computation.status,
                 heldForLeave: computation.heldForLeave,
                 ...(leaveChangedAt ? { leaveChangedAt } : {}),
+                // Undefined leaves the stored flag alone: see executiveFlagToWrite.
+                ...(executiveFlag === undefined ? {} : { excludedAsExecutive: executiveFlag }),
                 // A real run promotes a rehearsal's row to real. See above.
-                ...rehearsalUpdate(rehearsal)
+                ...rehearsalUpdate(rehearsal).set
             },
             $setOnInsert: {
                 _id: new ObjectId(),
@@ -230,7 +246,7 @@ export async function saveAssessment(
                 reviewNote: null,
                 reviewChannelId: null,
                 reviewMessageId: null,
-                rehearsal
+                ...rehearsalUpdate(rehearsal).setOnInsert
             }
         },
         { upsert: true, returnDocument: "after" }
@@ -254,11 +270,17 @@ export async function findAssessmentFor(
     return collections.fortnightAssessments().findOne({ staffId, fortnightIndex: index });
 }
 
-/** Assess every active staff member for the fortnight that just closed. */
+/**
+ * Assess every active staff member for the fortnight that just closed.
+ *
+ * `executives` is the Discord ids of whoever holds an Executive role now, and
+ * only matters to a row no real run has written yet: see `executiveFlagToWrite`.
+ */
 export async function assessFortnight(
     index: number,
     config: StaffBotConfig,
-    rehearsal = false
+    rehearsal = false,
+    executives: ReadonlySet<string> = new Set()
 ): Promise<FortnightAssessmentDoc[]> {
     const staff = await listActiveStaff();
     const saved: FortnightAssessmentDoc[] = [];
@@ -272,7 +294,20 @@ export async function assessFortnight(
             config,
             existing ? rulesOf(existing) : rulesFrom(config)
         );
-        saved.push(await saveAssessment(computation, rehearsal));
+        saved.push(
+            await saveAssessment(
+                computation,
+                rehearsal,
+                null,
+                executiveFlagToWrite(
+                    existing,
+                    excludedAsExecutive({
+                        isExecutive: executives.has(member.discordId),
+                        reviewExecutives: config.reviewExecutives
+                    })
+                )
+            )
+        );
     }
     await audit("assessment.run", {
         detail: { fortnightIndex: index, assessed: saved.length }
@@ -370,10 +405,14 @@ export async function assessmentsForFortnight(
         .toArray();
 }
 
+/**
+ * The fortnight's review queue: everyone below, less the Executives left out
+ * of it (`inReviewQueue` is the same rule without a database).
+ */
 export async function belowThresholdFor(index: number): Promise<FortnightAssessmentDoc[]> {
     return collections
         .fortnightAssessments()
-        .find({ fortnightIndex: index, status: "below" })
+        .find({ fortnightIndex: index, status: "below", excludedAsExecutive: { $ne: true } })
         .sort({ totalMinutes: 1 })
         .toArray();
 }
