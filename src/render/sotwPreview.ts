@@ -62,8 +62,16 @@ const THEMES = [
 
 type Theme = (typeof THEMES)[number];
 
-/** A semibold 19px Inter glyph averages about 11px; close enough to seat what follows the name. */
-const approxTextWidth = (text: string) => [...text].length * 10.9;
+/** How wide a run of the name is drawn, in px. */
+export type MeasureText = (text: string) => number;
+
+/**
+ * The fallback when nothing can measure: about 10px a glyph for semibold 19px
+ * Inter. Only good enough for tests; a real render measures with the font.
+ */
+const approxTextWidth: MeasureText = (text) => [...text].length * 10;
+
+const NAME_GAP = 5;
 
 /** Each channel scaled towards black, as Discord darkens a gradient name on Light. */
 function darken(value: number, factor: number): number {
@@ -98,7 +106,7 @@ function nameFill(colour: SotwColour | null, theme: Theme, span: { x1: number; x
     };
 }
 
-function row(input: SotwPreviewInput, theme: Theme, top: number): { defs: string; body: string } {
+function row(input: SotwPreviewInput, theme: Theme, top: number, measure: MeasureText): { defs: string; body: string } {
     const clipId = `sotw-avatar-${theme.id}`;
     const cx = PAD + 16 + AVATAR / 2;
     const cy = top + ROW / 2;
@@ -110,7 +118,7 @@ function row(input: SotwPreviewInput, theme: Theme, top: number): { defs: string
     let cursor = nameX;
     for (const part of parts) {
         placed.push({ part, x: cursor });
-        cursor += "text" in part ? approxTextWidth(part.text) : EMOJI_SIZE + 2;
+        cursor += "text" in part ? measure(part.text) : EMOJI_SIZE + 2;
     }
     const nameEnd = cursor;
     const fill = nameFill(input.colour, theme, { x1: nameX, x2: Math.max(nameEnd, nameX + 1) });
@@ -123,8 +131,8 @@ function row(input: SotwPreviewInput, theme: Theme, top: number): { defs: string
                   `width="${EMOJI_SIZE}" height="${EMOJI_SIZE}"/>`
         )
         .join("");
-    const badgeX = round(nameEnd + 6);
-    const stampX = input.badge ? badgeX + 26 : badgeX + 2;
+    const badgeX = round(nameEnd + NAME_GAP);
+    const stampX = input.badge ? badgeX + 20 + 8 : badgeX + 3;
 
     const avatar = input.avatar
         ? `<image class="sotw-avatar" href="${input.avatar}" x="${cx - AVATAR / 2}" y="${cy - AVATAR / 2}" ` +
@@ -172,8 +180,8 @@ export function describePreview(input: SotwPreviewInput): string {
     return `${input.name}'s name in ${colour}, on Discord's Ash, Dark, Onyx and Light themes.`;
 }
 
-export function sotwPreviewSvg(input: SotwPreviewInput): string {
-    const rows = THEMES.map((theme, index) => row(input, theme, PAD + index * ROW));
+export function sotwPreviewSvg(input: SotwPreviewInput, measure: MeasureText = approxTextWidth): string {
+    const rows = THEMES.map((theme, index) => row(input, theme, PAD + index * ROW, measure));
     const inner = WIDTH - PAD * 2;
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
     <defs>${rows.map((part) => part.defs).join("")}<clipPath id="sotw-frame"><rect x="${PAD}" y="${PAD}" width="${inner}" height="${ROW * 4}" rx="10"/></clipPath></defs>
@@ -185,6 +193,30 @@ export function sotwPreviewSvg(input: SotwPreviewInput): string {
 }
 
 const cache = new LruCache<string, Buffer>(128);
+const widths = new LruCache<string, number>(512);
+
+function inkWidth(text: string): number | null {
+    const svg =
+        `<svg xmlns="http://www.w3.org/2000/svg" width="2000" height="40"><text x="0" y="30" ` +
+        `font-size="${NAME_SIZE}" font-weight="600" font-family="${FONT_STACK}" xml:space="preserve">` +
+        `${escapeXml(text)}</text></svg>`;
+    return new Resvg(svg, { font: FONT_OPTIONS }).getBBox()?.width ?? null;
+}
+
+/**
+ * The run's advance width with the font that will draw it. A bounding box
+ * measures ink, which drops a trailing space and the glyphs' side bearings,
+ * so the run is measured between two x's and the x's are taken off again.
+ */
+export const measureNameText: MeasureText = (text) => {
+    const hit = widths.get(text);
+    if (hit !== undefined) return hit;
+    const framed = inkWidth(`x${text}x`);
+    const frame = inkWidth("xx");
+    const width = framed !== null && frame !== null ? Math.max(0, framed - frame) : approxTextWidth(text);
+    widths.set(text, width);
+    return width;
+};
 
 /** Rasterised at 2x, like the rings. Cached only when the caller supplies a key. */
 export function renderSotwPreview(input: SotwPreviewInput, cacheKey?: string): Buffer {
@@ -192,7 +224,7 @@ export function renderSotwPreview(input: SotwPreviewInput, cacheKey?: string): B
         const hit = cache.get(cacheKey);
         if (hit) return hit;
     }
-    const resvg = new Resvg(sotwPreviewSvg(input), {
+    const resvg = new Resvg(sotwPreviewSvg(input, measureNameText), {
         fitTo: { mode: "width", value: WIDTH * 2 },
         background: "rgba(0,0,0,0)",
         font: FONT_OPTIONS
