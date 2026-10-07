@@ -45,7 +45,7 @@ export async function colourCardFor(
 
     return colourSettingsCard({
         status: colourStatus({ holding, tier }),
-        savedLabel: saved ? describeColour(saved) : "No colour saved — the role would have no colour",
+        savedLabel: saved ? describeColour(saved) : "No colour saved. The role would show no colour",
         staged: options.staged ? { label: describeColour(options.staged.colour) } : null,
         pickerUrl: config.staffOfWeekColourPickerUrl
             ? pickerUrl(config.staffOfWeekColourPickerUrl, { ...assets.fragment, colour: saved, enhanced: assets.enhanced })
@@ -90,12 +90,12 @@ export async function saveStagedColour(
         detail: { colour: staged.colour }
     });
 
-    if (!holding || !holder) return "Saved. It goes on the role the next time you hold Staff of the Week.";
+    if (!holding || !holder) return "Saved. It goes on the role the next time you are Staff of the Week.";
 
     noteRoleWrite(staff.discordId, now);
     const write = await applyRoleColour(client, config, staged.colour, "Staff of the Week colour changed by its holder", staff.discordId);
     if (!write.ok) {
-        return "Saved. The role could not be updated just now; your colour goes on it at the next restart or handoff.";
+        return "Saved, but the bot could not update the role. Your colour goes on it the next time the bot restarts or the week changes over.";
     }
     // What was actually put on the role, not the staged preference: a
     // downgraded write shows one colour on the role while the preference
@@ -109,6 +109,6 @@ export async function saveStagedColour(
         })
     );
     return write.downgraded && staged.colour
-        ? `Saved, and on the role. ${downgradeNote(staged.colour)}`
-        : "Saved, and the role now wears it.";
+        ? `Saved. The role now shows your colour. ${downgradeNote(staged.colour)}`
+        : "Saved. The role now shows your colour.";
 }

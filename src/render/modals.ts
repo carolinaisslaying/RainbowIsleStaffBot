@@ -547,13 +547,13 @@ export function sotwRemoveModal(name: string, staffId: string): ModalBuilder {
         .setTitle("Remove Staff of the Week")
         .addTextDisplayComponents(
             new TextDisplayBuilder().setContent(
-                `-# **${name}** loses the role now. They are not barred from the next two weeks and ` +
-                    "this week is not counted as theirs."
+                `-# **${name}** loses the role now. They can still be picked in the next two weeks, ` +
+                    "and this week does not count as one of theirs."
             )
         )
         .addLabelComponents(
             new LabelBuilder()
-                .setLabel("Why is it being removed?")
+                .setLabel("Why are you removing it?")
                 .setTextInputComponent(
                     new TextInputBuilder()
                         .setCustomId(FIELD_REASON)

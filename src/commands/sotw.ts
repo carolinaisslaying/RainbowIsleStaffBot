@@ -31,11 +31,11 @@ export const sotwCommand: Command = {
         .addSubcommand((sub) =>
             sub
                 .setName("skip")
-                .setDescription("Nobody holds it next week, and there is no draw")
+                .setDescription("Have no Staff of the Week next week, and no random draw")
                 .addStringOption((option) => option.setName("reason").setDescription("Why").setMaxLength(500))
         )
-        .addSubcommand((sub) => sub.setName("remove").setDescription("Take it from this week's holder"))
-        .addSubcommand((sub) => sub.setName("view").setDescription("Who holds it, who is next, who is eligible")),
+        .addSubcommand((sub) => sub.setName("remove").setDescription("Take the role from this week's Staff of the Week"))
+        .addSubcommand((sub) => sub.setName("view").setDescription("This week, next week, and who can be picked")),
 
     async execute({ client, config, interaction }) {
         if (!sotwEnabled(config)) {
@@ -43,8 +43,8 @@ export const sotwCommand: Command = {
                 interaction,
                 sotwCard(
                     "Staff of the Week is not set up",
-                    "Its role has not been chosen yet, so there is nothing to pick. A deployment " +
-                        "administrator sets it in the configuration.",
+                    "Nobody has chosen the Staff of the Week role yet. A bot administrator needs to " +
+                        "set it in the bot's configuration first.",
                     { ephemeral: true }
                 )
             );
@@ -57,7 +57,7 @@ export const sotwCommand: Command = {
             // A modal cannot follow a defer, so this checks and opens only.
             const holder = await currentHolder(config);
             if (!holder) {
-                await respond(interaction, errorCard("Nobody holds Staff of the Week right now."));
+                await respond(interaction, errorCard("Nobody is Staff of the Week right now."));
                 return;
             }
             await interaction.showModal(
@@ -82,7 +82,7 @@ export const sotwCommand: Command = {
         const user = interaction.options.getUser("user", true);
         const subject = await findStaffByDiscordId(user.id);
         if (!subject) {
-            await respond(interaction, errorCard(`<@${user.id}> is not tracked as Moderation staff.`));
+            await respond(interaction, errorCard(`The bot has no staff record for <@${user.id}>.`));
             return;
         }
         await respond(interaction, await offerOrSet(client, config, interaction.user.id, subject, reason));

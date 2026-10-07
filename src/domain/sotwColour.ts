@@ -150,14 +150,12 @@ export function roleColoursFor(
 export function downgradeNote(pref: SotwColour): string | null {
     if (pref.style === "gradient") {
         return (
-            "Your gradient shows as its first colour here, because the server does not " +
-            "support gradient roles."
+            "This server cannot show gradient roles yet, so the role uses your first colour."
         );
     }
     if (pref.style === "holographic") {
         return (
-            "Holographic shows as a single colour here, because the server does not support " +
-            "holographic roles."
+            "This server cannot show holographic roles yet, so the role uses a single colour."
         );
     }
     return null;

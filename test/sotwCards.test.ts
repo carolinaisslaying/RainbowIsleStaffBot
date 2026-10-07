@@ -19,7 +19,7 @@ describe("the reminder", () => {
         const body = json(
             reminderCard({
                 nextWeekLabel: "Mon 5 Oct to Sun 11 Oct",
-                decision: "Not decided yet — it will be drawn at random.",
+                decision: "Not decided yet. If nobody is picked, the bot draws a name at random.",
                 barred: ["Robin", "Sam"],
                 leaders: [
                     { name: "Ashley", minutes: 300, pendingLeave: false },
@@ -30,10 +30,10 @@ describe("the reminder", () => {
             })
         );
         expect(body).toContain(EMOJI.staffOfWeek);
-        expect(body).toContain("drawn at random");
+        expect(body).toContain("draws a name at random");
         expect(body).toContain("Robin");
         expect(body).toContain("Ashley");
-        expect(body).toContain("has leave awaiting a decision");
+        expect(body).toContain("has a leave request for that week waiting for a decision");
         expect(body).toContain("</sotw set:1>");
         expect(body).not.toContain("⚠");
     });
@@ -57,21 +57,21 @@ describe("the handoff notice", () => {
         expect(random).toContain("drawn at random");
         expect(random).toContain("Sam");
         expect(handoffText({ kind: "skipped", by: "<@1>" })).toContain("skipped");
-        expect(handoffText({ kind: "empty", failedPick: null })).toContain("Nobody qualified");
+        expect(handoffText({ kind: "empty", failedPick: null })).toContain("Nobody who could be picked met the weekly minimum");
     });
 
-    it("says why a pick could not be honoured", () => {
+    it("says why the person picked could not have it", () => {
         const text = handoffText({ kind: "random", holder: "Sam", pool: ["Sam"], failedPick: "**Robin** has left." });
-        expect(text).toContain("could not be honoured");
+        expect(text).toContain("The person who was picked could not have it.");
         expect(text).toContain("**Robin** has left.");
     });
 });
 
 describe("the colour card", () => {
     it("says what saving will do, for each kind of member", () => {
-        expect(colourStatusText("holding")).toContain("straight away");
+        expect(colourStatusText("holding")).toContain("changes the role's colour now");
         expect(colourStatusText("saved")).toContain("next time");
-        expect(colourStatusText("executive")).toContain("Executives are never");
+        expect(colourStatusText("executive")).toContain("Executives cannot be Staff of the Week");
     });
 
     it("offers the picker link, a code and clearing when nothing is staged", () => {

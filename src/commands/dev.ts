@@ -210,7 +210,7 @@ export const devCommand: Command = {
                     interaction,
                     sotwCard(
                         "Staff of the Week draw, if the week closed now",
-                        (names.length > 0 ? names.join("\n") : "Nobody would qualify.") +
+                        (names.length > 0 ? names.join("\n") : "Nobody would be in the draw.") +
                             (sampleMember ? `\n\nOne sample draw: **${await nameOf(client, config, sampleMember)}**.` : "") +
                             "\n-# Nothing was recorded and nobody was told.",
                         { ephemeral: true }
@@ -226,7 +226,7 @@ export const devCommand: Command = {
                           message: pickCongratulation(Math.random),
                           colourLine: staff.sotwColour
                               ? "Your colour is on the role."
-                              : `The role has no colour yet — choose one with ${cmd("settings sotw-colour")}.`,
+                              : `The role has no colour yet. Choose one with ${cmd("settings sotw-colour")}.`,
                           preview: await previewFor(client, config, staff.discordId, staff.sotwColour ?? null)
                       });
             const delivered = await tryDm(client, interaction.user.id, sendOptions(card));

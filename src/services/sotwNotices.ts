@@ -73,13 +73,13 @@ export async function decisionLine(
     config: StaffBotConfig,
     doc: StaffOfWeekDoc | null
 ): Promise<string> {
-    if (doc?.status === "skipped") return `Skipped, by <@${doc.decidedBy}>.`;
+    if (doc?.status === "skipped") return `Skipped by <@${doc.decidedBy}>.`;
     if (doc?.status === "pending" && doc.staffId) {
         const staff = await findStaffById(doc.staffId);
-        const name = staff ? await nameOf(client, config, staff) : "a member no longer on record";
-        return `Picked: **${name}**, by <@${doc.decidedBy}>.`;
+        const name = staff ? await nameOf(client, config, staff) : "a member the bot no longer has a record of";
+        return `**${name}**, picked by <@${doc.decidedBy}>.`;
     }
-    return "Not decided yet — it will be drawn at random.";
+    return "Not decided yet. If nobody is picked, the bot draws a name at random.";
 }
 
 export async function buildReminder(

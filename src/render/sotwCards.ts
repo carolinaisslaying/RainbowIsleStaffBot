@@ -30,7 +30,7 @@ export interface Leader {
 
 const leaderLine = (leader: Leader, index: number) =>
     `${index + 1}. **${leader.name}** ${leader.minutes} min` +
-    (leader.pendingLeave ? ` — ${EMOJI.warning} has leave awaiting a decision for that week` : "");
+    (leader.pendingLeave ? ` (${EMOJI.warning} has a leave request for that week waiting for a decision)` : "");
 
 export function reminderCard(input: {
     nextWeekLabel: string;
@@ -44,14 +44,14 @@ export function reminderCard(input: {
         `### ${EMOJI.staffOfWeek} Staff of the Week: next week`,
         input.nextWeekLabel,
         input.decision,
-        "### Cannot hold it next week",
+        "### Cannot be picked next week",
         input.barred.length > 0 ? input.barred.map((name) => `- ${name}`).join("\n") : "Nobody.",
-        "### Doing well this week so far",
+        "### Most active this week so far",
         input.leaders.length > 0
             ? input.leaders.map(leaderLine).join("\n")
-            : "_Nobody eligible has recorded minutes yet._",
-        `-# The weekly minimum is ${input.target} minutes. Meeting it is not required for a pick.`,
-        `Record the choice with ${input.setCommand}, or skip the week.`
+            : "_Nobody who can be picked has any minutes yet._",
+        `-# The weekly minimum is ${input.target} minutes. You can pick somebody who has not met it.`,
+        `Pick somebody with ${input.setCommand}, or skip the week.`
     ];
     return {
         components: [new ContainerBuilder().setAccentColor(COLOUR.staffOfWeek).addTextDisplayComponents(text(lines.join("\n")))],
@@ -78,9 +78,9 @@ export function weekChoiceCard(input: {
         .addTextDisplayComponents(
             text(
                 `### ${EMOJI.staffOfWeek} Which week for ${input.name}?\n` +
-                    "Nobody holds Staff of the Week right now.\n" +
-                    `**Rest of this week** gives it to them straight away (${input.currentLabel}).\n` +
-                    `**Next week** records them for ${input.nextLabel}.`
+                    "Nobody is Staff of the Week right now.\n" +
+                    `**Rest of this week** (${input.currentLabel}) gives them the role now.\n` +
+                    `**Next week** (${input.nextLabel}) gives them the role when that week starts.`
             )
         )
         .addActionRowComponents(
@@ -108,29 +108,29 @@ export type HandoffSummary =
 
 export function handoffText(summary: HandoffSummary): string {
     const failed = (reason: string | null) =>
-        reason ? `\n${EMOJI.warning} The recorded pick could not be honoured: ${reason}` : "";
+        reason ? `\n${EMOJI.warning} The person who was picked could not have it. ${reason}` : "";
     switch (summary.kind) {
         case "picked":
-            return `**${summary.holder}** holds Staff of the Week, picked by ${summary.by}.`;
+            return `**${summary.holder}** is Staff of the Week, picked by ${summary.by}.`;
         case "random":
             return (
-                `**${summary.holder}** holds Staff of the Week, drawn at random from ` +
+                `**${summary.holder}** is Staff of the Week, drawn at random from ` +
                 `${summary.pool.map((name) => `**${name}**`).join(", ")}.` +
                 failed(summary.failedPick)
             );
         case "skipped":
-            return `Nobody holds Staff of the Week: the week was skipped by ${summary.by}.`;
+            return `Nobody is Staff of the Week this week. ${summary.by} skipped it.`;
         case "empty":
             if (summary.midWeek) {
                 return (
-                    "Nobody holds Staff of the Week. The week had already begun when the handoff " +
-                    "ran, so there was no draw." +
+                    "Nobody is Staff of the Week this week. The bot did not hand it over before the " +
+                    "week started, and it does not draw a name once a week has begun." +
                     failed(summary.failedPick)
                 );
             }
             return (
-                "Nobody holds Staff of the Week. Nobody qualified for the draw: nobody who may " +
-                "hold it met the weekly minimum last week." +
+                "Nobody is Staff of the Week this week. Nobody who could be picked met the weekly " +
+                "minimum last week, so there was nobody to draw from." +
                 failed(summary.failedPick)
             );
     }
@@ -151,7 +151,7 @@ export function viewCard(input: {
         input.next,
         "### Recent weeks",
         input.history.length > 0 ? input.history.join("\n") : "Nothing recorded yet.",
-        "### Eligible for next week",
+        "### Can be picked next week",
         input.eligible.length > 0 ? input.eligible.map(leaderLine).join("\n") : "Nobody.",
         `-# Minutes are this week's so far. The weekly minimum is ${input.target}.`
     ];
@@ -167,14 +167,11 @@ export type ColourStatusLine = "holding" | "saved" | "executive";
 export function colourStatusText(status: ColourStatusLine): string {
     switch (status) {
         case "holding":
-            return "You hold Staff of the Week — saving updates the role straight away.";
+            return "You are Staff of the Week, so saving changes the role's colour now.";
         case "saved":
-            return "Saved for the next time you hold Staff of the Week.";
+            return "Your colour goes on the role the next time you are Staff of the Week.";
         case "executive":
-            return (
-                "Saved for the next time you hold Staff of the Week. Executives are never Staff " +
-                "of the Week, so it only applies if that changes."
-            );
+            return "Executives cannot be Staff of the Week, so this colour is only used if that changes.";
     }
 }
 

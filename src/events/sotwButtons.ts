@@ -35,7 +35,7 @@ export async function handleSotwButton(
     stagedStaffId?: string
 ): Promise<void> {
     if (!(await isExecutive(client, config, interaction.user.id))) {
-        await respond(interaction, errorCard("Staff of the Week is decided by the Executives."));
+        await respond(interaction, errorCard("Only Executives can choose Staff of the Week."));
         return;
     }
     if (!sotwEnabled(config)) {
@@ -46,7 +46,7 @@ export async function handleSotwButton(
 
     if (action === "cancel") {
         takeSet(interaction.user.id);
-        await respond(interaction, sotwCard("Nothing recorded", "Staff of the Week is unchanged."));
+        await respond(interaction, sotwCard("Cancelled", "Nothing has changed."));
         return;
     }
 
@@ -69,7 +69,7 @@ export async function handleSotwButton(
     }
     const subject = await findStaffById(new ObjectId(pending.staffId));
     if (!subject) {
-        await respond(interaction, errorCard("That member no longer has a staff record."));
+        await respond(interaction, errorCard("The bot no longer has a staff record for that member."));
         return;
     }
     const card =
@@ -87,7 +87,7 @@ export async function handleSotwRemoveModal(
     expectedStaffId: string
 ): Promise<void> {
     if (!(await isExecutive(client, config, interaction.user.id))) {
-        await respond(interaction, errorCard("Staff of the Week is decided by the Executives."));
+        await respond(interaction, errorCard("Only Executives can choose Staff of the Week."));
         return;
     }
     if (!sotwEnabled(config)) {

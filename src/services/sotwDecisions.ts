@@ -98,8 +98,8 @@ export async function setNextWeek(
         `**${name}** will be Staff of the Week for ${label(config, slots.next)}.\n` +
         (replacedName ? `This replaces **${replacedName}**.\n` : "") +
         (verdict.pendingLeave ? `${EMOJI.warning} ${name} ${PENDING_LEAVE_NOTE}.\n` : "") +
-        `-# Last week: ${minutes} of ${config.weeklyTargetMinutes} minutes. For information only; ` +
-        "meeting the minimum is not required for a pick. They are told when the week begins.";
+        `-# Last week: ${minutes} of ${config.weeklyTargetMinutes} minutes. They do not need to meet ` +
+        "the minimum to be picked. The bot tells them when the week starts.";
 
     await postNotice(
         client,
@@ -128,12 +128,12 @@ export async function skipNextWeek(
     await postNotice(
         client,
         config,
-        sotwCard("Staff of the Week skipped", `<@${actorId}> skipped ${week}: nobody will hold it, and there is no draw.` + (reason ? `\n> ${reason}` : ""))
+        sotwCard("Staff of the Week skipped", `<@${actorId}> skipped ${week}. Nobody will be Staff of the Week, and the bot will not draw a name.` + (reason ? `\n> ${reason}` : ""))
     );
     return sotwCard(
         "Week skipped",
-        `Nobody will hold Staff of the Week for ${week}, and there will be no draw. A pick before the ` +
-            "week begins replaces this.",
+        `Nobody will be Staff of the Week for ${week}, and the bot will not draw a name. To change ` +
+            `your mind, pick somebody with ${cmd("sotw set")} before the week starts.`,
         { ephemeral: true }
     );
 }
@@ -150,7 +150,7 @@ export async function grantRestOfWeek(
     const current = await findWeek(slots.current.start);
     // Holding, not a staffId: a pick left pending by a handoff that never
     // finished names somebody who holds nothing.
-    if (current && isHolding(current.status)) return errorCard("Somebody already holds Staff of the Week this week.");
+    if (current && isHolding(current.status)) return errorCard("Somebody is already Staff of the Week this week.");
 
     const name = await nameOf(client, config, subject);
     const verdict = await eligibilityOf(client, config, subject, slots.current);
@@ -172,8 +172,8 @@ export async function grantRestOfWeek(
     );
     return sotwCard(
         "Staff of the Week given",
-        `**${name}** holds Staff of the Week for the rest of this week, and has been told.` +
-            (role.granted ? "" : `\n${EMOJI.warning} The role could not be given in the community server.`),
+        `**${name}** is Staff of the Week for the rest of this week. The bot has told them.` +
+            (role.granted ? "" : `\n${EMOJI.warning} The bot could not give them the role in the community server.`),
         { ephemeral: true }
     );
 }
@@ -188,11 +188,11 @@ export async function removeHolder(
     now = new Date()
 ): Promise<RenderedMessage> {
     const holder = await currentHolder(config, now);
-    if (!holder) return errorCard("Nobody holds Staff of the Week right now.");
+    if (!holder) return errorCard("Nobody is Staff of the Week right now.");
     // The modal can sit open while the week is handed off or somebody else
     // removes and re-grants it: remove the person it named or nobody.
     if (holder.staff._id.toHexString() !== expectedStaffId) {
-        return errorCard(`That holder has changed. Run ${cmd("sotw remove", guildId)} again.`);
+        return errorCard(`Somebody else is Staff of the Week now. Run ${cmd("sotw remove", guildId)} again.`);
     }
 
     await recordRemoval(holder.week.start, holder.staff._id, actorId, reason, now);
@@ -207,9 +207,9 @@ export async function removeHolder(
     );
     return sotwCard(
         "Staff of the Week removed",
-        `**${name}** no longer holds it. They are not barred from the next two weeks, and this week ` +
-            `is not counted as theirs. Pick somebody for the rest of the week with ${cmd("sotw set", guildId)}.` +
-            (roleTaken ? "" : `\n${EMOJI.warning} The role could not be taken off in the community server.`),
+        `**${name}** is no longer Staff of the Week. They can still be picked in the next two weeks, ` +
+            `and this week does not count as one of theirs. Pick somebody for the rest of the week with ${cmd("sotw set", guildId)}.` +
+            (roleTaken ? "" : `\n${EMOJI.warning} The bot could not take the role off them in the community server.`),
         { ephemeral: true }
     );
 }
@@ -228,9 +228,9 @@ export async function viewFor(client: Client, config: StaffBotConfig, now = new 
             case "random":
                 return `${who}, drawn at random.`;
             case "skipped":
-                return `Nobody: skipped by <@${doc.decidedBy}>.`;
+                return `Nobody. <@${doc.decidedBy}> skipped it.`;
             case "empty":
-                return (doc.removedHolders?.length ?? 0) > 0 ? "Nobody: the holder was removed." : "Nobody: nobody qualified.";
+                return (doc.removedHolders?.length ?? 0) > 0 ? "Nobody. An Executive took the role away." : "Nobody.";
             case "pending":
                 return await decisionLine(client, config, doc);
         }

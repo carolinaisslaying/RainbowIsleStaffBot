@@ -29,11 +29,11 @@ export async function checkLeaveAgainstSotw(
         const holder = await currentHolder(config, now);
         const next = await findWeek(slots.next.start);
         const checks = [
-            { week: slots.current, applies: holder?.staff._id.equals(staffId) ?? false, what: "this week's holder" },
+            { week: slots.current, applies: holder?.staff._id.equals(staffId) ?? false, what: "this week's Staff of the Week" },
             {
                 week: slots.next,
                 applies: next?.status === "pending" && (next.staffId?.equals(staffId) ?? false),
-                what: "next week's pick"
+                what: "picked for next week"
             }
         ];
         for (const check of checks) {
@@ -48,8 +48,8 @@ export async function checkLeaveAgainstSotw(
                 `late:${check.week.start.getTime()}:${staffId.toHexString()}:leave`,
                 sotwCard(
                     "Staff of the Week and leave",
-                    `**${name}**, ${check.what}, now has enough approved leave to be exempt from that ` +
-                        `week. Nothing has changed; use ${cmd("sotw remove")} or ${cmd("sotw set")} if it should.`
+                    `**${name}**, ${check.what}, now has enough approved leave for that week not to count ` +
+                        `for them. The bot has not changed anything. Use ${cmd("sotw remove")} or ${cmd("sotw set")} if you want to.`
                 )
             );
         }
@@ -59,9 +59,9 @@ export async function checkLeaveAgainstSotw(
 }
 
 const CAUSE_TEXT: Record<LateCause, string> = {
-    left: "has left the community server, so Discord has already taken the role",
+    left: "has left the community server, so Discord has already removed the role",
     notStaff: "is no longer Moderation staff",
-    executive: "is now an Executive, and Executives are never Staff of the Week"
+    executive: "is now an Executive, and Executives cannot be Staff of the Week"
 };
 
 export async function checkHolderStanding(
@@ -93,9 +93,9 @@ export async function checkHolderStanding(
             config,
             `late:${holder.week.start.getTime()}:${staff._id.toHexString()}:${cause}`,
             sotwCard(
-                "Staff of the Week holder changed",
-                `**${name}**, this week's holder, ${CAUSE_TEXT[cause]}. The record still says they hold ` +
-                    `it; use ${cmd("sotw remove")} to record that and pick somebody for the rest of the week.`
+                "Change to this week's Staff of the Week",
+                `**${name}**, this week's Staff of the Week, ${CAUSE_TEXT[cause]}. The bot still lists ` +
+                    `them as Staff of the Week. Use ${cmd("sotw remove")} to change that, then pick somebody for the rest of the week.`
             )
         );
     } catch (error) {

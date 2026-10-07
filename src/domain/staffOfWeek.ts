@@ -69,22 +69,22 @@ export function isHardRefusal(eligibility: Eligibility): boolean {
 export function refusalText(reason: Refusal, name: string): string {
     switch (reason) {
         case "inactive":
-            return `**${name}** has no active staff record.`;
+            return `**${name}** is not on the active staff list.`;
         case "notStaff":
             return `**${name}** is not Moderation staff in the community server, or has left it.`;
         case "executive":
-            return `**${name}** is an Executive, and Executives are never Staff of the Week.`;
+            return `**${name}** is an Executive, and Executives cannot be Staff of the Week.`;
         case "recentHolder":
             return (
-                `**${name}** held Staff of the Week in one of the two weeks before, so they ` +
-                "cannot hold it again yet."
+                `**${name}** was Staff of the Week in one of the last two weeks, so they ` +
+                "cannot have it again yet."
             );
         case "onLeave":
-            return `**${name}** has enough approved leave that week to be exempt from it.`;
+            return `**${name}** has enough approved leave that week for the week not to count for them.`;
     }
 }
 
-export const PENDING_LEAVE_NOTE = "has leave awaiting a decision for that week";
+export const PENDING_LEAVE_NOTE = "has a leave request for that week waiting for a decision";
 
 export interface Standing {
     staffId: string;

@@ -3,8 +3,8 @@
  * replaces and extends this list, and the bot picks one at random.
  */
 export const SOTW_CONGRATULATIONS: readonly string[] = [
-    "Congratulations — you're Staff of the Week! Thank you for everything you do for the " +
-        "island. The role is yours until the week turns over."
+    "Congratulations, you are Staff of the Week! Thank you for everything you do for the " +
+        "island. The role is yours until the end of the week."
 ];
 
 export function pickCongratulation(rng: () => number): string {

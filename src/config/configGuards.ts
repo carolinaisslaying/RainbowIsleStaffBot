@@ -183,8 +183,8 @@ export function staffOfWeekRoleOrder(facts: RoleOrderFacts | null): ConfigWarnin
             {
                 key: "staffOfWeekRole",
                 text:
-                    "The Staff of the Week role does not exist in the community server any more, " +
-                    "so nobody can be given it. Choose the role again."
+                    "The Staff of the Week role no longer exists in the community server, so the " +
+                    "bot cannot give it to anybody. Choose a role again."
             }
         ];
     }
@@ -194,16 +194,16 @@ export function staffOfWeekRoleOrder(facts: RoleOrderFacts | null): ConfigWarnin
             key: "staffOfWeekRole",
             text:
                 `**${facts.roleName}** sits above the bot's highest role, so the bot cannot give it, ` +
-                "take it back or change its colour. Move the bot's role above it."
+                "take it away or change its colour. Move the bot's role above it."
         });
     }
     if (facts.colouredRoleAbove) {
         warnings.push({
             key: "staffOfWeekRole",
             text:
-                `**${facts.colouredRoleAbove}** is coloured and sits above **${facts.roleName}**. ` +
-                "Discord colours a name by the highest coloured role, so a holder with it will " +
-                "not show their Staff of the Week colour. Move the Staff of the Week role above it."
+                `**${facts.colouredRoleAbove}** has a colour and sits above **${facts.roleName}**. ` +
+                "Discord colours a name by the highest coloured role, so a Staff of the Week with " +
+                `that role will not show their colour. Move **${facts.roleName}** above it.`
         });
     }
     return warnings;

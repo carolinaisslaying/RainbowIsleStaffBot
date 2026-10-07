@@ -157,7 +157,7 @@ export const CONFIG_KEYS: Record<keyof StaffBotConfig, KeySpec> = {
     },
     staffOfWeekRole: {
         kind: "string",
-        description: "Staff of the Week, in the community server. Unset turns it off",
+        description: "The Staff of the Week role, in the community server. Leave unset to turn it off",
         target: "role",
         importance: "optional",
         group: "roles",
@@ -214,11 +214,11 @@ export const CONFIG_KEYS: Record<keyof StaffBotConfig, KeySpec> = {
     },
     staffOfWeekChannelId: {
         kind: "string",
-        description: "Staff of the Week notices for the Executives",
+        description: "Where Executives see Staff of the Week updates",
         target: "channel",
         importance: "optional",
         group: "channels",
-        consequence: "Staff of the Week notices are only logged"
+        consequence: "Staff of the Week updates are not posted anywhere"
     },
     staffOfWeekColourPickerUrl: {
         kind: "url",
@@ -316,7 +316,7 @@ export const CONFIG_KEYS: Record<keyof StaffBotConfig, KeySpec> = {
     },
     staffOfWeekReminderOffsetMinutes: {
         kind: "number",
-        description: "Minutes into the week that Executives are reminded to pick Staff of the Week",
+        description: "Minutes after the week starts that Executives are reminded to pick Staff of the Week",
         target: "plain",
         importance: "optional",
         group: "timings",

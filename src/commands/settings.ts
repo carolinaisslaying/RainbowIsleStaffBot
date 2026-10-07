@@ -66,7 +66,7 @@ export const settingsCommand: Command = {
         .addSubcommand((sub) =>
             sub
                 .setName("sotw-colour")
-                .setDescription("The colour your name takes whenever you are Staff of the Week")
+                .setDescription("The colour your name shows while you are Staff of the Week")
         )
         .addSubcommand((sub) =>
             sub
@@ -122,7 +122,7 @@ export const settingsCommand: Command = {
                     interaction,
                     noticeCard(
                         "Staff of the Week is not set up",
-                        "There is no Staff of the Week role yet, so there is no colour to choose.",
+                        "Nobody has set up a Staff of the Week role yet, so there is no colour to choose.",
                         { ephemeral: true, colour: COLOUR.staffOfWeek }
                     )
                 );

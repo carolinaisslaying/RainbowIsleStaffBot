@@ -72,10 +72,10 @@ export async function congratulate(
 ): Promise<boolean> {
     const saved = holder.sotwColour ?? null;
     const colourLine = !saved
-        ? `The role has no colour yet — choose one with ${cmd("settings sotw-colour")} and it will ` +
-          "be kept for next time."
+        ? `The role has no colour yet. Choose one with ${cmd("settings sotw-colour")} and the bot ` +
+          "keeps it for next time."
         : !colour.ok
-          ? "Your colour is saved and goes on the role as soon as the bot can reach it."
+          ? "Your colour is saved. The bot puts it on the role as soon as it can."
           : colour.downgraded
             ? (downgradeNote(saved) ?? "Your colour is on the role.")
             : "Your colour is on the role.";

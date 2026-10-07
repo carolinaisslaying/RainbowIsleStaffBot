@@ -33,7 +33,7 @@ describe("where the Staff of the Week role sits", () => {
     it("warns when the role no longer exists", () => {
         expect(
             staffOfWeekRoleOrder({ missing: true, roleName: "123", aboveBot: false, colouredRoleAbove: null })[0].text
-        ).toMatch(/does not exist/);
+        ).toMatch(/no longer exists/);
     });
 
     it("finds the highest coloured role above it, ignoring uncoloured ones", () => {
