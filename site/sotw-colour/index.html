@@ -230,6 +230,11 @@
   .name { font-weight: 500; font-size: 16px; line-height: 22px; }
   .name.fancy { color: transparent; -webkit-background-clip: text; background-clip: text; background-size: 100% 100%; }
   .name.holo { background-size: 200% 100%; animation: shimmer 4s linear infinite; }
+  /* A gradient name is the two colours and back, twice the name's width, so
+     at rest it reads first to second and on hover it flows round without a
+     seam, as Discord moves it under the pointer. */
+  .name.grad { background-size: 200% 100%; background-position: 0% 0; }
+  .msg:hover .name.grad, .style:hover .name.grad { animation: shimmer 2.4s linear infinite; }
   .light-block .name.fancy { filter: brightness(.78) saturate(1.15); }
   .badge { display: inline-grid; place-items: center; width: 20px; height: 20px; font-size: 17px; line-height: 1; }
   .badge img { width: 20px; height: 20px; }
@@ -296,7 +301,7 @@
     .popover { width: auto; left: 0 !important; right: 0; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .name.holo { animation: none; }
+    .name.holo, .msg:hover .name.grad, .style:hover .name.grad { animation: none; }
     * { transition: none !important; }
   }
 </style>
@@ -494,14 +499,14 @@ var SotwCore = (function () {
 
   // How a name is painted for a given style, using that style's current choice.
   function paint(node, style) {
-    node.classList.remove("fancy", "holo");
+    node.classList.remove("fancy", "holo", "grad");
     if (style === "solid") {
       node.style.color = css(state.solid); node.style.backgroundImage = "none";
       return;
     }
-    var stops = style === "gradient" ? state.gradient : [H.primary, H.secondary, H.tertiary, H.primary];
+    var stops = style === "gradient" ? [state.gradient[0], state.gradient[1], state.gradient[0]] : [H.primary, H.secondary, H.tertiary, H.primary];
     node.classList.add("fancy");
-    if (style === "holographic") node.classList.add("holo");
+    node.classList.add(style === "holographic" ? "holo" : "grad");
     node.style.color = "";
     node.style.backgroundImage = "linear-gradient(90deg," + stops.map(css).join(",") + ")";
   }
