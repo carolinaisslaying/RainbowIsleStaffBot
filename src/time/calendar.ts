@@ -143,6 +143,26 @@ function addCalendarDays(
 }
 
 /**
+ * Move an instant along the local wall clock by whole minutes. A DST change in
+ * between moves the result with the clock, so "Saturday 06:00" stays 06:00.
+ * `zonedToUtc` normalises minutes past 59 the way Date.UTC does.
+ */
+export function addWallClockMinutes(instant: Date, minutes: number, timeZone: string): Date {
+    const wall = wallClockIn(instant, timeZone);
+    return zonedToUtc(
+        {
+            year: wall.year,
+            month: wall.month,
+            day: wall.day,
+            hour: wall.hour,
+            minute: wall.minute + minutes,
+            second: wall.second
+        },
+        timeZone
+    );
+}
+
+/**
  * Start of the accounting week containing `instant`.
  * weekStartDay follows Date#getUTCDay: 0 Sunday, 1 Monday.
  */

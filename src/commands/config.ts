@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, type AutocompleteInteraction, type Client } from "discord.js";
+import { MessageFlags, SlashCommandBuilder, type AutocompleteInteraction, type Client } from "discord.js";
 import type { Command } from "./types.js";
 import {
     CONFIG_KEYS,
@@ -15,8 +15,10 @@ import { isExecutive } from "../domain/permissions.js";
 import {
     configWarnings,
     historyChangeWarning,
-    rewritesHistory
+    rewritesHistory,
+    staffOfWeekRoleOrder
 } from "../config/configGuards.js";
+import { staffOfWeekRoleFacts } from "../services/sotwRole.js";
 import { collections } from "../db/client.js";
 import { errorCard, noticeCard } from "../render/cards.js";
 import {
@@ -26,7 +28,7 @@ import {
     resolveGuildNames,
     setupStatus
 } from "../render/configCards.js";
-import { defer, respond } from "../discord/respond.js";
+import { defer, followUp, respond } from "../discord/respond.js";
 import { cmd } from "../discord/commandMentions.js";
 import { audit } from "../domain/audit.js";
 import { searchTimezones, describeZone } from "../time/timezones.js";
@@ -105,7 +107,7 @@ async function suggestChannels(
 
 /** Which guild a key's roles or channels belong to. */
 function guildForKey(key: keyof StaffBotConfig, config: StaffBotConfig): string {
-    // Review, recap and leaderboard log channels, and the role pinged in them, are in the staff
+    // Review, recap, leaderboard log and Staff of the Week channels, and the role pinged in them, are in the staff
     // server; everything else, including every other role, is in the community
     // server.
     if (
@@ -113,6 +115,7 @@ function guildForKey(key: keyof StaffBotConfig, config: StaffBotConfig): string 
         key === "reportChannelId" ||
         key === "recapChannelId" ||
         key === "leaderboardLogChannelId" ||
+        key === "staffOfWeekChannelId" ||
         key === "staffExecutivePingRole"
     ) {
         return config.staffGuildId;
@@ -358,7 +361,13 @@ export const configCommand: Command = {
             await defer(interaction, true);
             const fresh = await loadConfig();
             const guildNames = await resolveGuildNames(client, fresh);
-            await respond(interaction, configViewCard(fresh, guildNames, setCommand));
+            const roleOrder = staffOfWeekRoleOrder(await staffOfWeekRoleFacts(client, fresh));
+            const [first, ...rest] = configViewCard(fresh, guildNames, setCommand, roleOrder);
+            await respond(interaction, first);
+            // A follow-up is not ephemeral because the deferred reply was.
+            for (const message of rest) {
+                await followUp(interaction, { ...message, flags: message.flags | MessageFlags.Ephemeral });
+            }
             return;
         }
 
@@ -480,7 +489,10 @@ export async function applyChange(
     // Everything the document now says that will not do what its author
     // expects. Shown after the change rather than instead of it: the write
     // already happened, and policy is theirs to set. See config/configGuards.ts.
-    const warnings = configWarnings(fresh, new Date());
+    const warnings = [
+        ...configWarnings(fresh, new Date()),
+        ...staffOfWeekRoleOrder(await staffOfWeekRoleFacts(client, fresh))
+    ];
     const warningBlock =
         warnings.length === 0
             ? ""

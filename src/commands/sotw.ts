@@ -1,0 +1,90 @@
+import { SlashCommandBuilder } from "discord.js";
+import type { Command } from "./types.js";
+import { findStaffByDiscordId } from "../domain/staff.js";
+import { sotwEnabled } from "../domain/staffOfWeek.js";
+import { errorCard } from "../render/cards.js";
+import { sotwRemoveModal } from "../render/modals.js";
+import { sotwCard } from "../render/sotwCards.js";
+import { defer, respond } from "../discord/respond.js";
+import { currentHolder, nameOf } from "../services/sotwContext.js";
+import { offerOrSet, skipNextWeek, viewFor } from "../services/sotwDecisions.js";
+
+/**
+ * Staff of the Week, for the Executives. The discussion happens in their own
+ * chat; this records what they decided. Wholly Executive, so a pending pick is
+ * never shown to anybody it might be about.
+ */
+export const sotwCommand: Command = {
+    tier: "executive",
+    data: new SlashCommandBuilder()
+        .setName("sotw")
+        .setDescription("Staff of the Week: pick, skip, remove or view (Executive)")
+        .addSubcommand((sub) =>
+            sub
+                .setName("set")
+                .setDescription("Pick next week's Staff of the Week")
+                .addUserOption((option) => option.setName("user").setDescription("Who").setRequired(true))
+                .addStringOption((option) =>
+                    option.setName("reason").setDescription("Why, for the other Executives").setMaxLength(500)
+                )
+        )
+        .addSubcommand((sub) =>
+            sub
+                .setName("skip")
+                .setDescription("Have no Staff of the Week next week, and no random draw")
+                .addStringOption((option) => option.setName("reason").setDescription("Why").setMaxLength(500))
+        )
+        .addSubcommand((sub) => sub.setName("remove").setDescription("Take the role from this week's Staff of the Week"))
+        .addSubcommand((sub) => sub.setName("view").setDescription("This week, next week, and who can be picked")),
+
+    async execute({ client, config, interaction }) {
+        if (!sotwEnabled(config)) {
+            await respond(
+                interaction,
+                sotwCard(
+                    "Staff of the Week is not set up",
+                    "Nobody has chosen the Staff of the Week role yet. A bot administrator needs to " +
+                        "set it in the bot's configuration first.",
+                    { ephemeral: true }
+                )
+            );
+            return;
+        }
+
+        const sub = interaction.options.getSubcommand();
+
+        if (sub === "remove") {
+            // A modal cannot follow a defer, so this checks and opens only.
+            const holder = await currentHolder(config);
+            if (!holder) {
+                await respond(interaction, errorCard("Nobody is Staff of the Week right now."));
+                return;
+            }
+            await interaction.showModal(
+                sotwRemoveModal(await nameOf(client, config, holder.staff), holder.staff._id.toHexString())
+            );
+            return;
+        }
+
+        await defer(interaction, true);
+
+        if (sub === "view") {
+            await respond(interaction, await viewFor(client, config));
+            return;
+        }
+
+        const reason = interaction.options.getString("reason");
+        if (sub === "skip") {
+            await respond(interaction, await skipNextWeek(client, config, interaction.user.id, reason));
+            return;
+        }
+
+        const user = interaction.options.getUser("user", true);
+        const subject = await findStaffByDiscordId(user.id);
+        if (!subject) {
+            await respond(interaction, errorCard(`The bot has no staff record for <@${user.id}>.`));
+            return;
+        }
+        await respond(interaction, await offerOrSet(client, config, interaction.user.id, subject, reason));
+    }
+};

@@ -4,6 +4,8 @@ import type { StaffBotConfig } from "../config/guildConfig.js";
 import type { StaffDoc, WeeklyStatsDoc } from "../db/types.js";
 import type { WeekWindow } from "../domain/weekly.js";
 import { leaderboardVisibility, logStandings } from "../domain/leaderboard.js";
+import { creditedHolders } from "../domain/staffOfWeek.js";
+import { findWeek, toHolderRecord } from "../domain/staffOfWeekStore.js";
 import { staffChannel } from "./leaveService.js";
 import { claimLeaderboardLog } from "./notifications.js";
 import { leaderboardCard, type RenderedMessage } from "../render/cards.js";
@@ -34,6 +36,9 @@ export async function buildLeaderboardLog(
 ): Promise<RenderedMessage | null> {
     const rollups = await collections.weeklyStats().find({ weekStart: week.start }).toArray();
     if (rollups.length === 0) return null;
+
+    // The log is frozen history: it marks whoever held that closed week.
+    const credited = new Set(creditedHolders(toHolderRecord(await findWeek(week.start))));
 
     const staff = await collections
         .staff()
@@ -74,7 +79,8 @@ export async function buildLeaderboardLog(
             state: row.member.rollup.ringState,
             isViewer: false,
             onLeave: row.onLeave,
-            hidden: row.hidden
+            hidden: row.hidden,
+            staffOfWeek: credited.has(row.member.staff._id.toHexString())
         });
     }
 

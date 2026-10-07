@@ -151,3 +151,60 @@ export function historyChangeWarning(options: {
         "Run a recompute afterwards to rebuild the rollups against the new boundaries."
     );
 }
+
+/**
+ * What the bot can see about where the Staff of the Week role sits. Gathered by
+ * `staffOfWeekRoleFacts`, because it needs the guild; judged here, purely, so
+ * `/config view`, `/config set` and `/dev status` say the same thing.
+ */
+export interface RoleOrderFacts {
+    missing: boolean;
+    roleName: string;
+    aboveBot: boolean;
+    /** The highest coloured staff role above it, which would win the name's colour. */
+    colouredRoleAbove: string | null;
+}
+
+export function colouredRoleAbove(
+    sotwPosition: number,
+    roles: { name: string; position: number; colour: number }[]
+): string | null {
+    return (
+        roles
+            .filter((role) => role.colour !== 0 && role.position > sotwPosition)
+            .sort((left, right) => right.position - left.position)[0]?.name ?? null
+    );
+}
+
+export function staffOfWeekRoleOrder(facts: RoleOrderFacts | null): ConfigWarning[] {
+    if (!facts) return [];
+    if (facts.missing) {
+        return [
+            {
+                key: "staffOfWeekRole",
+                text:
+                    "The Staff of the Week role no longer exists in the community server, so the " +
+                    "bot cannot give it to anybody. Choose a role again."
+            }
+        ];
+    }
+    const warnings: ConfigWarning[] = [];
+    if (facts.aboveBot) {
+        warnings.push({
+            key: "staffOfWeekRole",
+            text:
+                `**${facts.roleName}** sits above the bot's highest role, so the bot cannot give it, ` +
+                "take it away or change its colour. Move the bot's role above it."
+        });
+    }
+    if (facts.colouredRoleAbove) {
+        warnings.push({
+            key: "staffOfWeekRole",
+            text:
+                `**${facts.colouredRoleAbove}** has a colour and sits above **${facts.roleName}**. ` +
+                "Discord colours a name by the highest coloured role, so a Staff of the Week with " +
+                `that role will not show their colour. Move **${facts.roleName}** above it.`
+        });
+    }
+    return warnings;
+}

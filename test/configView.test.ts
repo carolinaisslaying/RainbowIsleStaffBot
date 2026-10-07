@@ -321,6 +321,14 @@ describe("the configuration viewer", () => {
      * one container longer failed three assertions about content that had not
      * moved. Position is not what any of these tests are about.
      */
+    /** Every message the card goes out in, as one list of containers. */
+    const viewer = async () => {
+        const { configViewCard } = await import("../src/render/configCards.js");
+        return (...args: Parameters<typeof configViewCard>) => ({
+            components: configViewCard(...args).flatMap((message) => message.components)
+        });
+    };
+
     const containerSaying = (
         card: { components: { toJSON(): unknown }[] },
         needle: string
@@ -333,7 +341,7 @@ describe("the configuration viewer", () => {
     };
 
     it("puts a divider between every heading instead of blank lines", async () => {
-        const { configViewCard } = await import("../src/render/configCards.js");
+        const configViewCard = await viewer();
         const card = configViewCard(DEFAULT_CONFIG, NAMES, "/config set");
 
         // Servers, Roles, Channels in one container; Targets, Timings, Calendar
@@ -356,7 +364,7 @@ describe("the configuration viewer", () => {
     });
 
     it("offers export and import at the foot of the card, after the settings", async () => {
-        const { configViewCard } = await import("../src/render/configCards.js");
+        const configViewCard = await viewer();
         const card = configViewCard(DEFAULT_CONFIG, NAMES, "/config set");
         const policy = containerSaying(card, "### Targets");
         const json = JSON.stringify(policy);
@@ -372,9 +380,64 @@ describe("the configuration viewer", () => {
     });
 
     it("never separates two headings with a bare blank line", async () => {
-        const { configViewCard } = await import("../src/render/configCards.js");
+        const configViewCard = await viewer();
         const json = JSON.stringify(configViewCard(DEFAULT_CONFIG, NAMES, "/config set"));
         expect(json).not.toContain("\\n\\n### ");
+    });
+
+    it("shows warnings it was handed alongside its own", async () => {
+        const configViewCard = await viewer();
+        const card = configViewCard(DEFAULT_CONFIG, NAMES, "/config set", [
+            { key: "staffOfWeekRole", text: "The role is above the bot." }
+        ]);
+        expect(JSON.stringify(card.components.map((c) => c.toJSON()))).toContain("The role is above the bot.");
+    });
+});
+
+describe("staying under Discord's text cap", () => {
+    // Discord refuses a whole Components V2 message past 4000 displayed
+    // characters. Every key with its description already passed that at the
+    // defaults, and /config view failed outright.
+    const id = (n: number) => String(1544176524322676858n + BigInt(n));
+    const busy = config({
+        publicGuildId: id(1),
+        staffGuildId: id(2),
+        moderationDepartmentRole: id(3),
+        executiveRoles: [id(4), id(5), id(6)],
+        leadRoles: [id(7), id(8)],
+        staffRankRoles: Array.from({ length: 10 }, (_, n) => id(20 + n)),
+        trackedChannels: Array.from({ length: 30 }, (_, n) => id(40 + n)),
+        leaveChannelId: id(9),
+        reportChannelId: id(10),
+        warningChannelId: id(11),
+        staffOfWeekRole: id(12),
+        staffOfWeekChannelId: id(13),
+        staffOfWeekColourPickerUrl: "https://example.org/a/fairly/long/path/to/the/sotw-colour/picker/index.html"
+    });
+
+    it("sends every message of /config view under the cap, at the defaults and fully set", async () => {
+        const { configViewCard } = await import("../src/render/configCards.js");
+        const { displayedTextLength, MAX_DISPLAYED_TEXT } = await import("../src/render/cards.js");
+        const command = "</config set:1557208520565334148>";
+        const warning = { key: "staffOfWeekRole" as const, text: "x".repeat(300) };
+        for (const settings of [DEFAULT_CONFIG, busy]) {
+            for (const message of configViewCard(settings, NAMES, command, [warning])) {
+                const json = message.components.map((component) => component.toJSON());
+                expect(displayedTextLength(json)).toBeLessThanOrEqual(MAX_DISPLAYED_TEXT);
+            }
+        }
+    });
+
+    it("keeps reading order and never splits a container", async () => {
+        const { ContainerBuilder } = await import("discord.js");
+        const { packContainers, text } = await import("../src/render/cards.js");
+        const block = (label: string, size: number) =>
+            new ContainerBuilder().addTextDisplayComponents(text(`${label}${"x".repeat(size - label.length)}`));
+        const messages = packContainers([block("a", 1500), block("b", 1500), block("c", 1500), block("d", 100)]);
+        const labels = messages.map((message) =>
+            message.components.map((component) => JSON.stringify(component.toJSON()).match(/"content":"(\w)/)?.[1])
+        );
+        expect(labels).toEqual([["a", "b"], ["c", "d"]]);
     });
 });
 

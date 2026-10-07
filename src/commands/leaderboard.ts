@@ -10,6 +10,7 @@ import { ringStateFor } from "../domain/rings.js";
 import { isLeadOrAbove } from "../domain/permissions.js";
 import { leaderboardRowVisible, leaderboardVisibility } from "../domain/leaderboard.js";
 import { leaderboardCard, type LeaderboardRowView } from "../render/cards.js";
+import { currentHolder } from "../services/sotwContext.js";
 import { describeRings, renderRings, ringsCacheKey } from "../render/rings.js";
 import { currentWeekStats } from "../domain/weekly.js";
 import { defer, respond } from "../discord/respond.js";
@@ -162,6 +163,10 @@ export async function renderLeaderboard(
 
     const ranked = [...visible].sort((left, right) => right.minutes - left.minutes);
 
+    // The trophy marks this week's holder whichever window is shown: it is who
+    // holds the role now, not a ranking of the window.
+    const holder = await currentHolder(config);
+
     const toView = async (
         entry: LeaderboardEntry,
         rank: number
@@ -187,7 +192,8 @@ export async function renderLeaderboard(
             // Every hidden row that reaches a copy carries the padlock: a Lead's
             // copy, and the member's own row on theirs. A public copy never
             // admits one, so this is false there whatever the flag says.
-            hidden: !publicView && entry.staff.leaderboardOptOut
+            hidden: !publicView && entry.staff.leaderboardOptOut,
+            staffOfWeek: holder?.staff._id.equals(entry.staff._id) ?? false
         };
     };
 

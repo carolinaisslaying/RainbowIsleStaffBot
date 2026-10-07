@@ -1,6 +1,6 @@
 import { ObjectId } from "mongodb";
 import { collections } from "../db/client.js";
-import type { StaffDoc } from "../db/types.js";
+import type { SotwColour, StaffDoc } from "../db/types.js";
 import { audit } from "./audit.js";
 import { LruCache } from "../util/cache.js";
 
@@ -130,6 +130,17 @@ export async function setRingFace(staffId: ObjectId, faceId: string): Promise<vo
 /** Has this member ever chosen a face? */
 export function needsRingFace(staff: StaffDoc | null): boolean {
     return !staff || !staff.ringFace;
+}
+
+/**
+ * A member's own Staff of the Week colour. Only they change it, whether or not
+ * they hold the role; applying it to the role is the service's job.
+ */
+export async function setSotwColour(staffId: ObjectId, colour: SotwColour | null): Promise<void> {
+    const now = new Date();
+    await collections
+        .staff()
+        .updateOne({ _id: staffId }, { $set: { sotwColour: colour, sotwColourUpdatedAt: now, updatedAt: now } });
 }
 
 export async function setLeaderboardOptOut(

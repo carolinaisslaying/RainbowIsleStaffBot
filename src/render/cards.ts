@@ -144,6 +144,8 @@ export interface RingCardInput {
     streak?: number;
     heading?: string;
     footnote?: string;
+    /** How many weeks they have been credited with Staff of the Week, and the latest. */
+    staffOfWeek?: { times: number; last: Date | null };
 }
 
 function ringsInputFor(input: RingCardInput): RingsInput {
@@ -192,6 +194,14 @@ export function ringFigures(input: RingCardInput): string {
             input.streak === 1
                 ? "First week meeting the minimum."
                 : `**${input.streak} weeks** in a row meeting the minimum.`
+        );
+    }
+
+    if (input.staffOfWeek && input.staffOfWeek.times > 0) {
+        const times = input.staffOfWeek.times === 1 ? "once" : `${input.staffOfWeek.times} times`;
+        lines.push(
+            `${EMOJI.staffOfWeek} Staff of the Week **${times}**` +
+                (input.staffOfWeek.last ? `, most recently the week of ${ts(input.staffOfWeek.last, "D")}.` : ".")
         );
     }
     return lines.join("\n");
@@ -287,6 +297,8 @@ export interface LeaderboardRowView {
      * Executive, or the member themselves, ever sees such a row.
      */
     hidden?: boolean;
+    /** The Staff of the Week holder for the window, marked with the trophy. */
+    staffOfWeek?: boolean;
 }
 
 export interface LeaderboardCardOptions {
@@ -314,7 +326,8 @@ export function leaderboardCard(options: LeaderboardCardOptions): RenderedMessag
         const trailing = row.onLeave
             ? "on leave"
             : `${row.activityMinutes} min, ${percent(row.activityMinutes, row.target)}%`;
-        const marker = row.hidden ? ` ${EMOJI.hidden}` : "";
+        const marker =
+            (row.hidden ? ` ${EMOJI.hidden}` : "") + (row.staffOfWeek ? ` ${EMOJI.staffOfWeek}` : "");
         const suffix = row.isViewer ? " (you)" : "";
         return `${row.rank}. **${row.label}**${marker}${suffix} ${trailing}`;
     };
@@ -992,6 +1005,8 @@ export function teamRecapCard(input: {
     /** The team's own rings. Never a mark per member: see teamRecapService. */
     rings: { png: Buffer; alt: string } | null;
     rehearsal: boolean;
+    /** The new holder's name, when the recap is for the week that just closed. */
+    staffOfWeek?: string | null;
 }): RenderedMessage {
     const container = new ContainerBuilder()
         .setAccentColor(COLOUR.report)
@@ -1003,6 +1018,12 @@ export function teamRecapCard(input: {
                     `weekly minimum of ${input.teamTargetMinutes}.`
             )
         );
+
+    if (input.staffOfWeek) {
+        container.addTextDisplayComponents(
+            text(`${EMOJI.staffOfWeek} **Staff of the Week:** ${input.staffOfWeek}`)
+        );
+    }
 
     if (input.rings) {
         container.addMediaGalleryComponents(
@@ -1730,6 +1751,51 @@ export function timezoneConfirmCard(
             )
         );
     return { components: [container], files: [], flags: V2_FLAGS | MessageFlags.Ephemeral };
+}
+
+/**
+ * Discord caps the text a Components V2 message displays at 4000 characters,
+ * summed over every text display and button label in it, and refuses the
+ * whole message past that.
+ */
+export const MAX_DISPLAYED_TEXT = 4000;
+
+/** The characters a component tree contributes towards `MAX_DISPLAYED_TEXT`. */
+export function displayedTextLength(node: unknown): number {
+    if (Array.isArray(node)) return node.reduce((sum: number, child) => sum + displayedTextLength(child), 0);
+    if (!node || typeof node !== "object") return 0;
+    const record = node as Record<string, unknown>;
+    let length = 0;
+    if (typeof record.content === "string") length += record.content.length;
+    if (typeof record.label === "string") length += record.label.length;
+    for (const value of Object.values(record)) {
+        if (value && typeof value === "object") length += displayedTextLength(value);
+    }
+    return length;
+}
+
+/**
+ * Containers in order, packed into as few messages as stay under Discord's
+ * text and component caps. A container is never split, so one that is over
+ * the cap on its own still fails, and says so in its own message rather than
+ * taking the others with it.
+ */
+export function packContainers(containers: ContainerBuilder[], flags: number = V2_FLAGS): RenderedMessage[] {
+    const messages: RenderedMessage[] = [];
+    let current: ContainerBuilder[] = [];
+    let length = 0;
+    for (const container of containers) {
+        const size = displayedTextLength(container.toJSON());
+        if (current.length > 0 && (length + size > MAX_DISPLAYED_TEXT || current.length >= MAX_COMPONENTS)) {
+            messages.push({ components: current, files: [], flags });
+            current = [];
+            length = 0;
+        }
+        current.push(container);
+        length += size;
+    }
+    if (current.length > 0) messages.push({ components: current, files: [], flags });
+    return messages;
 }
 
 /** Wrap loose containers into a paged message, respecting the 40 component cap. */

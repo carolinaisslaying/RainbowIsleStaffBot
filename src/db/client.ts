@@ -13,6 +13,7 @@ import type {
     LeaveDoc,
     ShiftDoc,
     StaffDoc,
+    StaffOfWeekDoc,
     UptimeHourDoc,
     WarningDoc,
     WeeklyStatsDoc
@@ -62,7 +63,8 @@ export const collections = {
     auditLog: () => db().collection<AuditLogDoc>("auditLog"),
     deliveries: () => db().collection<DeliveryDoc>("deliveries"),
     fortnightReviews: () => db().collection<FortnightReviewDoc>("fortnightReviews"),
-    pings: () => db().collection<PingDoc>("pings")
+    pings: () => db().collection<PingDoc>("pings"),
+    staffOfWeek: () => db().collection<StaffOfWeekDoc>("staffOfWeek")
 };
 
 /**
@@ -157,4 +159,10 @@ async function ensureIndexes(target: Db): Promise<void> {
     const audit = target.collection<AuditLogDoc>("auditLog");
     await audit.createIndex({ at: -1 });
     await audit.createIndex({ targetStaffId: 1, at: -1 });
+
+    // One document per week, and every Staff of the Week read is by week start
+    // or, for /stats and the export, by who held it.
+    const staffOfWeek = target.collection<StaffOfWeekDoc>("staffOfWeek");
+    await staffOfWeek.createIndex({ weekStart: 1 }, { unique: true });
+    await staffOfWeek.createIndex({ holders: 1 });
 }

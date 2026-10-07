@@ -159,11 +159,23 @@ const id = staff._id;
 db.warnings.deleteMany({ staffId: id });
 db.fortnightAssessments.deleteMany({ staffId: id });
 db.leave.deleteMany({ staffId: id }); // or purge them one by one from the log
+
+// Staff of the Week records are never deleted: they are each week's history.
+// Take the person out of them instead.
+db.staffOfWeek.updateMany({}, { $pull: { holders: id, removedHolders: id, events: { staffId: id } } });
+db.staffOfWeek.updateMany({ staffId: id }, { $set: { staffId: null } });
+// A draw keeps the pool it drew from on its `drawn` event, by hex id.
+db.staffOfWeek.updateMany({}, { $pull: { "events.$[].detail.pool": { staffId: id.toHexString() } } });
+
 db.weeklyStats.deleteMany({ staffId: id });
 db.shifts.deleteMany({ staffId: id });
 db.activityDays.deleteMany({ staffId: id });
 db.staff.deleteOne({ _id: id });
 ```
+
+The saved Staff of the Week colour lives on the staff record, so it goes with
+`db.staff.deleteOne` above; the late-change notice receipts carry the staff ID
+and are already caught by the `deliveries` regex below.
 
 The audit log is intentionally not in that list. It records who did what, which
 is an organisational record rather than the subject's own personal information,
@@ -255,6 +267,13 @@ const id = ObjectId("PUT_STAFF_ID_HERE");
     "activityDays"
 ].forEach((name) => print(name, db[name].countDocuments({ staffId: id })));
 print("staff", db.staff.countDocuments({ _id: id }));
+[
+    "holders",
+    "removedHolders",
+    "staffId",
+    "events.staffId"
+].forEach((field) => print(`staffOfWeek.${field}`, db.staffOfWeek.countDocuments({ [field]: id })));
+print("staffOfWeek.events.detail.pool", db.staffOfWeek.countDocuments({ "events.detail.pool.staffId": id.toHexString() }));
 ```
 
 Every count should be zero after a full purge.

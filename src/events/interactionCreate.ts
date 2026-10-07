@@ -59,8 +59,11 @@ import {
     LEAVE_WITHDRAW_MODAL,
     REVIEW_BULK_MODAL,
     REVIEW_DECISION_MODAL,
-    REVIEW_SUBSET_MODAL
+    REVIEW_SUBSET_MODAL,
+    SOTW_CODE_MODAL,
+    SOTW_REMOVE_MODAL
 } from "../render/modals.js";
+import { handleSotwButton, handleSotwColourButton, handleSotwCodeModal, handleSotwRemoveModal } from "./sotwButtons.js";
 import { renderLeaderboard, type LeaderboardScope } from "../commands/leaderboard.js";
 import { canonicaliseTimezone } from "../time/timezones.js";
 import { publicGuildName, staffGuildName } from "../discord/guildNames.js";
@@ -309,6 +312,23 @@ async function routeModal(
         return;
     }
 
+    // Staff of the Week: taking the role off this week's holder, and a colour
+    // code. The holder rides in the remove modal's id, so a modal left open
+    // while the holder changed refuses rather than removing somebody else.
+    if (interaction.customId.startsWith(`${SOTW_REMOVE_MODAL}:`)) {
+        await handleSotwRemoveModal(
+            client,
+            config,
+            interaction,
+            interaction.customId.slice(`${SOTW_REMOVE_MODAL}:`.length)
+        );
+        return;
+    }
+    if (interaction.customId === SOTW_CODE_MODAL) {
+        await handleSotwCodeModal(client, config, interaction);
+        return;
+    }
+
     // Conduct warnings: issuing one, and taking one back. The subject rides in
     // the id, because the warn modal is opened from a command rather than from
     // a message and has nothing else to carry it.
@@ -400,6 +420,14 @@ async function routeButton(client: Client, interaction: import("discord.js").But
     // The Withdraw button on a warning's card in the log.
     if (namespace === "conduct") {
         await handleConductButton(client, config, interaction, first, second);
+        return;
+    }
+    if (namespace === "sotw") {
+        await handleSotwButton(client, config, interaction, first, second);
+        return;
+    }
+    if (namespace === "sotwColour") {
+        await handleSotwColourButton(client, config, interaction, first);
         return;
     }
     if (namespace === "leave") {

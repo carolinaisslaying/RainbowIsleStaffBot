@@ -19,6 +19,7 @@ export interface StaffBotConfig {
     leadRoles: string[];
     executiveRoles: string[];
     staffExecutivePingRole: string;
+    staffOfWeekRole: string;
 
     trackedChannels: string[];
     leaveChannelId: string;
@@ -26,6 +27,8 @@ export interface StaffBotConfig {
     recapChannelId: string;
     leaderboardLogChannelId: string;
     warningChannelId: string;
+    staffOfWeekChannelId: string;
+    staffOfWeekColourPickerUrl: string;
 
     accountingTimezone: string;
     weekStartDay: number;
@@ -41,6 +44,7 @@ export interface StaffBotConfig {
     reviewExecutives: boolean;
     warningExpiryDays: number;
     reviewReminderDays: number;
+    staffOfWeekReminderOffsetMinutes: number;
 
     awayAfterMinutes: number;
     autoEndAfterAwayMinutes: number;
@@ -48,7 +52,15 @@ export interface StaffBotConfig {
     heatmapLookbackWeeks: number;
 }
 
-type KeyKind = "string" | "number" | "boolean" | "stringArray" | "timezone" | "isoDate" | "weekday";
+type KeyKind =
+    | "string"
+    | "number"
+    | "boolean"
+    | "stringArray"
+    | "timezone"
+    | "isoDate"
+    | "weekday"
+    | "url";
 
 /** What a value points at, so the UI can render and autocomplete it properly. */
 export type KeyTarget = "guild" | "role" | "channel" | "plain";
@@ -143,6 +155,14 @@ export const CONFIG_KEYS: Record<keyof StaffBotConfig, KeySpec> = {
         group: "roles",
         consequence: "Leave strips the department role only, not staff roles"
     },
+    staffOfWeekRole: {
+        kind: "string",
+        description: "The Staff of the Week role, in the community server. Leave unset to turn it off",
+        target: "role",
+        importance: "optional",
+        group: "roles",
+        consequence: "Staff of the Week is off: no reminder, no handoff, no draw"
+    },
     trackedChannels: {
         kind: "stringArray",
         description: "Where participation counts, in the community server",
@@ -191,6 +211,22 @@ export const CONFIG_KEYS: Record<keyof StaffBotConfig, KeySpec> = {
         importance: "recommended",
         group: "channels",
         consequence: "Warnings still issue; there is just no durable log of them"
+    },
+    staffOfWeekChannelId: {
+        kind: "string",
+        description: "Where Executives see Staff of the Week updates",
+        target: "channel",
+        importance: "optional",
+        group: "channels",
+        consequence: "Staff of the Week updates are not posted anywhere"
+    },
+    staffOfWeekColourPickerUrl: {
+        kind: "url",
+        description: "The page members choose their Staff of the Week colour on",
+        target: "plain",
+        importance: "optional",
+        group: "channels",
+        consequence: "No picker link; colour codes and hex still work"
     },
     weeklyTargetMinutes: {
         kind: "number",
@@ -277,6 +313,15 @@ export const CONFIG_KEYS: Record<keyof StaffBotConfig, KeySpec> = {
         group: "timings",
         min: 1,
         max: 90
+    },
+    staffOfWeekReminderOffsetMinutes: {
+        kind: "number",
+        description: "Minutes after the week starts that Executives are reminded to pick Staff of the Week",
+        target: "plain",
+        importance: "optional",
+        group: "timings",
+        min: 0,
+        max: 10079
     },
     awayAfterMinutes: {
         kind: "number",
@@ -390,6 +435,11 @@ export const DEFAULT_CONFIG: StaffBotConfig = {
     recapChannelId: "",
     leaderboardLogChannelId: "",
     warningChannelId: "",
+    staffOfWeekRole: "",
+    staffOfWeekChannelId: "",
+    // 5 days 6 hours: Saturday 06:00 when weeks start Monday 00:00.
+    staffOfWeekReminderOffsetMinutes: 7560,
+    staffOfWeekColourPickerUrl: "",
     accountingTimezone: "UTC",
     weekStartDay: 1,
     fortnightAnchor: "2026-09-28T00:00:00Z",
@@ -558,6 +608,20 @@ export function parseConfigValue(key: keyof StaffBotConfig, raw: string): ParseR
                 return { ok: false, error: "Expected an ISO 8601 instant." };
             }
             return { ok: true, value: parsed.toISOString() };
+        }
+        case "url": {
+            let parsed: URL;
+            try {
+                parsed = new URL(trimmed);
+            } catch {
+                return { ok: false, error: "Expected a full address starting https://." };
+            }
+            if (parsed.protocol !== "https:") {
+                return { ok: false, error: "Expected an address starting https://." };
+            }
+            // The bot writes its own fragment on every link it builds.
+            parsed.hash = "";
+            return { ok: true, value: parsed.toString() };
         }
         default:
             return { ok: false, error: "Unsupported key kind." };

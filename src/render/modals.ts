@@ -31,6 +31,8 @@ export const REVIEW_BULK_MODAL = "reviewBulk";
 export const REVIEW_SUBSET_MODAL = "reviewSubset";
 export const CONDUCT_WARN_MODAL = "conductWarn";
 export const CONDUCT_WITHDRAW_MODAL = "conductWithdraw";
+export const SOTW_CODE_MODAL = "sotwCode";
+export const SOTW_REMOVE_MODAL = "sotwRemove";
 
 export const FIELD_START = "start";
 export const FIELD_END = "end";
@@ -39,6 +41,7 @@ export const FIELD_CONFIG_JSON = "configJson";
 export const FIELD_SUBSET_ROWS = "rows";
 export const FIELD_SUBSET_ACTION = "outcome";
 export const FIELD_TIER = "tier";
+export const FIELD_CODE = "code";
 
 /** Discord's cap on a checkbox group. The subset modal is built around it. */
 export const SUBSET_MAX = 10;
@@ -501,6 +504,56 @@ export function leaveEndModal(
             new LabelBuilder()
                 .setLabel(cancel ? "Why is it being cancelled?" : "Why is it being ended early?")
                 .setDescription("They read this. The leave card and the audit log keep it too.")
+                .setTextInputComponent(
+                    new TextInputBuilder()
+                        .setCustomId(FIELD_REASON)
+                        .setStyle(TextInputStyle.Paragraph)
+                        .setRequired(true)
+                        .setMinLength(4)
+                        .setMaxLength(1000)
+                )
+        );
+}
+
+/** A colour code from the picker, or plain hex. Prefilled with what is saved or staged. */
+export function sotwCodeModal(prefill: string | null): ModalBuilder {
+    const input = new TextInputBuilder()
+        .setCustomId(FIELD_CODE)
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMinLength(3)
+        .setMaxLength(40)
+        .setPlaceholder("SOTW1-S-FF66AA or #FF66AA");
+    if (prefill) input.setValue(prefill);
+    return new ModalBuilder()
+        .setCustomId(SOTW_CODE_MODAL)
+        .setTitle("Staff of the Week colour")
+        .addLabelComponents(
+            new LabelBuilder()
+                .setLabel("Colour code")
+                .setDescription("Paste the code the colour picker gave you, or a hex colour.")
+                .setTextInputComponent(input)
+        );
+}
+
+/**
+ * Taking the role off the current holder. The reason is required and kept. The
+ * holder's staffId rides in the id, so the submission removes the person the
+ * modal named or nobody.
+ */
+export function sotwRemoveModal(name: string, staffId: string): ModalBuilder {
+    return new ModalBuilder()
+        .setCustomId(`${SOTW_REMOVE_MODAL}:${staffId}`)
+        .setTitle("Remove Staff of the Week")
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(
+                `-# **${name}** loses the role now. They can still be picked in the next two weeks, ` +
+                    "and this week does not count as one of theirs."
+            )
+        )
+        .addLabelComponents(
+            new LabelBuilder()
+                .setLabel("Why are you removing it?")
                 .setTextInputComponent(
                     new TextInputBuilder()
                         .setCustomId(FIELD_REASON)

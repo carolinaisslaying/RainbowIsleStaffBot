@@ -9,6 +9,8 @@ import { pruneActivityCache, recomputeCounts } from "../domain/activity.js";
 import { closeWeek, catchUpMissedWeeks } from "./weeklyRollup.js";
 import { recordOnlineMinute } from "../domain/uptime.js";
 import { nextWeekStart, weekStartFor, wallClockIn, zonedToUtc } from "../time/calendar.js";
+import { nextReminderAt } from "../domain/staffOfWeek.js";
+import { sendReminder, sendReminderIfDue } from "../services/sotwNotices.js";
 import { log } from "../log.js";
 
 /**
@@ -92,6 +94,25 @@ export async function registerJobs(client: Client): Promise<void> {
         await closeWeek(client, await loadConfig(), at);
     });
 
+    // Staff of the Week's reminder, at a configurable point in the week. Read
+    // from the cached config at each re-arm, like week-close, so changing the
+    // offset or the calendar moves it without a restart.
+    schedule(
+        "sotw-reminder",
+        (from) => {
+            const current = cachedConfig();
+            return nextReminderAt(from, {
+                timeZone: current.accountingTimezone,
+                weekStartDay: current.weekStartDay,
+                offsetMinutes: current.staffOfWeekReminderOffsetMinutes
+            });
+        },
+        async (at) => {
+            const sent = await sendReminder(client, await loadConfig(), at);
+            if (sent > 0) log.info(`Sent the Staff of the Week reminder to ${sent} Executive(s)`);
+        }
+    );
+
     // Nightly popcount recompute. The hot path treats count as advisory
     // precisely so this job is what makes it true.
     schedule(
@@ -122,4 +143,7 @@ export async function registerJobs(client: Client): Promise<void> {
     // Reconcile missed runs on boot, since the container will have restarted.
     await catchUpMissedWeeks(client, config);
     await processLeaveTransitions(client, config);
+
+    // A reminder that fell due while the process was down still goes, once.
+    await sendReminderIfDue(client, config);
 }

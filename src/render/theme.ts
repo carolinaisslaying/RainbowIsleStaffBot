@@ -71,7 +71,12 @@ export const COLOUR = {
      * rung's colour. Slate rather than red, which it used to share with
      * Misconduct on the log card, and bluer than the grey that means finished.
      */
-    activityWarning: 0x6f86a8
+    activityWarning: 0x6f86a8,
+    /**
+     * Staff of the Week. Mint: not amber, which is the fortnight review's; not
+     * red; and not the gold that standings and the Caution rung already share.
+     */
+    staffOfWeek: 0x66d4cf
 } as const;
 
 /**

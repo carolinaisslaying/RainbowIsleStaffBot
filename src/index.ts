@@ -8,6 +8,7 @@ import { registerCommands } from "./commands/index.js";
 import { registerInteractionHandler } from "./events/interactionCreate.js";
 import { registerMessageHandler } from "./events/messageCreate.js";
 import { registerPresenceHandler } from "./events/presenceUpdate.js";
+import { registerSotwMemberHandler } from "./events/sotwMembers.js";
 import { reconcileOnBoot } from "./jobs/reconcile.js";
 import { removeBotStaffRecords } from "./services/botRecordCleanup.js";
 import { registerJobs } from "./jobs/index.js";
@@ -34,6 +35,7 @@ async function main(): Promise<void> {
     registerInteractionHandler(client);
     registerMessageHandler(client);
     registerPresenceHandler(client);
+    registerSotwMemberHandler(client);
 
     client.once(Events.ClientReady, async (ready) => {
         log.info(`Logged in as ${ready.user.tag}`);
