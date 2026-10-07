@@ -1,0 +1,41 @@
+name: Deploy sotw-colour to Pages
+
+on:
+    push:
+        branches: ["main"]
+        # Only redeploy when the site or this workflow changes
+        paths:
+            - "site/sotw-colour/**"
+            - ".github/workflows/pages.yml"
+    workflow_dispatch:
+
+permissions:
+    contents: read
+    pages: write
+    id-token: write
+
+concurrency:
+    group: "pages"
+    cancel-in-progress: false
+
+jobs:
+    deploy:
+        environment:
+            name: github-pages
+            url: ${{ steps.deployment.outputs.page_url }}
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+              with:
+                  # Only fetch the site directory, not the whole repo
+                  sparse-checkout: site/sotw-colour
+            - name: Setup Pages
+              uses: actions/configure-pages@v5
+            - name: Upload artifact
+              uses: actions/upload-pages-artifact@v3
+              with:
+                  path: "site/sotw-colour"
+            - name: Deploy to GitHub Pages
+              id: deployment
+              uses: actions/deploy-pages@v5
