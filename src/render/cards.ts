@@ -1753,6 +1753,51 @@ export function timezoneConfirmCard(
     return { components: [container], files: [], flags: V2_FLAGS | MessageFlags.Ephemeral };
 }
 
+/**
+ * Discord caps the text a Components V2 message displays at 4000 characters,
+ * summed over every text display and button label in it, and refuses the
+ * whole message past that.
+ */
+export const MAX_DISPLAYED_TEXT = 4000;
+
+/** The characters a component tree contributes towards `MAX_DISPLAYED_TEXT`. */
+export function displayedTextLength(node: unknown): number {
+    if (Array.isArray(node)) return node.reduce((sum: number, child) => sum + displayedTextLength(child), 0);
+    if (!node || typeof node !== "object") return 0;
+    const record = node as Record<string, unknown>;
+    let length = 0;
+    if (typeof record.content === "string") length += record.content.length;
+    if (typeof record.label === "string") length += record.label.length;
+    for (const value of Object.values(record)) {
+        if (value && typeof value === "object") length += displayedTextLength(value);
+    }
+    return length;
+}
+
+/**
+ * Containers in order, packed into as few messages as stay under Discord's
+ * text and component caps. A container is never split, so one that is over
+ * the cap on its own still fails, and says so in its own message rather than
+ * taking the others with it.
+ */
+export function packContainers(containers: ContainerBuilder[], flags: number = V2_FLAGS): RenderedMessage[] {
+    const messages: RenderedMessage[] = [];
+    let current: ContainerBuilder[] = [];
+    let length = 0;
+    for (const container of containers) {
+        const size = displayedTextLength(container.toJSON());
+        if (current.length > 0 && (length + size > MAX_DISPLAYED_TEXT || current.length >= MAX_COMPONENTS)) {
+            messages.push({ components: current, files: [], flags });
+            current = [];
+            length = 0;
+        }
+        current.push(container);
+        length += size;
+    }
+    if (current.length > 0) messages.push({ components: current, files: [], flags });
+    return messages;
+}
+
 /** Wrap loose containers into a paged message, respecting the 40 component cap. */
 export function containersMessage(
     containers: ContainerBuilder[],

@@ -301,6 +301,14 @@ footnote. It used to return "Nobody is hidden from the leaderboard" without chec
 `commands/leaderboard.ts` appended a count of the members it had just left out, so the card denied
 and reported the same fact in consecutive sentences. Callers use `.note` as it comes.
 
+**`/config view` goes out in as many messages as it needs.** Discord refuses a whole Components V2
+message past 4000 displayed characters (`MAX_DISPLAYED_TEXT`), and every key with its description
+passed that at the defaults once Staff of the Week and `reviewExecutives` landed together, so the
+command failed outright. `packContainers` (`render/cards.ts`) fills each message in reading order
+without splitting a container; the rest go out as ephemeral follow-ups, because a follow-up is not
+ephemeral just because the deferred reply was. `test/configView.test.ts` measures the card at the
+defaults and fully set.
+
 **Config transfer.** `/config view` carries **Export as JSON** and **Import JSON**.
 `config/configTransfer.ts` holds both, as pure functions over a config object. Import applies only
 the keys the paste names, which makes a partial paste a feature (copy policy between deployments

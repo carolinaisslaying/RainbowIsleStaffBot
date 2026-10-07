@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, type AutocompleteInteraction, type Client } from "discord.js";
+import { MessageFlags, SlashCommandBuilder, type AutocompleteInteraction, type Client } from "discord.js";
 import type { Command } from "./types.js";
 import {
     CONFIG_KEYS,
@@ -28,7 +28,7 @@ import {
     resolveGuildNames,
     setupStatus
 } from "../render/configCards.js";
-import { defer, respond } from "../discord/respond.js";
+import { defer, followUp, respond } from "../discord/respond.js";
 import { cmd } from "../discord/commandMentions.js";
 import { audit } from "../domain/audit.js";
 import { searchTimezones, describeZone } from "../time/timezones.js";
@@ -362,7 +362,12 @@ export const configCommand: Command = {
             const fresh = await loadConfig();
             const guildNames = await resolveGuildNames(client, fresh);
             const roleOrder = staffOfWeekRoleOrder(await staffOfWeekRoleFacts(client, fresh));
-            await respond(interaction, configViewCard(fresh, guildNames, setCommand, roleOrder));
+            const [first, ...rest] = configViewCard(fresh, guildNames, setCommand, roleOrder);
+            await respond(interaction, first);
+            // A follow-up is not ephemeral because the deferred reply was.
+            for (const message of rest) {
+                await followUp(interaction, { ...message, flags: message.flags | MessageFlags.Ephemeral });
+            }
             return;
         }
 

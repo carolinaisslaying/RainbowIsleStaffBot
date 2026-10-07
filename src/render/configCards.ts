@@ -21,8 +21,8 @@ import { exportConfig, type ConfigChange, type ImportReport } from "../config/co
 import { configWarnings, type ConfigWarning } from "../config/configGuards.js";
 import {
     V2_FLAGS,
-    containersMessage,
     noticeCard,
+    packContainers,
     separator,
     text,
     type RenderedMessage
@@ -217,7 +217,7 @@ export function configViewCard(
     guildNames: Map<string, string>,
     setCommand: string,
     extraWarnings: ConfigWarning[] = []
-): RenderedMessage {
+): RenderedMessage[] {
     // One heading per block, one divider between blocks, and nothing else
     // doing the dividing. Blank lines inside a text display look like accident;
     // a Separator is the thing Discord provides for this and it renders the
@@ -285,7 +285,10 @@ export function configViewCard(
         containers.splice(1, 0, problems);
     }
 
-    return containersMessage(containers);
+    // Every key with its description is more than one message holds — Discord
+    // refuses the whole card past 4000 characters — so it goes out in as many
+    // as it needs, in reading order.
+    return packContainers(containers);
 }
 
 /**
