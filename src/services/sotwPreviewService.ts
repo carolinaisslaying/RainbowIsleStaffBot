@@ -2,10 +2,11 @@ import type { Client } from "discord.js";
 import type { StaffBotConfig } from "../config/guildConfig.js";
 import type { SotwColour } from "../db/types.js";
 import { fetchPublicMember } from "../domain/permissions.js";
-import { describeColour, highestIconRole, twemojiUrl } from "../domain/sotwColour.js";
+import { describeColour, highestIconRole, splitEmoji, twemojiUrl } from "../domain/sotwColour.js";
 import type { PickerFragmentInput } from "../domain/sotwFragment.js";
-import { describePreview, renderSotwPreview } from "../render/sotwPreview.js";
+import { describePreview, renderSotwPreview, type NamePart } from "../render/sotwPreview.js";
 import { guildHasEnhanced } from "./sotwRole.js";
+import { findStaffByDiscordId } from "../domain/staff.js";
 import { LruCache } from "../util/cache.js";
 import { log } from "../log.js";
 
@@ -18,6 +19,8 @@ import { log } from "../log.js";
 
 export interface PreviewAssets {
     nickname: string;
+    /** The nickname with each emoji fetched as a Twemoji image. */
+    nameParts: NamePart[];
     avatar: string | null;
     badge: string | null;
     enhanced: boolean;
@@ -43,6 +46,21 @@ async function dataUri(url: string): Promise<string | null> {
         images.set(url, null);
         return null;
     }
+}
+
+/**
+ * An emoji whose image cannot be fetched is left out rather than drawn as a
+ * missing glyph: the name is still readable without it.
+ */
+async function namePartsFor(name: string): Promise<NamePart[]> {
+    const parts = await Promise.all(
+        splitEmoji(name).map(async (segment): Promise<NamePart | null> => {
+            if (segment.kind === "text") return { text: segment.text };
+            const image = await dataUri(twemojiUrl(segment.emoji));
+            return image ? { image } : null;
+        })
+    );
+    return parts.filter((part): part is NamePart => part !== null);
 }
 
 export async function previewAssets(
@@ -79,13 +97,15 @@ export async function previewAssets(
               : null
         : null;
 
-    const [avatar, badge] = await Promise.all([
+    const [avatar, badge, nameParts] = await Promise.all([
         avatarUrl ? dataUri(avatarUrl) : Promise.resolve(null),
-        badgeUrl ? dataUri(badgeUrl) : Promise.resolve(null)
+        badgeUrl ? dataUri(badgeUrl) : Promise.resolve(null),
+        namePartsFor(nickname)
     ]);
 
     return {
         nickname,
+        nameParts,
         avatar,
         badge,
         enhanced,
@@ -102,6 +122,23 @@ export async function previewAssets(
     };
 }
 
+/**
+ * The time beside the name, as a Discord message shows it: the member's own
+ * clock when they have set a timezone, the accounting one otherwise.
+ */
+export function previewTime(timeZone: string, now = new Date()): string {
+    try {
+        return new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone }).format(now);
+    } catch {
+        return new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: "UTC" }).format(now);
+    }
+}
+
+export async function previewTimeFor(config: StaffBotConfig, discordId: string, now = new Date()): Promise<string> {
+    const staff = await findStaffByDiscordId(discordId);
+    return previewTime(staff?.timezone ?? config.accountingTimezone, now);
+}
+
 export async function previewFor(
     client: Client,
     config: StaffBotConfig,
@@ -110,10 +147,12 @@ export async function previewFor(
 ): Promise<{ png: Buffer; alt: string } | null> {
     if (!colour) return null;
     const assets = await previewAssets(client, config, discordId);
-    const input = { name: assets.nickname, colour, avatar: assets.avatar, badge: assets.badge };
+    const time = await previewTimeFor(config, discordId);
+    const input = { name: assets.nickname, nameParts: assets.nameParts, colour, avatar: assets.avatar, badge: assets.badge, time };
     const key = [
         discordId,
         assets.nickname,
+        time,
         describeColour(colour),
         assets.avatar?.length ?? 0,
         assets.badge?.length ?? 0

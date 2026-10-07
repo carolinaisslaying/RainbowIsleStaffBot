@@ -13,7 +13,7 @@ import { describePreview, renderSotwPreview } from "../render/sotwPreview.js";
 import { colourSettingsCard } from "../render/sotwCards.js";
 import type { RenderedMessage } from "../render/cards.js";
 import { currentHolder } from "./sotwContext.js";
-import { previewAssets } from "./sotwPreviewService.js";
+import { previewAssets, previewTime } from "./sotwPreviewService.js";
 import { applyRoleColour } from "./sotwRole.js";
 
 /**
@@ -38,7 +38,14 @@ export async function colourCardFor(
     const assets = await previewAssets(client, config, staff.discordId);
     const preview = shown
         ? (() => {
-              const input = { name: assets.nickname, colour: shown, avatar: assets.avatar, badge: assets.badge };
+              const input = {
+                  name: assets.nickname,
+                  nameParts: assets.nameParts,
+                  colour: shown,
+                  avatar: assets.avatar,
+                  badge: assets.badge,
+                  time: previewTime(staff.timezone ?? config.accountingTimezone)
+              };
               return { png: renderSotwPreview(input), alt: describePreview(input) };
           })()
         : null;

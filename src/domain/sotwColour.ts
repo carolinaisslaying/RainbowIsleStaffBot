@@ -189,6 +189,30 @@ export function highestIconRole<T extends IconRole>(roles: T[]): T | null {
     );
 }
 
+export type NameSegment = { kind: "text"; text: string } | { kind: "emoji"; emoji: string };
+
+const PICTOGRAPHIC = /\p{Extended_Pictographic}|\p{Regional_Indicator}/u;
+
+/**
+ * A name in runs of text and single emoji, split on whole graphemes so a
+ * flag, a skin tone or a ZWJ family stays one emoji. The preview's fonts have
+ * no emoji, so each one is drawn as a Twemoji image rather than a missing
+ * glyph. A keycap digit or a bare symbol with no emoji presentation stays text.
+ */
+export function splitEmoji(name: string): NameSegment[] {
+    const segments: NameSegment[] = [];
+    for (const { segment } of new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(name)) {
+        if (PICTOGRAPHIC.test(segment)) {
+            segments.push({ kind: "emoji", emoji: segment });
+            continue;
+        }
+        const last = segments.at(-1);
+        if (last?.kind === "text") last.text += segment;
+        else segments.push({ kind: "text", text: segment });
+    }
+    return segments;
+}
+
 /** Twemoji's file name: code points in hex, a lone U+FE0F dropped unless joined by ZWJ. */
 export function twemojiCodepoints(emoji: string): string {
     const points = [...emoji].map((char) => char.codePointAt(0) as number);

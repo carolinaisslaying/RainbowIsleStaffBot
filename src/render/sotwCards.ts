@@ -190,7 +190,9 @@ export function colourSettingsCard(input: {
 
     const container = new ContainerBuilder()
         .setAccentColor(COLOUR.staffOfWeek)
-        .addTextDisplayComponents(text(`${heading}\n${colourStatusText(input.status)}`));
+        // After a save or a refused code, the message is the news; the status
+        // line would only say the same thing again above the picture.
+        .addTextDisplayComponents(text(input.message ? heading : `${heading}\n${colourStatusText(input.status)}`));
 
     const files: AttachmentBuilder[] = [];
     if (input.preview) {

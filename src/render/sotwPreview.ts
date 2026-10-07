@@ -7,49 +7,83 @@ import { HOLOGRAPHIC, hexOf } from "./sotwPalette.js";
 import { LruCache } from "../util/cache.js";
 
 /**
- * A mock Discord message in the member's chosen colour, on the dark theme and
- * the light one, so they see what everybody else will.
+ * A mock Discord message in the member's chosen colour, once on each of
+ * Discord's four themes (Ash, Dark, Onyx and Light), the way the picker page
+ * shows it, so they see what everybody else will.
  *
  * The name is the public-guild nickname, not `staffDisplayName`'s staff-server
  * one: the colour only exists in the community server, so that is the name it
- * colours. A still image shows the colours and not Discord's shimmer.
+ * colours. A still image shows the colours and not Discord's shimmer. On
+ * Light, a gradient or holographic name is darkened, as Discord darkens it.
  *
- * Pure: the avatar and badge arrive as data URIs fetched by the service.
+ * Pure: the avatar and badge arrive as data URIs fetched by the service, and
+ * the time beside the name is formatted by the caller.
  */
 
 export const PREVIEW_FILE = "sotw-preview.png";
+
+export const PREVIEW_MESSAGE = "Staff of the Week!";
 
 export interface SotwPreviewInput {
     name: string;
     colour: SotwColour | null;
     avatar: string | null;
     badge: string | null;
+    /** The time shown beside the name, already formatted. Omitted when null. */
+    time?: string | null;
+    /**
+     * The name in runs of text and emoji images (data URIs), because the
+     * preview's fonts have no emoji. Absent means the name is plain text.
+     */
+    nameParts?: NamePart[] | null;
 }
 
+export type NamePart = { text: string } | { image: string };
+
+const EMOJI_SIZE = 20;
+
 const WIDTH = 520;
-const PAD = 16;
+const PAD = 12;
 const ROW = 76;
-const GAP = 8;
-const HEIGHT = PAD * 2 + ROW * 2 + GAP;
-const AVATAR = 40;
-const NAME_SIZE = 16;
+const HEIGHT = PAD * 2 + ROW * 4;
+const AVATAR = 44;
+const NAME_SIZE = 19;
+const BODY_SIZE = 18;
+const STAMP_SIZE = 13;
+const TAG_SIZE = 13;
+const LIGHT_DARKEN = 0.78;
 
 const THEMES = [
-    { id: "dark", ground: "#313338", body: "#DBDEE1", plainName: "#F2F3F5", muted: "#949BA4", placeholder: "#5865F2" },
-    { id: "light", ground: "#FFFFFF", body: "#313338", plainName: "#060607", muted: "#5C5E66", placeholder: "#5865F2" }
+    { id: "ash", label: "Ash", ground: "#2C2D32", body: "#DBDEE1", plainName: "#F2F3F5", muted: "#949BA4", light: false },
+    { id: "dark", label: "Dark", ground: "#1A1A1E", body: "#DBDEE1", plainName: "#F2F3F5", muted: "#949BA4", light: false },
+    { id: "onyx", label: "Onyx", ground: "#000000", body: "#D4D5D9", plainName: "#F2F3F5", muted: "#8C8D94", light: false },
+    { id: "light", label: "Light", ground: "#FBFBFB", body: "#313338", plainName: "#060607", muted: "#5C5E66", light: true }
 ] as const;
 
-/** A bold 16px Inter glyph averages about 9px; close enough to seat the badge. */
-const approxNameWidth = (name: string) => [...name].length * 9.2;
+type Theme = (typeof THEMES)[number];
 
-function nameFill(colour: SotwColour | null, theme: (typeof THEMES)[number]): { defs: string; fill: string } {
+/** A semibold 19px Inter glyph averages about 11px; close enough to seat what follows the name. */
+const approxTextWidth = (text: string) => [...text].length * 10.9;
+
+/** Each channel scaled towards black, as Discord darkens a gradient name on Light. */
+function darken(value: number, factor: number): number {
+    const channel = (shift: number) => Math.round(((value >> shift) & 255) * factor);
+    return (channel(16) << 16) | (channel(8) << 8) | channel(0);
+}
+
+/**
+ * Spans the whole name in user space, so a gradient runs once across text
+ * broken up by emoji rather than restarting in every run.
+ */
+function nameFill(colour: SotwColour | null, theme: Theme, span: { x1: number; x2: number }): { defs: string; fill: string } {
     if (!colour) return { defs: "", fill: theme.plainName };
     if (colour.style === "solid") return { defs: "", fill: hexOf(colour.primary) };
     const id = `sotw-name-${theme.id}`;
-    const stops =
+    const raw =
         colour.style === "gradient"
             ? [colour.primary, colour.secondary]
             : [HOLOGRAPHIC.primary, HOLOGRAPHIC.secondary, HOLOGRAPHIC.tertiary];
+    const stops = theme.light ? raw.map((stop) => darken(stop, LIGHT_DARKEN)) : raw;
     const stopMarkup = stops
         .map((stop, index) => {
             const offset = round((index / (stops.length - 1)) * 100);
@@ -57,41 +91,72 @@ function nameFill(colour: SotwColour | null, theme: (typeof THEMES)[number]): { 
         })
         .join("");
     return {
-        defs: `<linearGradient id="${id}" x1="0" y1="0" x2="1" y2="0">${stopMarkup}</linearGradient>`,
+        defs:
+            `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${round(span.x1)}" y1="0" ` +
+            `x2="${round(span.x2)}" y2="0">${stopMarkup}</linearGradient>`,
         fill: `url(#${id})`
     };
 }
 
-function row(input: SotwPreviewInput, theme: (typeof THEMES)[number], top: number): { defs: string; body: string } {
-    const fill = nameFill(input.colour, theme);
+function row(input: SotwPreviewInput, theme: Theme, top: number): { defs: string; body: string } {
     const clipId = `sotw-avatar-${theme.id}`;
     const cx = PAD + 16 + AVATAR / 2;
-    const cy = top + 18 + AVATAR / 2;
+    const cy = top + ROW / 2;
     const nameX = PAD + 16 + AVATAR + 16;
-    const nameY = top + 34;
-    const badgeX = round(nameX + approxNameWidth(input.name) + 6);
+    const nameY = top + 33;
+
+    const parts: NamePart[] = input.nameParts && input.nameParts.length > 0 ? input.nameParts : [{ text: input.name }];
+    const placed: { part: NamePart; x: number }[] = [];
+    let cursor = nameX;
+    for (const part of parts) {
+        placed.push({ part, x: cursor });
+        cursor += "text" in part ? approxTextWidth(part.text) : EMOJI_SIZE + 2;
+    }
+    const nameEnd = cursor;
+    const fill = nameFill(input.colour, theme, { x1: nameX, x2: Math.max(nameEnd, nameX + 1) });
+    const name = placed
+        .map(({ part, x }) =>
+            "text" in part
+                ? `<text class="sotw-name" x="${round(x)}" y="${nameY}" fill="${fill.fill}" font-size="${NAME_SIZE}" ` +
+                  `font-weight="600" font-family="${FONT_STACK}" xml:space="preserve">${escapeXml(part.text)}</text>`
+                : `<image class="sotw-name-emoji" href="${part.image}" x="${round(x)}" y="${nameY - 16}" ` +
+                  `width="${EMOJI_SIZE}" height="${EMOJI_SIZE}"/>`
+        )
+        .join("");
+    const badgeX = round(nameEnd + 6);
+    const stampX = input.badge ? badgeX + 26 : badgeX + 2;
 
     const avatar = input.avatar
         ? `<image class="sotw-avatar" href="${input.avatar}" x="${cx - AVATAR / 2}" y="${cy - AVATAR / 2}" ` +
           `width="${AVATAR}" height="${AVATAR}" clip-path="url(#${clipId})"/>`
-        : `<circle class="sotw-avatar" cx="${cx}" cy="${cy}" r="${AVATAR / 2}" fill="${theme.placeholder}"/>`;
+        : `<circle class="sotw-avatar" cx="${cx}" cy="${cy}" r="${AVATAR / 2}" fill="#5865F2"/>`;
 
     const badge = input.badge
-        ? `<image class="sotw-badge" href="${input.badge}" x="${badgeX}" y="${nameY - 15}" width="18" height="18"/>`
+        ? `<image class="sotw-badge" href="${input.badge}" x="${badgeX}" y="${nameY - 17}" width="20" height="20"/>`
         : "";
+
+    const stamp = input.time
+        ? `<text class="sotw-time" x="${stampX}" y="${nameY - 1}" fill="${theme.muted}" font-size="${STAMP_SIZE}" ` +
+          `font-family="${FONT_STACK}">${escapeXml(input.time)}</text>`
+        : "";
+
+    const tag =
+        `<text class="sotw-theme" x="${WIDTH - PAD - 14}" y="${top + 22}" text-anchor="end" fill="${theme.muted}" ` +
+        `font-size="${TAG_SIZE}" font-weight="600" font-family="${FONT_STACK}">${theme.label}</text>`;
 
     return {
         defs:
             fill.defs +
             `<clipPath id="${clipId}"><circle cx="${cx}" cy="${cy}" r="${AVATAR / 2}"/></clipPath>`,
         body:
-            `<rect x="${PAD}" y="${top}" width="${WIDTH - PAD * 2}" height="${ROW}" rx="8" fill="${theme.ground}"/>` +
+            `<rect class="sotw-row" x="${PAD}" y="${top}" width="${WIDTH - PAD * 2}" height="${ROW}" fill="${theme.ground}"/>` +
             avatar +
-            `<text class="sotw-name" x="${nameX}" y="${nameY}" fill="${fill.fill}" font-size="${NAME_SIZE}" ` +
-            `font-weight="bold" font-family="${FONT_STACK}">${escapeXml(input.name)}</text>` +
+            name +
             badge +
-            `<text x="${nameX}" y="${nameY + 22}" fill="${theme.body}" font-size="14" ` +
-            `font-family="${FONT_STACK}">Staff of the Week, reporting for duty.</text>`
+            stamp +
+            tag +
+            `<text x="${nameX}" y="${nameY + 25}" fill="${theme.body}" font-size="${BODY_SIZE}" ` +
+            `font-family="${FONT_STACK}">${PREVIEW_MESSAGE}</text>`
     };
 }
 
@@ -104,14 +169,17 @@ export function describePreview(input: SotwPreviewInput): string {
               : input.colour.style === "gradient"
                 ? `a gradient from ${hexOf(input.colour.primary)} to ${hexOf(input.colour.secondary)}`
                 : "Holographic";
-    return `${input.name}'s name in ${colour}, on Discord's dark and light themes.`;
+    return `${input.name}'s name in ${colour}, on Discord's Ash, Dark, Onyx and Light themes.`;
 }
 
 export function sotwPreviewSvg(input: SotwPreviewInput): string {
-    const rows = THEMES.map((theme, index) => row(input, theme, PAD + index * (ROW + GAP)));
+    const rows = THEMES.map((theme, index) => row(input, theme, PAD + index * ROW));
+    const inner = WIDTH - PAD * 2;
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
-    <defs>${rows.map((part) => part.defs).join("")}</defs>
+    <defs>${rows.map((part) => part.defs).join("")}<clipPath id="sotw-frame"><rect x="${PAD}" y="${PAD}" width="${inner}" height="${ROW * 4}" rx="10"/></clipPath></defs>
+    <g clip-path="url(#sotw-frame)">
     ${rows.map((part) => part.body).join("\n    ")}
+    </g>
     <title>${escapeXml(describePreview(input))}</title>
 </svg>`;
 }
