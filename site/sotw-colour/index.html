@@ -10,54 +10,100 @@
 <style>
   /* Discord's own surfaces, sampled from the role editor. */
   :root {
-    --bg: #1b1b1f;
+    --backdrop: #0e0e10;
+    --panel: #1b1b1f;
     --raised: #232328;
     --well: #121214;
-    --input: #1a1a1e;
-    --line: #2e2f35;
+    --input: #141417;
+    --line: #2a2b30;
     --line-strong: #3b3c43;
     --text: #fbfbfb;
     --text-normal: #dfe0e2;
     --muted: #9b9ca3;
     --blurple: #5865f2;
-    --blurple-hover: #4752c4;
     --green: #248046;
     --green-hover: #1a6334;
     --focus: #00a8fc;
+    --glow-a: #e91e63;
+    --glow-b: #e91e63;
+    --pad: 32px;
     --radius-s: 4px;
     --radius-m: 8px;
-    --radius-l: 12px;
+    --radius-l: 16px;
     --font: "gg sans", "Noto Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
-  html { background: var(--bg); }
+  html { background: var(--backdrop); }
   body {
-    margin: 0; min-height: 100vh; background: var(--bg); color: var(--text-normal);
-    font: 16px/1.375 var(--font); -webkit-font-smoothing: antialiased;
+    margin: 0; min-height: 100vh; background: var(--backdrop); color: var(--text-normal);
+    font: 16px/1.375 var(--font); -webkit-font-smoothing: antialiased; overflow-x: hidden;
   }
   button { font: inherit; color: inherit; }
   button:focus-visible, input:focus-visible, [tabindex]:focus-visible {
     outline: 2px solid var(--focus); outline-offset: 2px;
   }
 
-  main { max-width: 660px; margin: 0 auto; padding: 40px 16px 136px; }
+  /* The room behind the modal takes on the colour being chosen, softly, the
+     way a role colour spills across a member list. */
+  .ambient { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+  .ambient span {
+    position: absolute; width: 70vmax; height: 70vmax; border-radius: 50%;
+    filter: blur(110px); opacity: .28; transition: background-color .6s ease;
+  }
+  .ambient .a { top: -38vmax; left: -22vmax; background: var(--glow-a); }
+  .ambient .b { bottom: -44vmax; right: -26vmax; background: var(--glow-b); opacity: .2; }
+  .ambient::after {
+    content: ""; position: absolute; inset: 0;
+    background-image: radial-gradient(rgba(255,255,255,.035) 1px, transparent 1px);
+    background-size: 22px 22px;
+    -webkit-mask-image: linear-gradient(to bottom, #000, transparent 70%);
+    mask-image: linear-gradient(to bottom, #000, transparent 70%);
+  }
 
-  .intro { margin-bottom: 32px; }
-  h1 { margin: 0 0 8px; color: var(--text); font-size: 24px; line-height: 30px; font-weight: 700; }
-  .intro p { margin: 0; color: var(--muted); font-size: 15px; max-width: 60ch; }
-  .intro strong { color: var(--text-normal); font-weight: 600; }
+  .shell { position: relative; z-index: 1; padding: 48px 24px 56px; }
+  .modal {
+    max-width: 720px; margin: 0 auto; background: var(--panel); border-radius: var(--radius-l);
+    border: 1px solid rgba(255,255,255,.06);
+    box-shadow: 0 24px 64px rgba(0,0,0,.55), 0 2px 0 rgba(255,255,255,.03) inset;
+  }
 
-  section + section { margin-top: 32px; padding-top: 32px; border-top: 1px solid var(--line); }
-  h2 { margin: 0 0 4px; color: var(--text); font-size: 18px; line-height: 24px; font-weight: 600; }
-  .desc { margin: 0 0 16px; color: var(--muted); font-size: 15px; }
+  /* Header: the role's own icon beside the title, as the role editor leads
+     with the role. */
+  .modal-head {
+    display: flex; gap: 18px; align-items: center; padding: var(--pad) var(--pad) 28px;
+    border-bottom: 1px solid var(--line);
+    background: linear-gradient(to bottom, rgba(255,255,255,.025), transparent);
+    border-radius: var(--radius-l) var(--radius-l) 0 0;
+  }
+  .role-icon {
+    flex: none; width: 64px; height: 64px; border-radius: 14px; background: var(--well);
+    display: grid; place-items: center; font-size: 34px; line-height: 1;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
+  }
+  .role-icon img { width: 40px; height: 40px; }
+  .kicker {
+    display: flex; align-items: center; gap: 8px; margin: 0 0 4px; color: var(--muted);
+    font-size: 14px; font-weight: 500;
+  }
+  .kicker .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--glow-a); box-shadow: 0 0 0 3px rgba(255,255,255,.06); }
+  h1 { margin: 0; color: var(--text); font-size: 26px; line-height: 32px; font-weight: 800; letter-spacing: -.01em; }
+  .lede { margin: 6px 0 0; color: var(--muted); font-size: 15px; line-height: 21px; max-width: 54ch; }
+  .lede strong { color: var(--text-normal); font-weight: 600; }
+
+  .modal-body { padding: 8px var(--pad) 0; }
+  section { padding: 28px 0; }
+  section + section { border-top: 1px solid var(--line); }
+  .section-head { margin-bottom: 16px; }
+  h2 { margin: 0; color: var(--text); font-size: 20px; line-height: 26px; font-weight: 700; }
+  .desc { margin: 4px 0 0; color: var(--muted); font-size: 15px; line-height: 20px; max-width: 62ch; }
   .hint { margin: 12px 0 0; color: var(--muted); font-size: 14px; }
 
   /* Role style: three small previews, the way Discord offers them. */
-  .styles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+  .styles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
   .style {
     padding: 0; border: 2px solid transparent; border-radius: var(--radius-m);
-    background: var(--well); cursor: pointer; overflow: hidden; text-align: left;
+    background: var(--well); cursor: pointer; overflow: hidden; text-align: left; min-width: 0;
     transition: border-color .12s ease;
   }
   .style:hover:not(:disabled) { border-color: var(--line-strong); }
@@ -71,10 +117,9 @@
   .style-sample .says { color: var(--text-normal); font-size: 15px; }
   .style-label {
     display: block; padding: 6px 8px; background: #26262b; color: var(--muted);
-    font-size: 14px; font-weight: 500; text-align: center;
+    font-size: 14px; font-weight: 500; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .style[aria-checked="true"] .style-label { background: #2f2f35; color: var(--text); }
-  .style:disabled .style-label::after { content: " · not on this server"; }
 
   /* Role colour */
   .colour-area { position: relative; }
@@ -97,15 +142,15 @@
   .dropper[aria-expanded="true"] { box-shadow: 0 0 0 3px rgba(255,255,255,.35); }
   .dropper svg { width: 18px; height: 18px; }
 
-  .swatches { display: grid; grid-template-columns: repeat(10, 24px); gap: 12px 9px; }
+  .swatches { flex: 1; min-width: 0; max-width: 330px; display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 12px 9px; }
   .swatch {
-    width: 24px; height: 24px; border-radius: 50%; border: 0; padding: 0; cursor: pointer;
+    width: 100%; aspect-ratio: 1; max-width: 24px; border-radius: 50%; border: 0; padding: 0; cursor: pointer;
     display: grid; place-items: center; transition: transform .1s ease;
   }
   .swatch:hover { transform: scale(1.12); }
-  .presets { display: grid; grid-template-columns: repeat(6, 50px); gap: 8px 10px; }
+  .presets { flex: 1; min-width: 0; max-width: 360px; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px 10px; }
   .pill {
-    width: 50px; height: 26px; border-radius: 13px; border: 0; padding: 0; cursor: pointer;
+    width: 100%; height: 26px; border-radius: 13px; border: 0; padding: 0; cursor: pointer;
     display: grid; place-items: center; transition: transform .1s ease;
   }
   .pill:hover { transform: scale(1.06); }
@@ -120,16 +165,16 @@
 
   /* The picker: a square, a hue bar and a hex box, as Discord draws it. */
   .popover {
-    position: absolute; z-index: 10; width: 280px; padding: 16px; border-radius: var(--radius-m);
+    position: absolute; z-index: 30; width: 280px; max-width: 100%; padding: 16px; border-radius: var(--radius-m);
     background: #212126; border: 1px solid var(--line-strong);
-    box-shadow: 0 8px 24px rgba(0,0,0,.45);
+    box-shadow: 0 12px 32px rgba(0,0,0,.55);
   }
   .sv {
-    position: relative; height: 170px; border-radius: var(--radius-s); cursor: crosshair; touch-action: none;
+    position: relative; height: 160px; border-radius: var(--radius-s); cursor: crosshair; touch-action: none;
     background: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, transparent);
   }
   .knob {
-    position: absolute; width: 12px; height: 12px; border-radius: 50%; border: 2px solid #fff;
+    position: absolute; width: 14px; height: 14px; border-radius: 50%; border: 2px solid #fff;
     box-shadow: 0 0 0 1px rgba(0,0,0,.5); transform: translate(-50%, -50%); pointer-events: none;
   }
   .hue {
@@ -163,42 +208,48 @@
     outline: none; text-transform: lowercase;
   }
 
-  /* Preview: one message per Discord theme. */
+  /* Preview: one message per Discord theme, labelled down the side. */
   .previews { border-radius: var(--radius-m); overflow: hidden; border: 1px solid var(--line); }
-  .msg { display: flex; gap: 16px; padding: 14px 16px; }
+  .msg { position: relative; display: flex; gap: 16px; padding: 14px 16px; }
   .msg.ash { background: #2c2d32; --stamp: #949ba4; color: #dbdee1; }
   .msg.dark { background: #1a1a1e; --stamp: #949ba4; color: #dbdee1; }
   .msg.onyx { background: #000; --stamp: #8c8d94; color: #d4d5d9; }
   .light-block { background: #fbfbfb; }
   .msg.light { --stamp: #5c5e66; color: #313338; }
-  .light-note { margin: 0; padding: 0 16px 12px; color: #5c5e66; font-size: 13px; }
+  .theme-tag {
+    position: absolute; top: 10px; right: 12px; font-size: 12px; font-weight: 600; color: var(--stamp); opacity: .8;
+  }
+  .light-note { margin: 0; padding: 0 16px 12px 72px; color: #5c5e66; font-size: 13px; }
   .avatar {
     flex: none; width: 40px; height: 40px; border-radius: 50%; object-fit: cover;
     background: var(--blurple); color: #fff; display: grid; place-items: center;
     font-weight: 600; font-size: 17px; overflow: hidden;
   }
   .lines { min-width: 0; }
-  .head { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .head { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; padding-right: 56px; }
   .name { font-weight: 500; font-size: 16px; line-height: 22px; }
   .name.fancy { color: transparent; -webkit-background-clip: text; background-clip: text; background-size: 100% 100%; }
   .name.holo { background-size: 200% 100%; animation: shimmer 4s linear infinite; }
-  .light .name.fancy, .light-block .name.fancy { filter: brightness(.78) saturate(1.15); }
+  .light-block .name.fancy { filter: brightness(.78) saturate(1.15); }
   .badge { display: inline-grid; place-items: center; width: 20px; height: 20px; font-size: 17px; line-height: 1; }
   .badge img { width: 20px; height: 20px; }
   .stamp { margin-left: 4px; color: var(--stamp); font-size: 12px; line-height: 22px; }
   .says { font-size: 16px; line-height: 22px; }
   @keyframes shimmer { from { background-position: 0% 0; } to { background-position: 200% 0; } }
 
-  /* Docked like Discord's "unsaved changes" bar, because that is the moment
-     the person is ready to take the result away. */
+  /* The code rides at the foot of the modal, like Discord's "unsaved changes"
+     bar, and stays in reach while scrolling through the preview. */
   .dock {
-    position: fixed; left: 0; right: 0; bottom: 16px; padding: 0 16px; pointer-events: none;
+    position: sticky; bottom: 0; z-index: 20; padding: 16px var(--pad) var(--pad);
+    background: linear-gradient(to bottom, rgba(27,27,31,0), var(--panel) 24px);
+    border-radius: 0 0 var(--radius-l) var(--radius-l);
   }
   .dock-bar {
-    max-width: 628px; margin: 0 auto; pointer-events: auto;
     display: flex; align-items: center; gap: 12px; padding: 10px 10px 10px 16px;
-    border-radius: var(--radius-m); background: #232629; box-shadow: 0 6px 20px rgba(0,0,0,.45);
+    border-radius: var(--radius-m); background: #26282c; box-shadow: 0 6px 20px rgba(0,0,0,.4);
+    border: 1px solid rgba(255,255,255,.05);
   }
+  .dock-swatch { flex: none; width: 32px; height: 32px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(255,255,255,.15); }
   .dock-text { flex: 1; min-width: 0; }
   .dock-label { display: block; color: var(--muted); font-size: 13px; line-height: 16px; }
   .dock-code {
@@ -213,23 +264,35 @@
   .copy:hover { background: var(--green-hover); }
   .copy.done { background: var(--blurple); }
 
-  .footnote { margin: 24px 0 0; color: var(--muted); font-size: 13px; }
+  .footnote { max-width: 720px; margin: 16px auto 0; padding: 0 8px; color: var(--muted); font-size: 13px; text-align: center; }
 
-  @media (max-width: 600px) {
-    main { padding-top: 28px; }
+  @media (max-width: 720px) {
+    :root { --pad: 20px; }
+    .shell { padding: 16px 12px 32px; }
+    .modal-head { gap: 14px; padding-bottom: 22px; }
+    .role-icon { width: 52px; height: 52px; font-size: 28px; border-radius: 12px; }
+    .role-icon img { width: 32px; height: 32px; }
+    h1 { font-size: 22px; line-height: 28px; }
+    h2 { font-size: 18px; line-height: 24px; }
+    section { padding: 22px 0; }
+    .row { flex-direction: column; }
+    .tile-custom, .tile-gradient { width: 100%; }
+    .tile-custom { height: 52px; }
+    .swatches, .presets { width: 100%; max-width: none; }
+    .swatches { gap: 10px 6px; }
+    .swatch { max-width: none; }
+  }
+  @media (max-width: 480px) {
+    .modal-head { flex-direction: column; align-items: flex-start; }
     .styles { gap: 8px; }
     .style-sample { padding: 10px 0 10px 8px; gap: 8px; }
     .style-sample .avatar { width: 28px; height: 28px; font-size: 13px; }
     .style-sample .name, .style-sample .says { font-size: 13px; }
-    .style-label { font-size: 13px; }
-    .style:disabled .style-label::after { content: ""; }
-    .row { flex-direction: column; }
-    .tile-custom { width: 100%; height: 48px; }
-    .tile-gradient { width: 100%; }
-    .swatches { grid-template-columns: repeat(10, minmax(0, 1fr)); width: 100%; gap: 10px 6px; }
-    .swatch { width: 100%; height: auto; aspect-ratio: 1; }
-    .presets { grid-template-columns: repeat(6, minmax(0, 1fr)); width: 100%; }
-    .pill { width: 100%; }
+    .style-label { font-size: 13px; padding: 6px 4px; }
+    .theme-tag { display: none; }
+    .head { padding-right: 0; }
+    .light-note { padding-left: 16px; }
+    .dock-swatch { display: none; }
     .popover { width: auto; left: 0 !important; right: 0; }
   }
   @media (prefers-reduced-motion: reduce) {
@@ -245,21 +308,33 @@
   <symbol id="i-dropper" viewBox="0 0 24 24"><path fill="#fff" d="M21.04 2.96a3.3 3.3 0 0 0-4.66 0l-2.6 2.6-.7-.7a1 1 0 0 0-1.42 1.42l.71.7-7.5 7.5a3 3 0 0 0-.84 1.7l-.3 2.06-.94.94a1.5 1.5 0 0 0 2.12 2.12l.94-.94 2.06-.3a3 3 0 0 0 1.7-.84l7.5-7.5.7.71a1 1 0 0 0 1.42-1.42l-.7-.7 2.6-2.6a3.3 3.3 0 0 0 0-4.66ZM8.25 18.3a1 1 0 0 1-.57.28l-1.6.23.23-1.6a1 1 0 0 1 .28-.57l7.5-7.5 1.66 1.66-7.5 7.5Z"/></symbol>
 </svg>
 
-<main>
-  <header class="intro">
-    <h1>Your Staff of the Week colour</h1>
-    <p>Choose how your name looks while you are Staff of the Week, then copy the code and paste it into <strong>Enter code</strong> in <strong>/settings sotw-colour</strong>.</p>
+<div class="ambient" aria-hidden="true"><span class="a"></span><span class="b"></span></div>
+
+<div class="shell">
+<main class="modal">
+  <header class="modal-head">
+    <div class="role-icon" id="role-icon" aria-hidden="true">🏆</div>
+    <div>
+      <p class="kicker"><span class="dot"></span>Staff of the Week</p>
+      <h1>Choose your colour</h1>
+      <p class="lede">Pick how your name looks while you are Staff of the Week, then copy the code into <strong>Enter code</strong> in <strong>/settings sotw-colour</strong>.</p>
+    </div>
   </header>
 
+  <div class="modal-body">
   <section aria-labelledby="style-heading">
-    <h2 id="style-heading">Role style</h2>
+    <div class="section-head">
+      <h2 id="style-heading">Role style</h2>
+    </div>
     <div class="styles" role="radiogroup" aria-labelledby="style-heading" id="styles"></div>
     <p class="hint" id="enhanced-note" hidden>This server cannot show gradient or holographic roles yet, so only solid colours are available.</p>
   </section>
 
   <section aria-labelledby="colour-heading">
-    <h2 id="colour-heading">Role colour</h2>
-    <p class="desc">Your name shows the colour of the highest role you have, so this applies while Staff of the Week is your top coloured role.</p>
+    <div class="section-head">
+      <h2 id="colour-heading">Role colour</h2>
+      <p class="desc">Your name shows the colour of your highest coloured role, so this applies while Staff of the Week sits on top.</p>
+    </div>
     <div class="colour-area" id="colour-area">
       <div class="row" id="solid-row">
         <button class="tile tile-custom" id="custom" aria-haspopup="dialog" aria-expanded="false" aria-label="Custom colour">
@@ -289,23 +364,27 @@
   </section>
 
   <section aria-labelledby="preview-heading">
-    <h2 id="preview-heading">Preview</h2>
-    <p class="desc">How your name looks in each of Discord's themes.</p>
+    <div class="section-head">
+      <h2 id="preview-heading">Preview</h2>
+      <p class="desc">How your name looks to everyone, in each of Discord's themes.</p>
+    </div>
     <div class="previews" id="previews"></div>
   </section>
-
-  <p class="footnote">Nothing you choose leaves this page. Your name and picture come from the link you opened.</p>
-</main>
-
-<div class="dock">
-  <div class="dock-bar">
-    <div class="dock-text">
-      <span class="dock-label" id="dock-label">Your code</span>
-      <output class="dock-code" id="code"></output>
-    </div>
-    <button class="copy" id="copy">Copy code</button>
   </div>
-  <span id="copied" role="status" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)"></span>
+
+  <div class="dock">
+    <div class="dock-bar">
+      <span class="dock-swatch" id="dock-swatch" aria-hidden="true"></span>
+      <div class="dock-text">
+        <span class="dock-label" id="dock-label">Your code</span>
+        <output class="dock-code" id="code"></output>
+      </div>
+      <button class="copy" id="copy">Copy code</button>
+    </div>
+    <span id="copied" role="status" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)"></span>
+  </div>
+</main>
+<p class="footnote">Nothing you choose leaves this page. Your name and picture come from the link you opened.</p>
 </div>
 
 <script id="sotw-core">
@@ -458,6 +537,18 @@ var SotwCore = (function () {
     return span;
   }
 
+  // The header shows the role's own icon when the link carries one.
+  (function () {
+    var icon = $("role-icon");
+    if (info.roleId && info.iconHash) {
+      icon.textContent = "";
+      var img = el("img"); img.src = CDN + "role-icons/" + info.roleId + "/" + info.iconHash + ".png?size=80"; img.alt = "";
+      icon.appendChild(img);
+    } else if (info.emoji) {
+      icon.textContent = info.emoji;
+    }
+  })();
+
   // Role style cards.
   var styleNames = [];
   [["solid", "Solid"], ["gradient", "Gradient"], ["holographic", "Holographic"]].forEach(function (pair) {
@@ -508,6 +599,8 @@ var SotwCore = (function () {
   function message(theme, label) {
     var row = el("div", "msg " + theme);
     row.setAttribute("aria-label", label + " theme");
+    var tag = el("span", "theme-tag", label); tag.setAttribute("aria-hidden", "true");
+    row.appendChild(tag);
     row.appendChild(avatar());
     var lines = el("div", "lines"), head = el("div", "head"), nm = el("span", "name", name);
     head.appendChild(nm);
@@ -546,12 +639,23 @@ var SotwCore = (function () {
     var anchor = anchorFor(which), area = $("colour-area"), pop = $("popover");
     anchor.setAttribute("aria-expanded", "true");
     pop.hidden = false;
-    var a = anchor.getBoundingClientRect(), box = area.getBoundingClientRect();
-    pop.style.top = (a.bottom - box.top + 8) + "px";
-    pop.style.left = Math.max(0, Math.min(a.left - box.left, box.width - pop.offsetWidth)) + "px";
+    placePicker();
     render();
-    $("sv").focus();
+    $("sv").focus({ preventScroll: true });
   }
+  // Below the button when it fits in the window, above it when it does not,
+  // and scrolled into view either way, so a short window never hides it.
+  function placePicker() {
+    var anchor = anchorFor(state.editing), area = $("colour-area"), pop = $("popover");
+    var a = anchor.getBoundingClientRect(), box = area.getBoundingClientRect();
+    var height = pop.offsetHeight, gap = 8;
+    var below = window.innerHeight - a.bottom, above = a.top;
+    var flip = below < height + gap + 96 && above > below;
+    pop.style.top = (flip ? a.top - box.top - height - gap : a.bottom - box.top + gap) + "px";
+    pop.style.left = Math.max(0, Math.min(a.left - box.left, box.width - pop.offsetWidth)) + "px";
+    pop.scrollIntoView({ block: "nearest", behavior: "auto" });
+  }
+
   function closePicker(restoreFocus) {
     if (state.editing === null) return;
     var anchor = anchorFor(state.editing);
@@ -605,6 +709,13 @@ var SotwCore = (function () {
     }
 
     $("code").textContent = core.formatCode(c);
+
+    var glow = state.style === "solid" ? [state.solid, state.solid]
+      : state.style === "gradient" ? state.gradient : [H.primary, H.secondary];
+    document.documentElement.style.setProperty("--glow-a", css(glow[0]));
+    document.documentElement.style.setProperty("--glow-b", css(glow[1]));
+    $("dock-swatch").style.background = state.style === "solid" ? css(state.solid)
+      : "linear-gradient(135deg," + (state.style === "gradient" ? state.gradient : [H.primary, H.secondary, H.tertiary]).map(css).join(",") + ")";
   }
 
   $("custom").addEventListener("click", function () { openPicker("solid"); });
@@ -646,7 +757,7 @@ var SotwCore = (function () {
   document.addEventListener("keydown", function (e) {
     if (e.key === "Escape" && state.editing !== null) { e.preventDefault(); closePicker(true); }
   });
-  window.addEventListener("resize", function () { closePicker(); });
+  window.addEventListener("resize", function () { if (state.editing !== null) placePicker(); });
 
   var resetCopy = null;
   $("copy").addEventListener("click", function () {
