@@ -182,7 +182,7 @@ export type BootHandoff =
     | { kind: "pick"; claim: boolean }
     /** Record the week as empty. Never draws. */
     | { kind: "empty"; claim: boolean }
-    /** The week is already decided: mark it handed off, congratulate nobody. */
+    /** The week is already decided, skipped included: mark it handed off, congratulate nobody. */
     | { kind: "mark"; claim: boolean };
 
 /**
@@ -205,7 +205,7 @@ export function bootHandoff(input: BootHandoffInput): BootHandoff {
     if (input.coldStart) return { kind: "coldStart" };
     if (!input.pastGrace) return { kind: "run" };
     if (hasPick) return { kind: "pick", claim: true };
-    if (undecided || week.status === "skipped") return { kind: "empty", claim: true };
+    if (undecided) return { kind: "empty", claim: true };
     return { kind: "mark", claim: true };
 }
 

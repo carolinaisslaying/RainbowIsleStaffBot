@@ -697,9 +697,10 @@ bot down across the boundary, or `closeWeek` failing partway: the document staye
 ever, nobody held the role, `/sotw view` said "Picked: X", and `grantRestOfWeek` refused because the
 week carried a `staffId`. Now a pending pick is **honoured** against the hard refusals alone, through
 the same `completeHandoff` the boundary uses (grant, role, congratulation, notice); a pick refused
-there leaves the week empty with the pick-failed line on the notice. A pending week without a pick,
-or a skipped one, is recorded empty. A week somebody was already given for the rest of it is only
-marked. **A receipt claimed with `handedOffAt` still null** is a handoff that stopped partway, and is
+there leaves the week empty with the pick-failed line on the notice. A pending week without a pick
+is recorded empty. A skipped week is only marked: recording it empty overwrote the Executive's skip,
+and `/sotw view` then said nobody qualified. A week somebody was already given for the rest of it is
+only marked. **A receipt claimed with `handedOffAt` still null** is a handoff that stopped partway, and is
 finished without claiming again: still `pending`, as above; already `picked` or `random`, only marked
 and the role re-asserted, so nobody is congratulated twice. `grantRestOfWeek` refuses only while
 somebody is actually holding (`isHolding`), never merely because a `staffId` is recorded. A throw out

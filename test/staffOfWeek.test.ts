@@ -232,14 +232,17 @@ describe("the boot handoff", () => {
             expect(bootHandoff({ ...late, week: pending })).toEqual({ kind: "pick", claim: true });
         });
 
-        it("records nobody and never draws for an undecided, pickless or skipped week", () => {
+        it("records nobody and never draws for an undecided or pickless week", () => {
             expect(bootHandoff(late)).toEqual({ kind: "empty", claim: true });
             expect(bootHandoff({ ...late, week: { status: "pending", staffId: null } })).toEqual({
                 kind: "empty",
                 claim: true
             });
+        });
+
+        it("keeps an Executive's skip rather than recording the week as empty", () => {
             expect(bootHandoff({ ...late, week: { status: "skipped", staffId: null } })).toEqual({
-                kind: "empty",
+                kind: "mark",
                 claim: true
             });
         });

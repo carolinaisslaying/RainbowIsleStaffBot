@@ -279,8 +279,9 @@ export async function reassertRole(client: Client, config: StaffBotConfig, now =
  * never ran — the bot was down, or `closeWeek` failed partway — is honoured
  * against the hard refusals, because left pending it strands the week: nobody
  * holds the role, `/sotw view` names the pick, and the rest of the week cannot
- * be given to anybody else. A week without a pick, or a skipped one, is
- * recorded as empty. A handoff that claimed its receipt and stopped before
+ * be given to anybody else. A week without a pick is recorded as empty; a
+ * skipped week stays skipped, and its notice was posted when it was skipped.
+ * A handoff that claimed its receipt and stopped before
  * `markHandedOff` is finished without claiming again; one that had already
  * granted the role is only marked, so nobody is congratulated twice.
  */
