@@ -33,6 +33,11 @@ services:
 
     mongo:
         image: mongo:8
+        # Kernel 6.19+ breaks the allocator in MongoDB 8 (SERVER-121912). This
+        # makes it fall back to its older per-thread mode. Remove once MongoDB
+        # ships a fixed build.
+        environment:
+            GLIBC_TUNABLES: "glibc.pthread.rseq=1"
         restart: unless-stopped
         # WiredTiger's default cache is half of everything above 1GB, which on
         # any ordinary host is gigabytes reserved for a dataset measured in
