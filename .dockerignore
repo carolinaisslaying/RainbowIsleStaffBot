@@ -27,3 +27,4 @@ docker-compose*.yml
 docker-compose*.yaml
 *.log
 .DS_Store
+data
