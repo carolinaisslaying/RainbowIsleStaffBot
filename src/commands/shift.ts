@@ -137,9 +137,9 @@ export const shiftCommand: Command = {
                     `Open for ${formatDuration(elapsed)} across ${open.pauses.length} ` +
                     `${open.pauses.length === 1 ? "pause" : "pauses"}.\n` +
                     (pause
-                        ? `\nAway since ${ts(pause.from, "t")}, ${ts(pause.from, "R")}. Send a ` +
-                          "message in any public channel, or come back online, and you will be " +
-                          "available again.\n\n" +
+                        ? `\nAway since ${ts(pause.from, "t")}, ${ts(pause.from, "R")}. Come back ` +
+                          "online, or send a message in any public channel if you already are, " +
+                          "and you will be available again. Posting while invisible ends your shift.\n\n" +
                           `**Your shift ends itself ${ts(autoEndAt(pause.from, config), "R")}** ` +
                           `if you are still away then, ${config.autoEndAfterAwayMinutes} ` +
                           "minutes after you went away. You do not need to do anything for that."

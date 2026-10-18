@@ -14,7 +14,7 @@ import {
     zoneOffsetLabel,
     zoneWallClock
 } from "../time/timezones.js";
-import { setLeaderboardOptOut } from "../domain/staff.js";
+import { setLeaderboardOptOut, setShiftReminderOptOut } from "../domain/staff.js";
 import { exportDays } from "../domain/activity.js";
 import { shiftHistory } from "../domain/shifts.js";
 import { allWeeksFor } from "../domain/weekly.js";
@@ -45,7 +45,9 @@ export const settingsCommand: Command = {
     },
     data: new SlashCommandBuilder()
         .setName("settings")
-        .setDescription("Your timezone, ring colours, Staff of the Week colour, privacy and data")
+        .setDescription(
+            "Your timezone, ring colours, Staff of the Week colour, reminders, privacy and data"
+        )
         .addSubcommand((sub) =>
             sub
                 .setName("timezone")
@@ -79,6 +81,17 @@ export const settingsCommand: Command = {
                             "True hides you from other Moderators. Leads and Executives still " +
                                 "see you."
                         )
+                        .setRequired(true)
+                )
+        )
+        .addSubcommand((sub) =>
+            sub
+                .setName("shift-reminders")
+                .setDescription("Get a DM when you are active but not on shift")
+                .addBooleanOption((option) =>
+                    option
+                        .setName("on")
+                        .setDescription("True to get them, false to stop them")
                         .setRequired(true)
                 )
         )
@@ -135,6 +148,31 @@ export const settingsCommand: Command = {
 
         if (sub === "export") {
             await exportData(context);
+            return;
+        }
+
+        if (sub === "shift-reminders") {
+            const on = interaction.options.getBoolean("on", true);
+            await setShiftReminderOptOut(staff._id, !on);
+            const { config } = context;
+            await respond(
+                interaction,
+                noticeCard(
+                    on ? "Shift reminders on" : "Shift reminders off",
+                    (on
+                        ? `If you send ${config.shiftReminderMessages} messages in the tracked ` +
+                          `channels within ${config.shiftReminderWindowMinutes} minutes without ` +
+                          "a shift open, you will get a DM with a button to start one. At most " +
+                          `once every ${config.shiftReminderCooldownHours} hours.`
+                        : "You will not get a reminder to start a shift, however active you " +
+                          "are. Minutes count only on shift.") +
+                        (config.shiftReminderMessages <= 0
+                            ? "\n\n-# An Executive has turned shift reminders off for " +
+                              "everyone. Your choice applies if they turn them back on."
+                            : ""),
+                    { ephemeral: true }
+                )
+            );
             return;
         }
 
@@ -227,6 +265,8 @@ async function exportData({ interaction, staff }: CommandContext): Promise<void>
             leaderboardOptOut: staff.leaderboardOptOut,
             sotwColour: staff.sotwColour ?? null,
             sotwColourUpdatedAt: staff.sotwColourUpdatedAt ?? null,
+            shiftReminderOptOut: staff.shiftReminderOptOut ?? false,
+            lastShiftReminderAt: staff.lastShiftReminderAt ?? null,
             createdAt: staff.createdAt,
             updatedAt: staff.updatedAt
         },

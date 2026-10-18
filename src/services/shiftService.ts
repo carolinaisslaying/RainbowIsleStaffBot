@@ -26,6 +26,9 @@ import { COLOUR } from "../render/theme.js";
 import { publicGuildName } from "../discord/guildNames.js";
 import { cmd } from "../discord/commandMentions.js";
 import { staffDisplayName } from "../discord/displayName.js";
+import { presenceStatusOf } from "../discord/presence.js";
+import { isOffline, mayStartShift, sweepShouldPause } from "../domain/presence.js";
+import { forgetOffShiftActivity } from "./shiftReminderService.js";
 
 /**
  * Shift orchestration: the state machine plus the role, DM and card effects
@@ -39,7 +42,16 @@ const REASON_LABEL: Record<ShiftEndReason, string> = {
     auto_ended_away: "away too long",
     leave_started: "leave began",
     reconciled: "reconciled on restart",
-    terminated: "an Executive ended it"
+    terminated: "an Executive ended it",
+    invisible: "you posted while invisible"
+};
+
+/** What the member should do next time, for an end they caused. */
+const REASON_INSTRUCTION: Partial<Record<ShiftEndReason, string>> = {
+    invisible:
+        "You cannot be invisible and on shift. Invisible shows you as offline to everybody, " +
+        "so nobody can see you working. Set your status to Online, Idle or Do Not Disturb " +
+        "before you start your next shift."
 };
 
 /** Somebody other than the member ending their shift: `/shift terminate`. */
@@ -127,8 +139,9 @@ function alreadyOnShiftCard(
     return noticeCard(
         "You are already on shift",
         stateOf(open) === "away"
-            ? `Your shift is open but marked away. Send a message in ${publicGuildName()}, ` +
-              "or come back online, and you will be available again.\n\n" +
+            ? "Your shift is open but marked away. Come back online, or send a message in " +
+              `${publicGuildName()} if you already are, and you will be available again. ` +
+              "Posting while invisible ends your shift.\n\n" +
               `It ends itself ${ts(awayDeadline(open, config), "R")} if you stay away.`
             : `Use ${cmd("shift end", guildId)} when you are finished.`,
         { ephemeral: true }
@@ -163,6 +176,25 @@ export async function beginShift(
         };
     }
 
+    // Invisible reads as offline to the bot and to the community, so nobody can
+    // see this member working. See domain/presence.ts.
+    const status = presenceStatusOf(client, config.publicGuildId, staff.discordId);
+    if (!mayStartShift(status)) {
+        return {
+            ok: false,
+            card: noticeCard(
+                "You are showing as offline",
+                `A shift only runs while ${publicGuildName()} can see you, and right now ` +
+                    (status === null
+                        ? "the bot cannot read your status. Try again in a minute."
+                        : "Discord shows you as offline. Invisible counts as offline.\n\n" +
+                          "Set your status to Online, Idle or Do Not Disturb, then run " +
+                          `${cmd("shift start", guildId)} again.`),
+                { ephemeral: true }
+            )
+        };
+    }
+
     let shift: ShiftDoc;
     try {
         shift = await startShift(staff._id);
@@ -178,6 +210,7 @@ export async function beginShift(
         return { ok: false, card: alreadyOnShiftCard(raced, config, guildId) };
     }
     markSeen(staff._id);
+    forgetOffShiftActivity(staff._id);
 
     const member = await fetchMember(client, config.publicGuildId, staff.discordId);
     if (member) {
@@ -218,7 +251,7 @@ export async function goAway(
 
     const why =
         cause === "presence"
-            ? "your Discord status went idle or offline"
+            ? "your Discord status went idle, offline or invisible"
             : `you have not posted in ${publicGuildName()} for ${config.awayAfterMinutes} minutes`;
 
     // The auto-end is the part people are surprised by, so it is stated up
@@ -230,8 +263,9 @@ export async function goAway(
             `Marked away`,
             `Your shift is still open, but ${why}, so you have stopped showing as available ` +
                 "and your minutes have paused.\n\n" +
-                `Send a message in ${publicGuildName()}, or come back online, and you are ` +
-                "available again. You do not need to do anything else.\n\n" +
+                "Come back online and you are available again. If you went idle, a message " +
+                `in ${publicGuildName()} does it too. **Posting while invisible ends your ` +
+                "shift**, because invisible shows you as offline to everybody.\n\n" +
                 `**If you stay away, your shift ends itself ${ts(autoEndAt, "R")}**, at ` +
                 `${ts(autoEndAt, "t")}. That is ${config.autoEndAfterAwayMinutes} minutes from ` +
                 "now. Nothing is lost: minutes you have earned stay counted.",
@@ -328,9 +362,55 @@ export async function finishShift(
         earnedMinutes: closed.activityMinutes,
         reasonLabel: reasonLabelFor(reason, endedBy),
         reasonGiven: endedBy?.reason,
+        instruction: REASON_INSTRUCTION[reason],
         startedAt: open.startedAt,
         endedAt: at
     });
+}
+
+/**
+ * The wait between a message from an offline member and ending their shift.
+ * The gateway delivers a message and the presence update before it on separate
+ * paths, so a member who opens Discord and posts at once can show offline for
+ * a moment. Five seconds clears that race and costs an invisible member nothing.
+ */
+export const INVISIBLE_RECHECK_MS = 5_000;
+
+/** One pending recheck per member, so a burst of messages schedules one end. */
+const invisibleRechecks = new Set<string>();
+
+/**
+ * End a shift for posting while invisible, once a recheck finds the member
+ * still offline and the same shift still open. The end carries the message's
+ * timestamp, the moment the bot saw them post.
+ */
+export function endShiftIfStillInvisible(
+    client: Client,
+    config: StaffBotConfig,
+    staff: StaffDoc,
+    shiftId: ObjectId,
+    at: Date
+): void {
+    const key = staff._id.toHexString();
+    if (invisibleRechecks.has(key)) return;
+    invisibleRechecks.add(key);
+
+    setTimeout(() => {
+        void (async () => {
+            try {
+                const status = presenceStatusOf(client, config.publicGuildId, staff.discordId);
+                if (!isOffline(status)) return;
+                const open = await getOpenShift(staff._id);
+                if (!open || !open._id.equals(shiftId)) return;
+                await autoFinishShift(client, config, staff._id, "invisible", at);
+                log.info(`Ended shift ${shiftId.toHexString()} for posting while invisible`);
+            } catch (error) {
+                log.error(`Ending shift ${shiftId.toHexString()} for invisibility failed`, error);
+            } finally {
+                invisibleRechecks.delete(key);
+            }
+        })();
+    }, INVISIBLE_RECHECK_MS);
 }
 
 /**
@@ -391,6 +471,7 @@ function plainShiftEndCard(reason: ShiftEndReason, at: Date, endedBy?: EndedBy):
         "Your shift has ended",
         `${reasonLabelFor(reason, endedBy)}, ${ts(at, "R")}.\n` +
             (endedBy?.reason ? `Reason given: ${endedBy.reason}\n` : "") +
+            (REASON_INSTRUCTION[reason] ? `\n**${REASON_INSTRUCTION[reason]}**\n` : "") +
             "\n" +
             "Your minutes for it are counted. The summary card could not be drawn this time, " +
             `so use ${cmd("stats rings")} to see where the week stands.`,
@@ -428,11 +509,21 @@ export async function sweepShifts(
                 continue;
             }
 
+            // Available but offline: the bot lost the presence event that should
+            // have paused them, in a reconnect or a restart. This catches it
+            // within the minute instead of after awayAfterMinutes of silence.
+            const staff = await findStaffById(shift.staffId);
+            if (!staff) continue;
+            const status = presenceStatusOf(client, config.publicGuildId, staff.discordId);
+            if (sweepShouldPause(status, false)) {
+                await goAway(client, config, staff, shift, "presence", now);
+                continue;
+            }
+
             // Available: has anything been heard from them lately?
             const seen = lastSeenAt(shift.staffId) ?? shift.startedAt.getTime();
             if (now.getTime() - seen > awayMs) {
-                const staff = await findStaffById(shift.staffId);
-                if (staff) await goAway(client, config, staff, shift, "inactivity", now);
+                await goAway(client, config, staff, shift, "inactivity", now);
             }
         } catch (error) {
             log.error(`Shift sweep failed for shift ${shift._id.toHexString()}`, error);

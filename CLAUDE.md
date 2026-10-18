@@ -342,7 +342,7 @@ which splits `customId` on `:` into `namespace:first:second`. Namespaces in use:
 (`export`/`import`/`apply`/`discard`/`setConfirm`/`setCancel`), `review`, `warning`
 (`ack` on the member's DM), `conduct` (`withdraw` on the log card), `leave`
 (`approve`/`decline`/`extApprove`/`extDecline`/`end`/`endConfirm`/`endCancel`), `leaveConfirm`,
-`leavePurge`, `tz`,
+`leavePurge`, `shift` (`start` on the reminder DM), `tz`,
 `leaderboard`, `sotw` (`rest`/`next`/`cancel`, each id carrying the staged staffId) and `sotwColour`
 (`code`/`clear`/`save`/`cancel`). A pressed button edits its own message in place
 (`interaction.update` / `deferUpdate` + `editReply`) rather than replying beneath it.
@@ -926,6 +926,42 @@ on shift" card the read produces. Index creation for it goes through `tryIndex`,
 already accumulated a duplicate logs the failure rather than refusing to boot — taking the bot down
 to protect against a race it has already lost helps nobody, and `/dev status` is where somebody would
 go to find out why.
+
+**Nobody is on shift while offline, and invisible counts as offline.** Discord reports an invisible
+member to the bot as offline, and the community sees them the same way it sees somebody who has left.
+`domain/presence.ts` holds the rule as pure functions, and `presenceStatusOf` (`discord/presence.ts`)
+reads the status off the gateway cache. Discord sends a large guild's non-offline presences only, so
+a member with no cached presence is offline; `null` means the guild itself is unavailable. Three
+paths enforce the rule. `/shift start` refuses while offline (`mayStartShift`), and refuses when it
+cannot read the status too, so the check never waves anybody through. A message from an offline
+sender ends the shift, paused or not (`messageEffect`, end reason `invisible`), and the summary DM
+tells them in bold that they cannot be invisible and on shift. A member who has closed Discord cannot
+post, so an offline sender is invisible. Such a message used to resume a paused shift and earn its
+minute; a pause in its place would let them post on into a shift that later ended without a word.
+`endShiftIfStillInvisible` waits `INVISIBLE_RECHECK_MS` (5s) and checks again first, because a
+message can reach the bot ahead of the presence update from somebody who opened Discord and posted at
+once. The end carries the message's timestamp. Last, the minute sweep pauses an available shift whose
+holder shows offline (`sweepShouldPause`), catching a presence event lost in a reconnect or a restart.
+It pauses and leaves the shift open: a member who is offline and silent may have closed Discord, and
+away covers that. It ignores `null`, so a guild outage of a minute leaves every shift alone.
+Idle and Do Not Disturb stay on shift by the Executives' choice: staff work shifts in both, and some
+sit on idle all day. Only `transitionFor`'s online → idle pauses, as before.
+
+**Active without a shift gets one DM, and Executives never get it.** Minutes count only on shift, so
+a member active in the tracked channels who never runs `/shift start` earns nothing and finds out at
+the end of the week. `services/shiftReminderService.ts` counts a member's off-shift messages in
+tracked channels, in memory. At `shiftReminderMessages` within `shiftReminderWindowMinutes` (20 in 30
+by default; `0` turns the feature off) it DMs them a card with a **Start shift** button
+(`shift:start`, `events/shiftButtons.ts`). The button calls `beginShift`, so leave, an open shift and
+an offline status refuse it the way they refuse the command. An Executive set the bar high to avoid
+false positives: members learn to ignore a reminder that fires on a few off-duty replies.
+`reminderRefusal` (`domain/shiftReminder.ts`) holds the rule. It skips Executives (tier from roles
+alone, as `currentExecutives` reads it) and anybody on leave, on shift, or opted out through
+`/settings shift-reminders`. The cooldown (`shiftReminderCooldownHours`, 6) lives in
+`lastShiftReminderAt` on the staff record, and `claimShiftReminder` takes it in one conditional
+write, so a restart cannot hand everybody a fresh reminder and two messages cannot both win. Reaching
+the count resets it whether or not anybody gets a DM, so an Executive costs one role lookup per
+twenty messages instead of one per message.
 
 **Collections** (`src/db/client.ts`): `staff`, `activityDays`, `shifts`, `weeklyStats`,
 `fortnightAssessments`, `warnings`, `leave`, `demandBuckets`, `guildConfig`, `auditLog`,

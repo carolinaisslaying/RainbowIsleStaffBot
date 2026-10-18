@@ -50,6 +50,10 @@ export interface StaffBotConfig {
     autoEndAfterAwayMinutes: number;
     maxShiftHours: number;
     heatmapLookbackWeeks: number;
+
+    shiftReminderMessages: number;
+    shiftReminderWindowMinutes: number;
+    shiftReminderCooldownHours: number;
 }
 
 type KeyKind =
@@ -359,6 +363,34 @@ export const CONFIG_KEYS: Record<keyof StaffBotConfig, KeySpec> = {
         min: 1,
         max: 52
     },
+    shiftReminderMessages: {
+        kind: "number",
+        description:
+            "Off-shift messages in tracked channels before the bot DMs a reminder to start a shift. 0 turns it off",
+        target: "plain",
+        importance: "optional",
+        group: "timings",
+        min: 0,
+        max: 500
+    },
+    shiftReminderWindowMinutes: {
+        kind: "number",
+        description: "Minutes the bot counts those messages over",
+        target: "plain",
+        importance: "optional",
+        group: "timings",
+        min: 1,
+        max: 240
+    },
+    shiftReminderCooldownHours: {
+        kind: "number",
+        description: "Hours between two shift reminders to one member, at least",
+        target: "plain",
+        importance: "optional",
+        group: "timings",
+        min: 1,
+        max: 168
+    },
     accountingTimezone: {
         kind: "timezone",
         description: "Timezone used for measuring weekly boundaries",
@@ -460,7 +492,12 @@ export const DEFAULT_CONFIG: StaffBotConfig = {
     awayAfterMinutes: 20,
     autoEndAfterAwayMinutes: 30,
     maxShiftHours: 12,
-    heatmapLookbackWeeks: 8
+    heatmapLookbackWeeks: 8,
+    // High at the Executives' request. Members learn to ignore a reminder that
+    // fires on a few off-duty replies, and then miss the one that mattered.
+    shiftReminderMessages: 20,
+    shiftReminderWindowMinutes: 30,
+    shiftReminderCooldownHours: 6
 };
 
 /**

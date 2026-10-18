@@ -256,6 +256,8 @@ export interface ShiftSummaryInput extends RingCardInput {
     reasonLabel: string;
     /** Why somebody else ended it, when they said. */
     reasonGiven?: string;
+    /** What the member needs to do differently, for an end they caused. */
+    instruction?: string;
     startedAt: Date;
     endedAt: Date;
 }
@@ -268,6 +270,7 @@ export function shiftSummaryCard(input: ShiftSummaryInput): RenderedMessage {
     });
 
     const summary = [
+        ...(input.instruction ? [`**${input.instruction}**`, ""] : []),
         ...(input.reasonGiven ? [`Reason given: ${input.reasonGiven}`] : []),
         `**${formatMinutes(input.earnedMinutes)}** earned this shift.`,
         `Ran ${ts(input.startedAt, "t")} to ${ts(input.endedAt, "t")}, ` +

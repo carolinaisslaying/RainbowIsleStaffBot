@@ -153,6 +153,41 @@ export async function setLeaderboardOptOut(
     );
 }
 
+export async function setShiftReminderOptOut(
+    staffId: ObjectId,
+    optOut: boolean
+): Promise<void> {
+    await collections.staff().updateOne(
+        { _id: staffId },
+        { $set: { shiftReminderOptOut: optOut, updatedAt: new Date() } }
+    );
+}
+
+/**
+ * Claim the next shift reminder for this member, if the cooldown allows one.
+ *
+ * One conditional write, so two messages landing together cannot both win. It
+ * lives on the record, so a restart cannot hand everybody a fresh reminder.
+ */
+export async function claimShiftReminder(
+    staffId: ObjectId,
+    now: Date,
+    cooldownMs: number
+): Promise<boolean> {
+    const result = await collections.staff().updateOne(
+        {
+            _id: staffId,
+            $or: [
+                { lastShiftReminderAt: { $exists: false } },
+                { lastShiftReminderAt: null },
+                { lastShiftReminderAt: { $lte: new Date(now.getTime() - cooldownMs) } }
+            ]
+        },
+        { $set: { lastShiftReminderAt: now } }
+    );
+    return result.modifiedCount > 0;
+}
+
 export async function setStaffActive(staffId: ObjectId, active: boolean): Promise<void> {
     const result = await collections.staff().findOneAndUpdate(
         { _id: staffId },

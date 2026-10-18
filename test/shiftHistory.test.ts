@@ -74,7 +74,8 @@ describe("every end reason", () => {
             "auto_ended_away",
             "leave_started",
             "reconciled",
-            "terminated"
+            "terminated",
+            "invisible"
         ] as const) {
             const line = shiftHistoryLine({
                 startedAt: at("2026-09-24T01:00:00Z"),

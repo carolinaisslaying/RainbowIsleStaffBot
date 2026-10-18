@@ -4,8 +4,11 @@ import { recordDemand } from "../domain/demand.js";
 import { creditMinute } from "../domain/activity.js";
 import { findStaffByDiscordId } from "../domain/staff.js";
 import { getOpenShift, openPauseOf } from "../domain/shifts.js";
-import { comeBack, markSeen } from "../services/shiftService.js";
+import { comeBack, endShiftIfStillInvisible, markSeen } from "../services/shiftService.js";
+import { presenceStatusOf } from "../discord/presence.js";
+import { messageEffect } from "../domain/presence.js";
 import { maybeRingClosure } from "../services/notifications.js";
+import { noteOffShiftMessage } from "../services/shiftReminderService.js";
 import { log } from "../log.js";
 
 /**
@@ -16,6 +19,13 @@ import { log } from "../log.js";
  * A message does three things: it counts toward server demand if the channel is
  * tracked, it brings the sender back from Away, and it credits one activity
  * minute if the sender is Available and the channel is tracked.
+ *
+ * From somebody with no shift open, a message in a tracked channel counts
+ * towards the reminder to start one (services/shiftReminderService.ts).
+ *
+ * The last two need the sender visible. A message from a member Discord shows
+ * as offline, which is how invisible looks, credits nothing and ends their
+ * shift (domain/presence.ts).
  */
 export function registerMessageHandler(client: Client): void {
     client.on(Events.MessageCreate, async (message: Message) => {
@@ -43,10 +53,22 @@ export function registerMessageHandler(client: Client): void {
             markSeen(staff._id, message.createdAt);
 
             const shift = await getOpenShift(staff._id);
-            if (!shift) return;
+            if (!shift) {
+                // Activity without a shift earns nothing, so the bot DMs a
+                // reminder once a member posts enough of it in a short window.
+                if (tracked) await noteOffShiftMessage(client, config, staff, message.createdAt);
+                return;
+            }
+
+            const status = presenceStatusOf(client, config.publicGuildId, message.author.id);
+            const effect = messageEffect(status, openPauseOf(shift) !== null);
+            if (effect === "end") {
+                endShiftIfStillInvisible(client, config, staff, shift._id, message.createdAt);
+                return;
+            }
 
             // Returning from Away is automatic and requires nothing from them.
-            if (openPauseOf(shift)) {
+            if (effect === "resume") {
                 await comeBack(client, config, staff, shift, message.createdAt);
                 // The pause closed at this instant, so this minute is now
                 // Available and may be credited below.

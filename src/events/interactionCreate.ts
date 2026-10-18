@@ -43,6 +43,7 @@ import {
     handleConductWithdrawModal
 } from "./conductButtons.js";
 import { handleScrubButton } from "./scrubButtons.js";
+import { handleShiftButton } from "./shiftButtons.js";
 import { handleLeaveButton, handleLeaveEndModal } from "./leaveButtons.js";
 import { handleLeaveModal, handleLeaveWithdrawModal } from "./leaveModals.js";
 import { handleLeaveConfirmButton } from "./leaveConfirm.js";
@@ -131,7 +132,9 @@ export function registerInteractionHandler(client: Client): void {
             if (!atLeast(tier, required.tier)) {
                 await respond(
                     interaction,
-                    errorCard(`**/${required.path}** is for ${required.tier} and above.`)
+                    errorCard(
+                        `${cmd(required.path, interaction.guildId)} is for ${required.tier} and above.`
+                    )
                 );
                 return;
             }
@@ -151,8 +154,9 @@ export function registerInteractionHandler(client: Client): void {
                 await respond(
                     interaction,
                     errorCard(
-                        `**/${command.data.name}** is limited to the administrators named when ` +
-                            "this bot was deployed. Being an Executive is not enough: " +
+                        `${cmd(required.path, interaction.guildId)} is limited to the ` +
+                            "administrators named when this bot was deployed. Being an " +
+                            "Executive is not enough: " +
                             "configuration decides who counts as an Executive.\n\n" +
                             "Ask whoever runs the deployment."
                     )
@@ -428,6 +432,11 @@ async function routeButton(client: Client, interaction: import("discord.js").But
     }
     if (namespace === "sotwColour") {
         await handleSotwColourButton(client, config, interaction, first);
+        return;
+    }
+    // Start shift, on the reminder DM.
+    if (namespace === "shift") {
+        await handleShiftButton(client, config, interaction, first);
         return;
     }
     if (namespace === "leave") {

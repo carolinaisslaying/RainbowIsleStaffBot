@@ -30,6 +30,7 @@ import {
 import { COLOUR } from "./theme.js";
 import { formatDuration, ts } from "../time/format.js";
 import { EMOJI, emojiForColour } from "./emoji.js";
+import { cmd } from "../discord/commandMentions.js";
 
 /**
  * The configuration viewer.
@@ -533,7 +534,7 @@ export function devStatusCard(input: {
         container.addSeparatorComponents(separator());
         container.addTextDisplayComponents(
             text(
-                "### ❗ Deployment\n**DEV_DANGEROUS_COMMANDS is on.** `/dev purge` can delete " +
+                `### ❗ Deployment\n**DEV_DANGEROUS_COMMANDS is on.** ${cmd("dev purge")} can delete ` +
                     "real assessment history, not just rehearsals. Unset it and restart when " +
                     "you are done."
             )

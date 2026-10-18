@@ -34,6 +34,10 @@ export interface StaffDoc {
      */
     sotwColour?: SotwColour | null;
     sotwColourUpdatedAt?: Date | null;
+    /** Turned off the "you look active, start a shift" DM. Absent reads as on. */
+    shiftReminderOptOut?: boolean;
+    /** When that DM last went out, for its cooldown. Absent is never. */
+    lastShiftReminderAt?: Date | null;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -112,7 +116,8 @@ export type ShiftEndReason =
     | "auto_ended_away"
     | "leave_started"
     | "reconciled"
-    | "terminated";
+    | "terminated"
+    | "invisible";
 
 export type PauseCause = "presence" | "inactivity";
 

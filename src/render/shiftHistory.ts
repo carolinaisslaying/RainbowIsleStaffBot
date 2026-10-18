@@ -38,7 +38,8 @@ const END_REASON: Record<ShiftEndReason, string> = {
     auto_ended_away: "auto-ended while away",
     leave_started: "ended when leave began",
     reconciled: "closed on restart",
-    terminated: "ended by an Executive"
+    terminated: "ended by an Executive",
+    invisible: "ended for posting while invisible"
 };
 
 export function shiftHistoryLine(input: ShiftLineInput): string {
