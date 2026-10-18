@@ -216,7 +216,7 @@ export function colourSettingsCard(input: {
           ]
         : [
               ...(input.pickerUrl
-                  ? [new ButtonBuilder().setURL(input.pickerUrl).setLabel("Open colour picker ↗").setStyle(ButtonStyle.Link)]
+                  ? [new ButtonBuilder().setURL(input.pickerUrl).setLabel("Open colour picker").setStyle(ButtonStyle.Link)]
                   : []),
               new ButtonBuilder().setCustomId("sotwColour:code").setLabel("Enter code").setStyle(ButtonStyle.Primary),
               new ButtonBuilder().setCustomId("sotwColour:clear").setLabel("Clear colour").setStyle(ButtonStyle.Secondary)
