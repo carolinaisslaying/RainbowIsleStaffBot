@@ -3,6 +3,7 @@ import {
     isOffline,
     mayStartShift,
     messageEffect,
+    readStatus,
     sweepShouldPause
 } from "../src/domain/presence.js";
 
@@ -48,5 +49,28 @@ describe("nobody is on shift while offline", () => {
         expect(sweepShouldPause("online", false)).toBe(false);
         // A guild outage leaves every shift alone.
         expect(sweepShouldPause(null, false)).toBe(false);
+    });
+});
+
+describe("an unheard status is unknown, never offline", () => {
+    it("takes a cached presence as it is, offline included", () => {
+        expect(readStatus("online", false)).toBe("online");
+        expect(readStatus("idle", true)).toBe("idle");
+        expect(readStatus("offline", false)).toBe("offline");
+    });
+
+    it("reads a member missing from the cache as unknown, as after a restart", () => {
+        expect(readStatus(undefined, false)).toBeNull();
+    });
+
+    it("reads them as offline once Discord was asked and said so", () => {
+        expect(readStatus(undefined, true)).toBe("offline");
+    });
+
+    it("acts against nobody on an unknown status", () => {
+        const status = readStatus(undefined, false);
+        expect(sweepShouldPause(status, false)).toBe(false);
+        expect(messageEffect(status, false)).toBe("credit");
+        expect(messageEffect(status, true)).toBe("resume");
     });
 });

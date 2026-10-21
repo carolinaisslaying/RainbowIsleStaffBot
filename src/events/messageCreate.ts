@@ -66,6 +66,12 @@ export function registerMessageHandler(client: Client): void {
                 endShiftIfStillInvisible(client, config, staff, shift._id, message.createdAt);
                 return;
             }
+            // Unknown, which after a restart is nearly everybody: the message
+            // counts, and Discord is asked in the background. Only its answer
+            // can end the shift.
+            if (status === null) {
+                endShiftIfStillInvisible(client, config, staff, shift._id, message.createdAt);
+            }
 
             // Returning from Away is automatic and requires nothing from them.
             if (effect === "resume") {

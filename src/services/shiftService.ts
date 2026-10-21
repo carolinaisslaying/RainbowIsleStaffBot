@@ -26,7 +26,7 @@ import { COLOUR } from "../render/theme.js";
 import { publicGuildName } from "../discord/guildNames.js";
 import { cmd } from "../discord/commandMentions.js";
 import { staffDisplayName } from "../discord/displayName.js";
-import { presenceStatusOf } from "../discord/presence.js";
+import { confirmPresence, presenceStatusOf } from "../discord/presence.js";
 import { isOffline, mayStartShift, sweepShouldPause } from "../domain/presence.js";
 import { forgetOffShiftActivity } from "./shiftReminderService.js";
 
@@ -177,8 +177,9 @@ export async function beginShift(
     }
 
     // Invisible reads as offline to the bot and to the community, so nobody can
-    // see this member working. See domain/presence.ts.
-    const status = presenceStatusOf(client, config.publicGuildId, staff.discordId);
+    // see this member working. Asks Discord when the cache has not heard of
+    // them, which is everybody idle since a restart. See domain/presence.ts.
+    const status = await confirmPresence(client, config.publicGuildId, staff.discordId);
     if (!mayStartShift(status)) {
         return {
             ok: false,
@@ -383,6 +384,11 @@ const invisibleRechecks = new Set<string>();
  * End a shift for posting while invisible, once a recheck finds the member
  * still offline and the same shift still open. The end carries the message's
  * timestamp, the moment the bot saw them post.
+ *
+ * Also called for a sender whose status the cache does not know, and the
+ * recheck asks Discord directly rather than reading the cache again: an unknown
+ * status ends nothing until Discord says offline. Reading it as offline is what
+ * ended every shift that posted after a restart.
  */
 export function endShiftIfStillInvisible(
     client: Client,
@@ -398,7 +404,7 @@ export function endShiftIfStillInvisible(
     setTimeout(() => {
         void (async () => {
             try {
-                const status = presenceStatusOf(client, config.publicGuildId, staff.discordId);
+                const status = await confirmPresence(client, config.publicGuildId, staff.discordId);
                 if (!isOffline(status)) return;
                 const open = await getOpenShift(staff._id);
                 if (!open || !open._id.equals(shiftId)) return;
@@ -510,8 +516,10 @@ export async function sweepShifts(
             }
 
             // Available but offline: the bot lost the presence event that should
-            // have paused them, in a reconnect or a restart. This catches it
-            // within the minute instead of after awayAfterMinutes of silence.
+            // have paused them, in a reconnect. This catches it within the
+            // minute instead of after awayAfterMinutes of silence. Only a status
+            // Discord actually sent counts: an unknown one is ignored, or every
+            // shift would pause on the first tick after a restart.
             const staff = await findStaffById(shift.staffId);
             if (!staff) continue;
             const status = presenceStatusOf(client, config.publicGuildId, staff.discordId);

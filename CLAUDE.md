@@ -930,20 +930,28 @@ go to find out why.
 **Nobody is on shift while offline, and invisible counts as offline.** Discord reports an invisible
 member to the bot as offline, and the community sees them the same way it sees somebody who has left.
 `domain/presence.ts` holds the rule as pure functions, and `presenceStatusOf` (`discord/presence.ts`)
-reads the status off the gateway cache. Discord sends a large guild's non-offline presences only, so
-a member with no cached presence is offline; `null` means the guild itself is unavailable. Three
-paths enforce the rule. `/shift start` refuses while offline (`mayStartShift`), and refuses when it
-cannot read the status too, so the check never waves anybody through. A message from an offline
+reads the status off the gateway cache. **A member missing from that cache is unknown, never
+offline** (`readStatus`). Discord does not send a guild this size every online presence on connect,
+only changes from then on, so after a restart nearly everybody is missing until they next change
+status. The cache used to read that absence as offline, and the first restart after this shipped
+ended the shift of everybody who posted in the next few minutes, for invisibility, and paused the
+rest. `null` covers both that and an unavailable guild, and nothing acts against anybody on it.
+`confirmPresence` asks Discord directly instead (a single-member Request Guild Members with
+presences; no presence back means offline, and is remembered), with a one-minute backoff after a
+failure such as a rate limit. Three paths enforce the rule. `/shift start` asks it, refuses while
+offline (`mayStartShift`), and refuses when even that cannot read the status, so the check never
+waves anybody through. A message from an offline
 sender ends the shift, paused or not (`messageEffect`, end reason `invisible`), and the summary DM
 tells them in bold that they cannot be invisible and on shift. A member who has closed Discord cannot
 post, so an offline sender is invisible. Such a message used to resume a paused shift and earn its
 minute; a pause in its place would let them post on into a shift that later ended without a word.
-`endShiftIfStillInvisible` waits `INVISIBLE_RECHECK_MS` (5s) and checks again first, because a
-message can reach the bot ahead of the presence update from somebody who opened Discord and posted at
-once. The end carries the message's timestamp. Last, the minute sweep pauses an available shift whose
+`endShiftIfStillInvisible` waits `INVISIBLE_RECHECK_MS` (5s) and checks again through
+`confirmPresence` first, because a message can reach the bot ahead of the presence update from
+somebody who opened Discord and posted at once. A message from a sender whose status is unknown
+counts as normal and schedules the same recheck, so only Discord's own answer ends the shift. The end carries the message's timestamp. Last, the minute sweep pauses an available shift whose
 holder shows offline (`sweepShouldPause`), catching a presence event lost in a reconnect or a restart.
 It pauses and leaves the shift open: a member who is offline and silent may have closed Discord, and
-away covers that. It ignores `null`, so a guild outage of a minute leaves every shift alone.
+away covers that. It ignores `null`, so a restart or a guild outage leaves every shift alone.
 Idle and Do Not Disturb stay on shift by the Executives' choice: staff work shifts in both, and some
 sit on idle all day. Only `transitionFor`'s online → idle pauses, as before.
 

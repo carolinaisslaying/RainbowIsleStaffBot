@@ -11,14 +11,36 @@
  * offline member available until the inactivity sweep heard silence, which a
  * member who keeps posting never gives it.
  *
- * `null` means the bot cannot read any status, because the public guild is
- * unavailable to this process. Starting and pausing handle it in opposite
- * ways. A start refuses it, so the check never waves anybody through. The
- * pause ignores it, so a guild outage of a minute leaves every shift alone.
+ * `null` means the bot does not know: the public guild is unavailable to this
+ * process, or Discord has not told it this member's status since it connected.
+ * The second is the common one. Discord does not send a guild this size every
+ * online member's presence on connect, only changes from then on, so a member
+ * who has sat on one status since before a restart is simply absent from the
+ * cache. Reading that absence as offline once ended the shift of everybody who
+ * posted in the minutes after a restart, and paused the rest, all for being
+ * invisible when none of them were. An unknown status is never a reason to act
+ * against anybody; `confirmPresence` (discord/presence.ts) asks Discord before
+ * anything that would. Starting and pausing still handle `null` in opposite
+ * ways. A start refuses it, so the check never waves anybody through. The pause
+ * ignores it, so a restart or a guild outage leaves every shift alone.
  */
 
 /** The statuses Discord reports for another user. "invisible" only for self. */
 export type SeenStatus = "online" | "idle" | "dnd" | "offline" | "invisible";
+
+/**
+ * A member's status from what the gateway has told this process. A cached
+ * presence is the answer, `offline` included: Discord sent it. With none cached
+ * the member is offline only if the bot asked Discord directly and was told so;
+ * otherwise nobody knows yet.
+ */
+export function readStatus(
+    cached: SeenStatus | undefined,
+    confirmedOffline: boolean
+): SeenStatus | null {
+    if (cached !== undefined) return cached;
+    return confirmedOffline ? "offline" : null;
+}
 
 export function isOffline(status: SeenStatus | null): boolean {
     return status === "offline" || status === "invisible";
