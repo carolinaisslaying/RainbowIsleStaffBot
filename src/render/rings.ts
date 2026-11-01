@@ -53,7 +53,7 @@ export interface RingsInput {
  * two soft ones.
  */
 
-const OUTER_COLOURS: Record<RingState, RingColours> = {
+export const OUTER_COLOURS: Record<RingState, RingColours> = {
     green: { core: "#30d158", light: "#6ef08d", overlay: "#a8f7bd" },
     amber: { core: "#ff9f0a", light: "#ffc960", overlay: "#ffdca6" },
     red: { core: "#ff453a", light: "#ff7b72", overlay: "#ffada7" },

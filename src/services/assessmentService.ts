@@ -23,7 +23,8 @@ import {
     reminderDue,
     rowButtons,
     warningTally,
-    warningWeightLine
+    warningWeightLine,
+    onSpreadChart
 } from "../domain/review.js";
 import {
     findReview,
@@ -32,7 +33,7 @@ import {
     rememberHeader,
     unremindedReviews
 } from "../domain/reviewQueue.js";
-import { findStaffById, listActiveStaff } from "../domain/staff.js";
+import { findManyStaff, findStaffById, listActiveStaff } from "../domain/staff.js";
 import { fetchPublicMember, tierOf } from "../domain/permissions.js";
 import { staffChannel } from "./leaveService.js";
 import { pingExecutives, pingKey, resolvePing, resolvePingsReplyingTo } from "./pings.js";
@@ -44,7 +45,9 @@ import {
 import { claimFortnightAnnouncement, sendFortnightOutcome } from "./notifications.js";
 import { labelDate, labelWindow, formatMinutes, ts } from "../time/format.js";
 import { sendOptions } from "../discord/respond.js";
+import { ringStateFor } from "../domain/rings.js";
 import {
+    chartName,
     renderSpread,
     renderTrend,
     type SpreadEntry,
@@ -313,18 +316,30 @@ export async function refreshQueueHeader(
     const fullRequirement = fullRequirementOf(everyone, config);
     // Executives left out of the queue are left off the chart too, or it
     // shows more people below the line than the header counts.
-    const spreadEntries = everyone
-        .filter(
-            (entry) =>
-                entry.status !== "exempt" &&
-                !entry.week1Exempt &&
-                !entry.week2Exempt &&
-                entry.excludedAsExecutive !== true
-        )
-        .map((entry) => ({
+    //
+    // Named, hidden members included and unmarked: this channel is an Executive
+    // record, and hiding is from the leaderboard other Moderators read.
+    const charted = everyone.filter(onSpreadChart);
+    const chartedStaff = await findManyStaff(charted.map((entry) => entry.staffId));
+    const spreadEntries: SpreadEntry[] = [];
+    for (const entry of charted) {
+        const member = chartedStaff.get(entry.staffId.toHexString());
+        spreadEntries.push({
+            name: chartName(
+                member
+                    ? await staffDisplayName(client, config, member.discordId, "Departed")
+                    : "Departed"
+            ),
             minutes: entry.totalMinutes,
-            below: entry.status === "below"
-        }));
+            below: entry.status === "below",
+            state: ringStateFor({
+                activityMinutes: entry.totalMinutes,
+                weeklyTargetMinutes: fullRequirement,
+                amberThresholdPercent: config.amberThresholdPercent,
+                onLeave: false
+            })
+        });
+    }
 
     const header = reviewHeaderCard({
         fortnightIndex: index,
@@ -341,6 +356,7 @@ export async function refreshQueueHeader(
                       png: renderSpread({
                           entries: spreadEntries,
                           requiredMinutes: fullRequirement,
+                          amberPercent: config.amberThresholdPercent,
                           title: "Everyone this fortnight"
                       }),
                       alt: describeSpread(spreadEntries, fullRequirement)
@@ -529,7 +545,7 @@ export async function reviewRowFor(
     const issued = warnings.find(
         (warning) => warning.assessmentId?.equals(assessment._id) && !warning.withdrawnAt
     );
-    const trend = await trendFor(assessment.staffId, index, config);
+    const trend = await trendFor(assessment.staffId, config);
 
     const decidedLine =
         assessment.reviewOutcome && assessment.reviewedAt
@@ -581,7 +597,7 @@ export async function reviewRowFor(
             ? {
                   png: renderTrend({
                       points: trend.points,
-                      requiredMinutes: assessment.weeklyTargetMinutes * 2,
+                      fullMinutes: assessment.weeklyTargetMinutes * 2,
                       title: "Recent fortnights"
                   }),
                   alt: trend.alt
@@ -709,7 +725,8 @@ export async function chaseUnworkedQueues(
 
 
 /**
- * The member's last six fortnights, oldest first, ready to plot.
+ * The member's last four fortnights, oldest first, ready to plot. Four because
+ * every row card in the queue carries this, and six rows made each one tall.
  *
  * Oldest first because a chart of time reads left to right, while
  * `assessmentHistory` returns newest first for the text line. Exempt fortnights
@@ -718,10 +735,9 @@ export async function chaseUnworkedQueues(
  */
 async function trendFor(
     staffId: ObjectId,
-    currentIndex: number,
     config: StaffBotConfig
 ): Promise<{ points: TrendPoint[]; alt: string }> {
-    const history = await assessmentHistory(staffId, 6);
+    const history = await assessmentHistory(staffId, 4);
     const points: TrendPoint[] = history
         .slice()
         .reverse()
@@ -729,8 +745,13 @@ async function trendFor(
             label: labelDate(entry.windowStart, config.accountingTimezone),
             minutes: entry.totalMinutes,
             exempt: entry.status === "exempt",
-            current: entry.fortnightIndex === currentIndex,
-            requiredMinutes: entry.requiredMinutes
+            requiredMinutes: entry.requiredMinutes,
+            state: ringStateFor({
+                activityMinutes: entry.totalMinutes,
+                weeklyTargetMinutes: entry.requiredMinutes,
+                amberThresholdPercent: config.amberThresholdPercent,
+                onLeave: entry.status === "exempt"
+            })
         }));
 
     return { points, alt: describeTrend(points, fullRequirementOf(history, config)) };

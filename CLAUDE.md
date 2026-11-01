@@ -810,19 +810,23 @@ anything. It is scoped to the holder because the handler sits on `GuildMemberUpd
 110,000 members, and checking anybody else's roles on every one of those events is work with no
 reader.
 
-**Review charts.** `render/trend.ts` draws two, both pure string functions like the others.
-`trendSvg` plots a member's last six fortnights as bars against a dashed requirement line, because
-"0 of 240" reads identically whether somebody has always been at zero or fell off a cliff, and those
-are opposite decisions. `spreadSvg` plots everybody's minutes for the fortnight, sorted, because
-whether 120 is bad depends on what the rest of the team managed and the queue cannot say — it only
-lists the people who fell short. **One hue (`#2e9fb8`), never a status palette**: the requirement
-line carries met-versus-below geometrically, so colour never has to. That is deliberate — red
-against green is ΔE 7.9 under deuteranopia, inside the band that is only legal with a second
-encoding, and height against a labelled line is an encoding that survives greyscale. Below the line
-is drawn as an absence rather than in red, because a red bar is a verdict the Executive has not
-reached yet. The requirement is always included in the scale, so the line is never off the top of a
-chart where everybody missed it. Exempt fortnights are drawn as a full-height absence labelled
-"leave", never as a zero somebody earned.
+**Review charts.** `render/trend.ts` draws two, both pure string functions, in the ring card's language: its
+panel, its state colours (`ringStateFor`, so a bar and a ring cannot disagree), its track and fill. `trendSvg`
+is a member's last four fortnights as the ring card's legend rows, because "0 of 240" reads the same whether
+somebody has always been at zero or fell off a cliff. Each row is measured against what that fortnight asked
+for, and a minimum leave lowered is said in words, so no second line is needed. Exempt fortnights read
+"exempt", never as a zero somebody earned. `spreadSvg` is everybody's minutes as ring-thick columns, sorted, because
+whether 120 is bad depends on what the rest of the team managed. The scale stops at twice the requirement: it
+used to run to the busiest member, and two people on 3000 minutes flattened everyone below the line, the part
+a review is about. Past the line a column goes lighter, as a ring does past 100%. Columns are **named**
+(`chartName` strips what the image fonts cannot draw, in the image only), hidden members included and unmarked,
+because the channel is an Executive record; names and figures drop out past 19 members, when they no longer fit.
+`onSpreadChart` (`domain/review.ts`) is who it draws, Executives left out.
+
+**Colour carries met and below here, deliberately.** These were one blue, with below drawn as an absence so
+that colour expressed no verdict the Executive had not reached. Executives found it a sea of blue that did not
+say who had met what, so the verdict line is now the ring's: green, amber, red. Every figure is printed, which
+is what survives greyscale and colour blindness now that height against a line is not the only encoding.
 
 **Images.** `ringsSvg` / `ringCardSvg` / `heatmapSvg` are pure string functions, exported separately
 from the `render*` wrappers so tests assert on markup without invoking resvg. Ring elements carry

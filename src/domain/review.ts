@@ -54,6 +54,26 @@ export function inReviewQueue(assessment: {
 }
 
 /**
+ * Who the fortnight's chart draws. Everyone assessed against the full
+ * requirement: somebody whose leave lowered theirs would be read against a line
+ * that is not theirs. Executives left out of the queue are left off too, or it
+ * shows more people below the line than the header counts.
+ */
+export function onSpreadChart(assessment: {
+    status: string;
+    week1Exempt?: boolean;
+    week2Exempt?: boolean;
+    excludedAsExecutive?: boolean;
+}): boolean {
+    return (
+        assessment.status !== "exempt" &&
+        !assessment.week1Exempt &&
+        !assessment.week2Exempt &&
+        assessment.excludedAsExecutive !== true
+    );
+}
+
+/**
  * The one-line tally `/admin assess` and `/dev rehearse` reply with. "Below"
  * counts everybody under the requirement, so the Executives left out of the
  * queue are named in it, or the reply says 4 where the header says 2.
