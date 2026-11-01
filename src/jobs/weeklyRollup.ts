@@ -17,6 +17,7 @@ import {
 import { postTeamRecap } from "../services/teamRecapService.js";
 import { postLeaderboardLog } from "../services/leaderboardLogService.js";
 import { handoffOnBoot, runHandoffSafely } from "../services/sotwHandoff.js";
+import { runRetirementSweep } from "../services/retirementService.js";
 import { log } from "../log.js";
 
 /**
@@ -31,6 +32,11 @@ export async function closeWeek(
     at = new Date()
 ): Promise<void> {
     const closing = previousWeekWindow(at, config);
+    try {
+        await runRetirementSweep(client, config, {}, at);
+    } catch (error) {
+        log.error("Checking who is on the team failed at week close", error);
+    }
     await rebuildWeekForAll(closing, config, at);
     log.info(`Closed week starting ${closing.start.toISOString()}`);
 

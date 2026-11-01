@@ -12,6 +12,15 @@ const row = (minutes: number, extra: Partial<TeamWeekRow> = {}): TeamWeekRow => 
 });
 
 describe("summarising the team's week", () => {
+    it("adds a retired member's minutes without expecting anything of them", () => {
+        const week = summariseTeamWeek([row(200), row(150, { retired: true })], null);
+        expect(week.totalMinutes).toBe(350);
+        expect(week.counted).toBe(1);
+        expect(week.closed).toBe(1);
+        expect(week.meanMinutes).toBe(200);
+        expect(week.onLeave).toBe(0);
+    });
+
     it("counts who closed and who was away", () => {
         const week = summariseTeamWeek(
             [row(200), row(130), row(40), row(0, { ringState: "leave", onLeave: true })],

@@ -452,6 +452,34 @@ export function listeningLine(listening: { online: number; possible: number } | 
     );
 }
 
+/** The one confirmation for retiring past the sweep's threshold. */
+export function retireConfirmCard(names: string[]): RenderedMessage {
+    const container = new ContainerBuilder()
+        .setAccentColor(COLOUR.adverse)
+        .addTextDisplayComponents(
+            text(
+                `### ${emojiForColour(COLOUR.adverse)} Retire ${names.length} from the team?\n` +
+                    `${names.join(", ")}\n\n` +
+                    "They come off every current view, their shifts end, and leave that has not " +
+                    "started is cancelled, which cannot be undone. Their records stay, and they " +
+                    "come back automatically if they get the role again."
+            )
+        )
+        .addActionRowComponents(
+            new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`retire:go:${names.length}`)
+                    .setLabel(`Retire ${names.length}`)
+                    .setStyle(ButtonStyle.Danger),
+                new ButtonBuilder()
+                    .setCustomId("retire:cancel")
+                    .setLabel("Leave them")
+                    .setStyle(ButtonStyle.Secondary)
+            )
+        );
+    return { components: [container], files: [], flags: V2_FLAGS };
+}
+
 /**
  * The operator's card: what the bot is doing, and what is stopping it.
  *
@@ -479,6 +507,9 @@ export function devStatusCard(input: {
     missingRequired: string[];
     warnings: { key: string; text: string }[];
     dangerousCommands: boolean;
+    retiredCount: number;
+    /** What stopped the last check of who is on the team, or null. */
+    teamCheck: { kind: "roles"; reason: string } | { kind: "threshold"; names: string[]; roster: number } | null;
 }): RenderedMessage {
     // Red when something is actually broken, amber when something is merely
     // unset or oddly configured, green when there is nothing to say. The
@@ -486,7 +517,8 @@ export function devStatusCard(input: {
     const broken =
         !input.databaseOk ||
         !input.schedulerRunning ||
-        input.jobs.some((job) => job.lastOutcome === "failed");
+        input.jobs.some((job) => job.lastOutcome === "failed") ||
+        input.teamCheck !== null;
     const unsettled = input.missingRequired.length > 0 || input.warnings.length > 0;
     const colour = broken ? COLOUR.adverse : unsettled ? COLOUR.pending : COLOUR.approved;
 
@@ -529,6 +561,33 @@ export function devStatusCard(input: {
         .addTextDisplayComponents(text(`### Jobs\n${jobLines.join("\n")}`))
         .addSeparatorComponents(separator())
         .addTextDisplayComponents(text(`### Configuration\n${configLines.join("\n\n")}`));
+
+    const teamLines = [`**No longer on the team** ${input.retiredCount}`];
+    if (input.teamCheck?.kind === "roles") {
+        teamLines.push(
+            `❗ **Nobody is being retired:** ${input.teamCheck.reason}. Every member would look like ` +
+                "they had lost the role. Correct it with " +
+                `${cmd("config set")}.`
+        );
+    } else if (input.teamCheck) {
+        teamLines.push(
+            `❗ **Nobody was retired.** ${input.teamCheck.names.length} of ${input.teamCheck.roster} ` +
+                "would go at once, which looks like a fault rather than a decision: " +
+                `${input.teamCheck.names.join(", ")}.`
+        );
+    }
+    container.addSeparatorComponents(separator());
+    container.addTextDisplayComponents(text(`### Team\n${teamLines.join("\n\n")}`));
+    if (input.teamCheck?.kind === "threshold") {
+        container.addActionRowComponents(
+            new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder()
+                    .setCustomId("retire:ask")
+                    .setLabel("Retire them")
+                    .setStyle(ButtonStyle.Danger)
+            )
+        );
+    }
 
     if (input.dangerousCommands) {
         container.addSeparatorComponents(separator());

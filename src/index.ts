@@ -9,6 +9,8 @@ import { registerInteractionHandler } from "./events/interactionCreate.js";
 import { registerMessageHandler } from "./events/messageCreate.js";
 import { registerPresenceHandler } from "./events/presenceUpdate.js";
 import { registerSotwMemberHandler } from "./events/sotwMembers.js";
+import { registerRetirementHandler } from "./events/retirementMembers.js";
+import { runRetirementSweep } from "./services/retirementService.js";
 import { reconcileOnBoot } from "./jobs/reconcile.js";
 import { removeBotStaffRecords } from "./services/botRecordCleanup.js";
 import { registerJobs } from "./jobs/index.js";
@@ -36,6 +38,7 @@ async function main(): Promise<void> {
     registerMessageHandler(client);
     registerPresenceHandler(client);
     registerSotwMemberHandler(client);
+    registerRetirementHandler(client);
 
     client.once(Events.ClientReady, async (ready) => {
         log.info(`Logged in as ${ready.user.tag}`);
@@ -75,6 +78,14 @@ async function main(): Promise<void> {
             if (removed > 0) log.warn(`Removed ${removed} staff record(s) belonging to bots.`);
         } catch (error) {
             log.error("Checking for staff records that belong to bots failed", error);
+        }
+
+        // Who is on the team, before anything reconciles, rolls up or assesses
+        // them. A failure here must not stop boot.
+        try {
+            await runRetirementSweep(client, config);
+        } catch (error) {
+            log.error("Checking who is on the team failed", error);
         }
 
         // Mandatory, and before the schedulers start touching anything.

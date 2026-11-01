@@ -11,6 +11,7 @@ import { isLeadOrAbove } from "../domain/permissions.js";
 import { timesHeld } from "../domain/staffOfWeek.js";
 import { toHolderRecord, weeksHeldBy } from "../domain/staffOfWeekStore.js";
 import { errorCard, noticeCard, ringCard } from "../render/cards.js";
+import { withRetiredLine } from "../render/retired.js";
 import { defer, respond } from "../discord/respond.js";
 import { staffDisplayName } from "../discord/displayName.js";
 import { showLeaderboard } from "./leaderboard.js";
@@ -102,7 +103,7 @@ async function showRings({ client, config, interaction, staff, tier }: CommandCo
 
     await respond(
         interaction,
-        ringCard({
+        withRetiredLine(ringCard({
             staffId: subject._id.toHexString(),
             displayName: await staffDisplayName(
                 client,
@@ -127,6 +128,6 @@ async function showRings({ client, config, interaction, staff, tier }: CommandCo
             streak,
             staffOfWeek: { times: held.count, last: held.last },
             footnote: leaveNoteFor(stats, config.minimumLeaveDays)
-        })
+        }), subject)
     );
 }

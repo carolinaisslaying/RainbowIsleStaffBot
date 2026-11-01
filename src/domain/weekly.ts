@@ -15,7 +15,7 @@ import {
     weekIndexFrom,
     DAY_MS
 } from "../time/calendar.js";
-import { listActiveStaff } from "./staff.js";
+import { listAllStaff } from "./staff.js";
 import { log } from "../log.js";
 
 /**
@@ -146,15 +146,36 @@ export async function rebuildWeek(
     return { _id: new ObjectId(), ...stats };
 }
 
-/** Rebuild one week for every active member. Idempotent. */
+/**
+ * Rebuild one week for one record. Somebody off the team still gets a rollup for
+ * a week they worked, which is what keeps them in that week's history, but no
+ * empty row for every week since they left.
+ */
+export async function rebuildWeekFor(
+    member: StaffDoc,
+    window: WeekWindow,
+    config: StaffBotConfig,
+    now = new Date()
+): Promise<void> {
+    if (member.active) {
+        await rebuildWeek(member._id, window, config, now);
+        return;
+    }
+    const stats = await computeWeek(member._id, window, config, now);
+    const empty = stats.activityMinutes === 0 && stats.shiftMs === 0;
+    if (empty && !(await getStoredWeek(member._id, window.start))) return;
+    await upsertWeek(stats);
+}
+
+/** Rebuild one week for every record, on the team or not. Idempotent. */
 export async function rebuildWeekForAll(
     window: WeekWindow,
     config: StaffBotConfig,
     now = new Date()
 ): Promise<number> {
-    const staff = await listActiveStaff();
+    const staff = await listAllStaff();
     for (const member of staff) {
-        await rebuildWeek(member._id, window, config, now);
+        await rebuildWeekFor(member, window, config, now);
     }
     log.info(
         `Rebuilt weeklyStats for ${staff.length} staff, week starting ${window.start.toISOString()}`

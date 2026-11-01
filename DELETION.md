@@ -111,9 +111,11 @@ Nothing else in the bot deletes anything.
 - Deletion is irreversible. Take a dump first: `mongodump --db staffbot`.
 - Work out whether you actually need deletion. `/settings export` answers an
   access request under IPP 6 of the Privacy Act 2020 without removing anything,
-  and a member leaving the team is handled by setting `active: false`, which
+  and a member leaving the team is handled by the bot, which sets `active: false`
+  and `retiredAt`, `retiredCause` and `retiredPeriods` when the role goes and
   retains the record.
-- If the member is coming back, or might, do not delete. Set `active: false`.
+- If the member is coming back, or might, do not delete. Taking the role away is
+  all it needs, and giving it back returns them.
 
 ## Order matters
 

@@ -4,6 +4,7 @@ import type { StaffBotConfig } from "../config/guildConfig.js";
 import type { StaffDoc, WeeklyStatsDoc } from "../db/types.js";
 import type { WeekWindow } from "../domain/weekly.js";
 import { leaderboardVisibility, logStandings } from "../domain/leaderboard.js";
+import { appearsInClosedWeek } from "../domain/retirement.js";
 import { creditedHolders } from "../domain/staffOfWeek.js";
 import { findWeek, toHolderRecord } from "../domain/staffOfWeekStore.js";
 import { staffChannel } from "./leaveService.js";
@@ -50,6 +51,7 @@ export async function buildLeaderboardLog(
         const member = byId.get(row.staffId.toHexString());
         // A rollup whose member has since been removed has nobody to name.
         if (!member) return [];
+        if (!appearsInClosedWeek({ active: member.active, minutes: row.activityMinutes })) return [];
         return [
             {
                 member: { staff: member, rollup: row },

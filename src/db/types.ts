@@ -11,6 +11,8 @@ export type SotwColour =
     | { style: "gradient"; primary: number; secondary: number }
     | { style: "holographic" };
 
+export type RetiredCause = "role_removed" | "left_server";
+
 export interface StaffDoc {
     _id: ObjectId;
     discordId: string;
@@ -38,6 +40,11 @@ export interface StaffDoc {
     shiftReminderOptOut?: boolean;
     /** When that DM last went out, for its cooldown. Absent is never. */
     lastShiftReminderAt?: Date | null;
+    /** When they came off the team, while they are off it. Absent is never. */
+    retiredAt?: Date | null;
+    retiredCause?: RetiredCause | null;
+    /** Earlier times off the team, which `/coverage member` skips as it skips leave. */
+    retiredPeriods?: { from: Date; to: Date }[];
     createdAt: Date;
     updatedAt: Date;
 }
@@ -117,7 +124,8 @@ export type ShiftEndReason =
     | "leave_started"
     | "reconciled"
     | "terminated"
-    | "invisible";
+    | "invisible"
+    | "retired";
 
 export type PauseCause = "presence" | "inactivity";
 

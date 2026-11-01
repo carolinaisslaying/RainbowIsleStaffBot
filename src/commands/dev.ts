@@ -4,7 +4,14 @@ import { assessmentSummaryLine } from "../domain/review.js";
 import type { Command } from "./types.js";
 import { errorCard, noticeCard, scrubConfirmCard } from "../render/cards.js";
 import { defer, respond } from "../discord/respond.js";
-import { findStaffByDiscordId, findStaffById, listActiveStaff } from "../domain/staff.js";
+import {
+    countRetiredStaff,
+    findStaffByDiscordId,
+    findStaffById,
+    listActiveStaff
+} from "../domain/staff.js";
+import { sweepBlock } from "../services/retirementService.js";
+import { staffDisplayName } from "../discord/displayName.js";
 import { previousWeekWindow } from "../domain/weekly.js";
 import {
     currentFortnightIndex,
@@ -162,6 +169,16 @@ export const devCommand: Command = {
                     log.error("Reading uptime failed during /dev status", error);
                 }
             }
+            const block = sweepBlock();
+            let teamCheck: Parameters<typeof devStatusCard>[0]["teamCheck"] = null;
+            if (block?.kind === "roles") teamCheck = block;
+            if (block?.kind === "threshold") {
+                const names = [];
+                for (const id of block.discordIds) {
+                    names.push(await staffDisplayName(client, fresh, id, `<@${id}>`));
+                }
+                teamCheck = { kind: "threshold", names, roster: block.roster };
+            }
             await respond(
                 interaction,
                 devStatusCard({
@@ -177,7 +194,9 @@ export const devCommand: Command = {
                         ...configWarnings(fresh, new Date()),
                         ...staffOfWeekRoleOrder(await staffOfWeekRoleFacts(client, fresh))
                     ].map((warning) => ({ key: String(warning.key), text: warning.text })),
-                    dangerousCommands: env.devDangerousCommands
+                    dangerousCommands: env.devDangerousCommands,
+                    retiredCount: databaseOk ? await countRetiredStaff() : 0,
+                    teamCheck
                 })
             );
             return;

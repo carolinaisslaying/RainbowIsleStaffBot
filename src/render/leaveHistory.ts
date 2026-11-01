@@ -33,11 +33,21 @@ export function leaveHistory(
 
     let ending: LeaveEnding | null = null;
     if (leave.status === "ended" && leave.rolesRestoredAt) {
-        ending = leave.endedEarlyBy ? "executive" : leave.plannedEndDate ? "member" : "schedule";
+        // A reason with nobody behind it is the one case nobody chose: they left
+        // the server while on leave.
+        ending = leave.endedEarlyBy
+            ? "executive"
+            : leave.endedEarlyReason
+              ? "retired"
+              : leave.plannedEndDate
+                ? "member"
+                : "schedule";
         history.push({
             mark: "👋",
             text:
-                ending === "executive"
+                ending === "retired"
+                    ? "Ended when they came off the team"
+                    : ending === "executive"
                     ? `Ended early by ${mention(leave.endedEarlyBy)}`
                     : ending === "member"
                       ? "Ended early by them"
@@ -68,7 +78,9 @@ export function leaveHistory(
                 ? "Withdrawn by them before a decision"
                 : themselves
                   ? "Cancelled by them"
-                  : `Cancelled by ${mention(leave.cancelledBy)}`,
+                  : leave.cancelledBy
+                    ? `Cancelled by ${mention(leave.cancelledBy)}`
+                    : "Closed when they came off the team",
             at: leave.cancelledAt,
             note: leave.cancellationReason ?? null
         });

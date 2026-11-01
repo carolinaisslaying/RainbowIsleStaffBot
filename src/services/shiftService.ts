@@ -43,7 +43,8 @@ const REASON_LABEL: Record<ShiftEndReason, string> = {
     leave_started: "leave began",
     reconciled: "reconciled on restart",
     terminated: "an Executive ended it",
-    invisible: "you posted while invisible"
+    invisible: "you posted while invisible",
+    retired: "no longer on the team"
 };
 
 /** What the member should do next time, for an end they caused. */

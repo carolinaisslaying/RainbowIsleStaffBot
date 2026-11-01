@@ -29,6 +29,7 @@ import {
 } from "../render/heatmap.js";
 import { isExecutive } from "../domain/permissions.js";
 import { findStaffByDiscordId } from "../domain/staff.js";
+import { noLongerOnTeamLine } from "../render/retired.js";
 import {
     V2_FLAGS,
     containersMessage,
@@ -319,6 +320,9 @@ export const coverageCommand: Command = {
                 .addTextDisplayComponents(
                     text(headline(`Activity: ${name}`, grid.maxDemand <= 0 ? grid : undefined))
                 );
+            if (!member.active) {
+                container.addTextDisplayComponents(text(noLongerOnTeamLine(member)));
+            }
 
             if (grid.maxDemand <= 0) {
                 container

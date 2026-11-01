@@ -133,6 +133,36 @@ describe("a leave's history", () => {
         expect(lines.indexOf("Ended on schedule")).toBeLessThan(lines.length - 1);
     });
 
+    it("says leave ended because they came off the team, not by them", () => {
+        const { history, ending } = leaveHistory(
+            {
+                ...base,
+                status: "ended",
+                rolesRestoredAt: at("2026-10-01T00:00:00Z"),
+                endedEarlyReason: "No longer on the team.",
+                plannedEndDate: at("2026-11-01T00:00:00Z")
+            },
+            mention
+        );
+        expect(ending).toBe("retired");
+        expect(history.at(-1)?.text).toBe("Ended when they came off the team");
+    });
+
+    it("says leave closed because they came off the team, naming nobody", () => {
+        const { history, withdrawn } = leaveHistory(
+            {
+                ...base,
+                status: "cancelled",
+                cancelledAt: at("2026-10-01T00:00:00Z"),
+                cancelledBy: null,
+                cancellationReason: "No longer on the team."
+            },
+            mention
+        );
+        expect(withdrawn).toBe(false);
+        expect(history.at(-1)?.text).toBe("Closed when they came off the team");
+    });
+
     it("names who ended it early and why", () => {
         const { history, ending } = leaveHistory(
             {

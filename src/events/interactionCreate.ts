@@ -1,3 +1,4 @@
+import { handleRetireButton } from "./retireButtons.js";
 import {
     Events,
     MessageFlags,
@@ -411,6 +412,10 @@ async function routeButton(client: Client, interaction: import("discord.js").But
     }
     if (namespace === "reviewBulk") {
         await handleReviewBulkButton(client, config, interaction, Number(first), second);
+        return;
+    }
+    if (namespace === "retire") {
+        await handleRetireButton(client, config, interaction, first, second);
         return;
     }
     if (namespace === "scrub") {

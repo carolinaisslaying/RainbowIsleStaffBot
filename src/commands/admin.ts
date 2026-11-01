@@ -5,8 +5,8 @@ import { EMOJI } from "../render/emoji.js";
 import { errorCard, noticeCard } from "../render/cards.js";
 import { defer, respond } from "../discord/respond.js";
 import { fetchMember } from "../discord/roles.js";
-import { listActiveStaff, relinkStaff } from "../domain/staff.js";
-import { rebuildWeek, weekWindowFor } from "../domain/weekly.js";
+import { listAllStaff, relinkStaff } from "../domain/staff.js";
+import { rebuildWeekFor, weekWindowFor } from "../domain/weekly.js";
 import { recomputeCounts } from "../domain/activity.js";
 import {
     currentFortnightIndex,
@@ -95,7 +95,7 @@ export const adminCommand: Command = {
             const weeks = interaction.options.getInteger("weeks", true);
             await defer(interaction, true);
 
-            const members = await listActiveStaff();
+            const members = await listAllStaff();
             const now = new Date();
             let rebuilt = 0;
 
@@ -112,7 +112,7 @@ export const adminCommand: Command = {
                     end: nextWeekStart(start, config.accountingTimezone, config.weekStartDay)
                 };
                 for (const member of members) {
-                    await rebuildWeek(member._id, window, config, now);
+                    await rebuildWeekFor(member, window, config, now);
                     rebuilt += 1;
                 }
                 cursor = start;

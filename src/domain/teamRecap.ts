@@ -20,6 +20,8 @@ export interface TeamWeekRow {
     activeDays: number;
     ringState: RingState;
     onLeave: boolean;
+    /** Off the team now. Their minutes happened; nobody is counting on them. */
+    retired?: boolean;
 }
 
 export interface TeamWeek {
@@ -42,19 +44,21 @@ export function summariseTeamWeek(
     rows: TeamWeekRow[],
     priorTotalMinutes: number | null
 ): TeamWeek {
-    const counted = rows.filter((row) => !row.onLeave);
+    const counted = rows.filter((row) => !row.onLeave && !row.retired);
+    const contributing = rows.filter((row) => !row.onLeave);
     const minutes = counted.map((row) => row.activityMinutes).sort((a, b) => a - b);
-    const totalMinutes = minutes.reduce((sum, value) => sum + value, 0);
+    const countedMinutes = minutes.reduce((sum, value) => sum + value, 0);
+    const totalMinutes = contributing.reduce((sum, row) => sum + row.activityMinutes, 0);
 
     return {
         counted: counted.length,
         closed: counted.filter((row) => row.ringState === "green").length,
-        onLeave: rows.length - counted.length,
+        onLeave: rows.filter((row) => row.onLeave && !row.retired).length,
         totalMinutes,
-        totalShiftMs: counted.reduce((sum, row) => sum + row.shiftMs, 0),
-        totalActiveDays: counted.reduce((sum, row) => sum + row.activeDays, 0),
+        totalShiftMs: contributing.reduce((sum, row) => sum + row.shiftMs, 0),
+        totalActiveDays: contributing.reduce((sum, row) => sum + row.activeDays, 0),
         medianMinutes: median(minutes),
-        meanMinutes: counted.length === 0 ? 0 : Math.round(totalMinutes / counted.length),
+        meanMinutes: counted.length === 0 ? 0 : Math.round(countedMinutes / counted.length),
         // A previous week of zero has no percentage to be a change from, so it
         // reports as "no comparison" rather than as an infinite rise.
         deltaPercent:

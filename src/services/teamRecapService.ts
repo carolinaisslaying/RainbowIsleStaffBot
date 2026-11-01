@@ -49,13 +49,19 @@ export async function buildTeamRecap(
               .reduce((sum, row) => sum + row.activityMinutes, 0)
         : null;
 
+    const retired = new Set(
+        (await collections.staff().find({ active: false }).project({ _id: 1 }).toArray()).map((doc) =>
+            doc._id.toHexString()
+        )
+    );
     const summary = summariseTeamWeek(
         rows.map((row) => ({
             activityMinutes: row.activityMinutes,
             shiftMs: row.shiftMs,
             activeDays: row.activeDays,
             ringState: row.ringState,
-            onLeave: row.onLeave
+            onLeave: row.onLeave,
+            retired: retired.has(row.staffId.toHexString())
         })),
         priorTotal
     );
@@ -64,7 +70,7 @@ export async function buildTeamRecap(
     // rather than a ranking: the leaderboard is where positions live.
     let topStreak: { mention: string; weeks: number } | null = null;
     for (const row of rows) {
-        if (row.onLeave) continue;
+        if (row.onLeave || retired.has(row.staffId.toHexString())) continue;
         const weeks = await computeStreak(row.staffId, config, week.end);
         if (weeks > (topStreak?.weeks ?? 0)) {
             const staff = await findStaffById(row.staffId);

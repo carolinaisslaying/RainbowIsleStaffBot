@@ -1,3 +1,4 @@
+import { retiredSpans } from "../domain/retirement.js";
 import type { StaffBotConfig } from "../config/guildConfig.js";
 import type { StaffDoc } from "../db/types.js";
 import { allShiftsOverlapping, availableIntervals } from "../domain/shifts.js";
@@ -193,7 +194,7 @@ export interface MemberActivityGrid extends CoverageGrid {
  */
 export async function buildMemberActivityGrid(
     config: StaffBotConfig,
-    member: Pick<StaffDoc, "_id" | "joinedTeamAt">,
+    member: Pick<StaffDoc, "_id" | "joinedTeamAt" | "retiredAt" | "retiredPeriods">,
     timeZone: string,
     lookbackWeeks: number,
     now = new Date()
@@ -207,7 +208,7 @@ export async function buildMemberActivityGrid(
         uptimeByHour(from, to),
         uptimeMeasuredSince()
     ]);
-    const excludedHours = hoursTouchedBy(leave, from, to);
+    const excludedHours = hoursTouchedBy([...leave, ...retiredSpans(member, now)], from, to);
 
     const observation = observe({
         from,

@@ -7,6 +7,7 @@ import { CONDUCT_TIERS, type ConductTier } from "../db/types.js";
 import { conductWarnModal } from "../render/modals.js";
 import { TIER_STYLE } from "../render/tiers.js";
 import { errorCard } from "../render/cards.js";
+import { withRetiredLine } from "../render/retired.js";
 import { defer, respond } from "../discord/respond.js";
 import { cmd } from "../discord/commandMentions.js";
 import { staffDisplayName } from "../discord/displayName.js";
@@ -79,7 +80,10 @@ async function viewWarnings({ client, config, interaction, staff, tier }: Comman
 
     await respond(
         interaction,
-        await warningsViewFor(client, config, subject, subject._id.equals(staff._id))
+        withRetiredLine(
+            await warningsViewFor(client, config, subject, subject._id.equals(staff._id)),
+            subject
+        )
     );
 }
 

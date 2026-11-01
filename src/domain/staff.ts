@@ -1,6 +1,6 @@
 import { ObjectId } from "mongodb";
 import { collections } from "../db/client.js";
-import type { SotwColour, StaffDoc } from "../db/types.js";
+import type { RetiredCause, SotwColour, StaffDoc } from "../db/types.js";
 import { audit } from "./audit.js";
 import { LruCache } from "../util/cache.js";
 
@@ -14,7 +14,7 @@ import { LruCache } from "../util/cache.js";
  * joins the department is picked up without a restart.
  *
  * Every write that changes who a Discord ID resolves to invalidates it:
- * `ensureStaff`, `relinkStaff` and `setStaffActive`.
+ * `ensureStaff`, `relinkStaff`, `retireStaff` and `returnStaff`.
  *
  * Both hits and misses also expire, which is the belt to that braces. The other
  * writers here — `setTimezone`, `setRingFace`, `setLeaderboardOptOut` — take a
@@ -57,6 +57,15 @@ export async function findManyStaff(staffIds: ObjectId[]): Promise<Map<string, S
 
 export async function listActiveStaff(): Promise<StaffDoc[]> {
     return collections.staff().find({ active: true }).toArray();
+}
+
+/** Everybody with a record, on the team or not. */
+export async function listAllStaff(): Promise<StaffDoc[]> {
+    return collections.staff().find({}).toArray();
+}
+
+export async function countRetiredStaff(): Promise<number> {
+    return collections.staff().countDocuments({ active: false });
 }
 
 /**
@@ -188,19 +197,41 @@ export async function claimShiftReminder(
     return result.modifiedCount > 0;
 }
 
-export async function setStaffActive(staffId: ObjectId, active: boolean): Promise<void> {
+/**
+ * Take somebody off the team. Null when they were already off it, so a member
+ * event and a sweep reaching the same person cannot both act.
+ */
+export async function retireStaff(
+    staffId: ObjectId,
+    cause: RetiredCause,
+    at = new Date()
+): Promise<StaffDoc | null> {
     const result = await collections.staff().findOneAndUpdate(
-        { _id: staffId },
-        { $set: { active, updatedAt: new Date() } },
+        { _id: staffId, active: true },
+        { $set: { active: false, retiredAt: at, retiredCause: cause, updatedAt: at } },
         { returnDocument: "after" }
     );
+    if (!result) return null;
     // `active` is read off the cached document by reviewRowFor to decide whether
     // somebody has departed, so a stale copy would draw a departed member as
     // present and offer buttons that refuse.
-    if (result) forgetStaffLookup(result.discordId);
-    await audit(active ? "staff.reactivated" : "staff.deactivated", {
-        targetStaffId: staffId
-    });
+    forgetStaffLookup(result.discordId);
+    await audit("staff.retired", { targetStaffId: staffId, detail: { cause } });
+    return result;
+}
+
+/** Put somebody back on the team, keeping their settings, history and join date. */
+export async function returnStaff(staff: StaffDoc, at = new Date()): Promise<void> {
+    const result = await collections.staff().findOneAndUpdate(
+        { _id: staff._id, active: false },
+        {
+            $set: { active: true, retiredAt: null, retiredCause: null, updatedAt: at },
+            $push: { retiredPeriods: { from: staff.retiredAt ?? at, to: at } }
+        }
+    );
+    if (!result) return;
+    forgetStaffLookup(staff.discordId);
+    await audit("staff.returned", { targetStaffId: staff._id });
 }
 
 /**

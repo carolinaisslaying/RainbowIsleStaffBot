@@ -1174,7 +1174,7 @@ export interface LeaveEvent {
 }
 
 /** How an ended leave ended, which is what its title says. */
-export type LeaveEnding = "schedule" | "member" | "executive";
+export type LeaveEnding = "schedule" | "member" | "executive" | "retired";
 
 /** The card's title: the state, in words, at the size of a heading. */
 function leaveTitle(options: {
@@ -1194,7 +1194,7 @@ function leaveTitle(options: {
         case "active":
             return "On leave";
         case "ended":
-            return options.ending === "member" || options.ending === "executive"
+            return options.ending === "member" || options.ending === "executive" || options.ending === "retired"
                 ? "Leave ended early"
                 : "Back from leave";
         case "cancelled":

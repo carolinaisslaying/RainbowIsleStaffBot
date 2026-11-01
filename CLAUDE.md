@@ -343,7 +343,7 @@ which splits `customId` on `:` into `namespace:first:second`. Namespaces in use:
 (`ack` on the member's DM), `conduct` (`withdraw` on the log card), `leave`
 (`approve`/`decline`/`extApprove`/`extDecline`/`end`/`endConfirm`/`endCancel`), `leaveConfirm`,
 `leavePurge`, `shift` (`start` on the reminder DM), `tz`,
-`leaderboard`, `sotw` (`rest`/`next`/`cancel`, each id carrying the staged staffId) and `sotwColour`
+`retire` (`ask`/`go`/`cancel`, from `/dev status`), `leaderboard`, `sotw` (`rest`/`next`/`cancel`, each id carrying the staged staffId) and `sotwColour`
 (`code`/`clear`/`save`/`cancel`). A pressed button edits its own message in place
 (`interaction.update` / `deferUpdate` + `editReply`) rather than replying beneath it.
 
@@ -612,7 +612,7 @@ therefore writes to `collections.auditLog()` directly so a failure can abort.
 
 **The one other delete: a bot's staff record.** A bot is never staff — `tierOf` answers `none` for
 one whatever roles it holds — but a bot given the Moderation role for a while once picked up a
-record, and since nothing retires records it stayed on every leaderboard at 0 minutes long after
+record, and since nothing retired records then it stayed on every leaderboard at 0 minutes long after
 the role went. `removeBotStaffRecords` (`services/botRecordCleanup.ts`) runs at boot, before
 `reconcileOnBoot`, and removes any record whose account Discord says is a bot, with everything
 stored against it in `DELETION.md`'s full purge order. The audit log is kept; the audit row goes
@@ -620,6 +620,31 @@ first, with the record embedded, and a failure leaves that record alone. An acco
 looked up is **kept** (`botRecordAction`, `domain/botRecords.ts`): not knowing is not knowing it is
 a bot. `/warnings issue` and its form decide every rule before `ensureStaff`, on Discord ids, so a
 refused subject — a bot, or anybody not on the team — no longer comes away with a staff record.
+
+**Being on the team is holding a tier, and `active` follows it.** `domain/retirement.ts` holds the rules
+as pure functions; `services/retirementService.ts` applies them from member events
+(`events/retirementMembers.ts`) and from a sweep at boot and at week close. Somebody who leaves the public
+guild or drops to tier `none` is retired at once: `active: false`, `retiredAt`, `retiredCause`, an open shift
+ended with its minutes, pending and unstarted leave closed, no DM, an audit row and nothing else. Every
+`listActiveStaff` reader then follows without knowing. Cards say "no longer on the team". Getting a tier back
+returns them automatically, with `joinedTeamAt` untouched and the gap in `retiredPeriods`, which `/coverage
+member` skips as it skips leave. Seeded admins are never retired.
+
+Three things must not read as somebody quitting. **A failed lookup**: only Discord's own Unknown Member
+counts, so `readMember` separates it from every other error, which `fetchMember` cannot. **Leave**: activation
+takes the roles before it marks the record, so the update arrives while the record says `approved`, which is
+why `isOnLeaveNow` counts approved leave whose start has arrived. Leaving the server while on leave does retire
+them, and ends the leave. **A bad configuration**: `tierOf` answers `none` for everybody when a role is unset or
+deleted, so `staffRolesProblem` stops the sweep and the live path, and a sweep that would retire more than a
+quarter of the roster stops too, deciding before it writes anything. Either shows red on `/dev status`. Over
+the threshold it lists the names with **Retire them**, because a first cleanup can honestly cross it; that
+button re-reads the roster on every press and never overrides bad roles.
+
+Rollups cover every record (`rebuildWeekFor`), because a closed week keeps somebody who worked it:
+`appearsInClosedWeek` lists a retired person only with minutes, and current staff always. A retired member
+writes no empty rollups. The team recap adds their minutes and leaves them out of the head count, the ring
+figure and the top streak. A later re-run of an assessment takes whoever is on the team at that moment, which is
+how an Executive repairs an accidental removal across a close.
 
 **Ring faces.** A member picks one of four curated faces (`render/faces.ts`), stored as
 `StaffDoc.ringFace`. A face sets **only the two soft rings**, shift time and active days, because

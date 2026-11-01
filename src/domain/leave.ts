@@ -196,7 +196,7 @@ export async function markLeaveActive(
  */
 export async function markLeaveCancelled(
     leave: LeaveDoc,
-    cancelledBy: ObjectId,
+    cancelledBy: ObjectId | null,
     reason: string | null,
     at = new Date()
 ): Promise<LeaveDoc | null> {

@@ -190,7 +190,9 @@ export type LeaveEndReason =
     /** The member ran `/leave end` themselves. */
     | { kind: "member" }
     /** An Executive ended it early from the leave channel, and said why. */
-    | { kind: "executive"; discordId: string; staffId: ObjectId; reason: string };
+    | { kind: "executive"; discordId: string; staffId: ObjectId; reason: string }
+    /** They left the server while on leave. Nobody is told; there is nobody to welcome back. */
+    | { kind: "retired"; reason: string };
 
 /**
  * The one renderer for a leave record's card, wherever it is being drawn.
@@ -351,7 +353,8 @@ export async function endLeave(
     }
 
     const earlyBy = endedBy.kind === "executive" ? endedBy.staffId : null;
-    const earlyReason = endedBy.kind === "executive" ? endedBy.reason : null;
+    const earlyReason =
+        endedBy.kind === "executive" || endedBy.kind === "retired" ? endedBy.reason : null;
     const ended = (await markLeaveEnded(leave, errors, earlyBy, new Date(), earlyReason)) ?? {
         ...leave,
         status: "ended" as const,
@@ -381,7 +384,9 @@ export async function endLeave(
         inGuild: member !== null,
         minimumLeaveDays: config.minimumLeaveDays
     };
-    await tryDm(client, staff.discordId, { ...welcomeBackCard(summary) });
+    if (endedBy.kind !== "retired") {
+        await tryDm(client, staff.discordId, { ...welcomeBackCard(summary) });
+    }
 
     // The channel card follows the record into its final state, so the leave
     // channel shows one row per request from "pending" through to "back".
@@ -444,15 +449,16 @@ export async function cancelLeave(
     client: Client,
     config: StaffBotConfig,
     leave: LeaveDoc,
-    by: { discordId: string; staffId: ObjectId },
+    /** Null when nobody decided it: they came off the team. Nobody is DMed. */
+    by: { discordId: string; staffId: ObjectId } | null,
     reason: string | null
 ): Promise<boolean> {
-    const cancelled = await markLeaveCancelled(leave, by.staffId, reason);
+    const cancelled = await markLeaveCancelled(leave, by?.staffId ?? null, reason);
     if (!cancelled) return false;
 
     const staff = await findStaffById(leave.staffId);
     await audit("leave.cancel", {
-        actorId: by.discordId,
+        actorId: by?.discordId ?? null,
         targetStaffId: leave.staffId,
         detail: {
             leaveId: leave._id.toHexString(),
@@ -464,8 +470,8 @@ export async function cancelLeave(
         }
     });
 
-    const themselves = by.staffId.equals(leave.staffId);
-    if (staff && !themselves && reason) {
+    const themselves = by?.staffId.equals(leave.staffId) ?? false;
+    if (by && staff && !themselves && reason) {
         await tryDm(client, staff.discordId, {
             ...leaveCancelledCard({
                 startDate: leave.startDate,
