@@ -27,6 +27,12 @@ interface Job {
 
 const jobs: Job[] = [];
 let running = false;
+let failureHandler: ((name: string, message: string) => Promise<void>) | null = null;
+
+/** Who hears about a failed run, beyond the log and `/dev status`. */
+export function onJobFailure(handler: (name: string, message: string) => Promise<void>): void {
+    failureHandler = handler;
+}
 
 /** setTimeout saturates above ~24.8 days. Chain instead of firing immediately. */
 const MAX_DELAY = 2_147_483_647;
@@ -82,6 +88,10 @@ async function fire(job: Job): Promise<void> {
         job.failures += 1;
         job.lastError = error instanceof Error ? error.message : String(error);
         log.error(`Job ${job.name} failed`, error);
+        // Telling somebody must not be what stops the schedule.
+        await failureHandler?.(job.name, job.lastError).catch((alertError) =>
+            log.error(`Alerting about job ${job.name} failed`, alertError)
+        );
     } finally {
         arm(job);
     }

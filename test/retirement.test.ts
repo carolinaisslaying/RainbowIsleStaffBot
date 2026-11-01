@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
     appearsInClosedWeek,
     isOnLeaveNow,
+    leaveCloseDue,
+    LEAVE_CLOSE_DELAY_MS,
     retiredSpans,
     retirementAction,
     staffRolesProblem,
@@ -169,5 +171,23 @@ describe("the lookup line", () => {
         const message = { components: [], files: [] } as never;
         const result = withRetiredLine(message, { active: false, retiredAt });
         expect(result.components).toHaveLength(1);
+    });
+});
+
+describe("closing a retired person's leave", () => {
+    const retiredAt = new Date("2026-11-02T00:00:00Z");
+    const after = (ms: number) => new Date(retiredAt.getTime() + ms);
+
+    it("waits five minutes, so a two-step role swap keeps it", () => {
+        expect(LEAVE_CLOSE_DELAY_MS).toBe(300_000);
+        expect(leaveCloseDue(retiredAt, after(299_999))).toBe(false);
+    });
+
+    it("closes it from then on", () => {
+        expect(leaveCloseDue(retiredAt, after(300_000))).toBe(true);
+    });
+
+    it("does not wait on a record with no date", () => {
+        expect(leaveCloseDue(null, retiredAt)).toBe(true);
     });
 });

@@ -61,6 +61,14 @@ export function isOnLeaveNow(
     );
 }
 
+/** How long somebody stays retired before their leave is closed. */
+export const LEAVE_CLOSE_DELAY_MS = 5 * 60_000;
+
+/** Whether retirement has lasted long enough to close their leave. No date is long enough. */
+export function leaveCloseDue(retiredAt: Date | null | undefined, now: Date): boolean {
+    return !retiredAt || now.getTime() - retiredAt.getTime() >= LEAVE_CLOSE_DELAY_MS;
+}
+
 /**
  * Why the role settings cannot be trusted to say who is on the team, or null.
  *

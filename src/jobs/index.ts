@@ -1,6 +1,10 @@
 import { Status, type Client } from "discord.js";
 import { cachedConfig, loadConfig, type StaffBotConfig } from "../config/guildConfig.js";
-import { everyHour, everyMinute, schedule, startScheduler } from "./scheduler.js";
+import { everyHour, everyMinute, onJobFailure, schedule, startScheduler } from "./scheduler.js";
+import { jobAlertDue } from "../domain/adminAlerts.js";
+import { alertAdmins } from "../services/adminAlerts.js";
+import { closeLeaveOfRetired } from "../services/retirementService.js";
+import { cmd } from "../discord/commandMentions.js";
 import { sweepShifts } from "../services/shiftService.js";
 import { processLeaveTransitions } from "../services/leaveService.js";
 import { deliverDueRecaps } from "../services/notifications.js";
@@ -55,6 +59,20 @@ function offsetMinutes(weekStart: Date, minutes: number, zone: string): Date {
 export async function registerJobs(client: Client): Promise<void> {
     const config = await loadConfig();
 
+    const lastAlerts = new Map<string, number>();
+    onJobFailure(async (name, message) => {
+        const now = Date.now();
+        if (!jobAlertDue(lastAlerts.get(name), now)) return;
+        lastAlerts.set(name, now);
+        await alertAdmins(
+            client,
+            `The ${name} job failed`,
+            `\`\`\`\n${message.slice(0, 500)}\n\`\`\`\nIt tries again on its next run. ` +
+                `${cmd("dev status")} shows how it is doing. You will not hear about this job ` +
+                "again for six hours, however often it fails."
+        );
+    });
+
     // Away detection, auto end and the hard shift ceiling.
     schedule("shift-sweep", everyMinute, async (at) => {
         await sweepShifts(client, await loadConfig(), at);
@@ -77,7 +95,9 @@ export async function registerJobs(client: Client): Promise<void> {
     // idempotent, so a missed run still self-heals, and it costs two indexed
     // queries when nothing is due.
     schedule("leave-transitions", everyMinute, async (at) => {
-        await processLeaveTransitions(client, await loadConfig(), at);
+        const current = await loadConfig();
+        await processLeaveTransitions(client, current, at);
+        await closeLeaveOfRetired(client, current, at);
     });
 
     // Recaps are held until each recipient's local 09:00, so this must tick

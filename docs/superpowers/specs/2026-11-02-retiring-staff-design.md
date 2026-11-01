@@ -89,7 +89,7 @@ All of it idempotent, so the live event and the sweep can both reach the same pe
 1. `active: false`, plus new `StaffDoc.retiredAt` and `retiredCause` (`role_removed` | `left_server`).
    For the first cleanup, the date is when the bot noticed. Absent reads as never retired.
 2. An open shift ends at that moment and keeps its minutes, with no summary DM.
-3. Pending requests, pending extensions and approved leave that has not started are closed, with "no
+3. Five minutes later (added after this was first agreed, for two-step role swaps), pending requests, pending extensions and approved leave that has not started are closed, with "no
    longer on the team" on the leave card and any ping cleared, and nobody DMed. Reassess as any other
    leave change does. Pending leave may have been holding a review row.
 4. Active leave ends only for `left_server`, without trying to restore roles and without a DM.

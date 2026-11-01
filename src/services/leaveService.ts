@@ -65,6 +65,9 @@ export async function activateLeave(
 ): Promise<void> {
     const staff = await findStaffById(leave.staffId);
     if (!staff) return;
+    // Retired and waiting to have this closed, or to come back and keep it. Either
+    // way it does not start: that would take roles and DM somebody off the team.
+    if (!staff.active) return;
 
     const member = await fetchMember(client, config.publicGuildId, staff.discordId);
     let removed: string[] = [];

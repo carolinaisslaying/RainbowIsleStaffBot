@@ -1,3 +1,6 @@
+import { retrying } from "../domain/retry.js";
+import { readMember } from "../discord/roles.js";
+import { alertAdmins } from "./adminAlerts.js";
 import type { Client } from "discord.js";
 import { ObjectId } from "mongodb";
 import type { FortnightAssessmentDoc, ReviewOutcome, WarningDoc } from "../db/types.js";
@@ -104,8 +107,12 @@ async function priorOutcomesFor(
 /**
  * The Discord ids of active staff holding an Executive role in the public
  * server right now, for `assessFortnight` to snapshot. Roles only: a seeded
- * admin without the role is reviewed like anybody else. A member who cannot be
- * fetched is left out, which reviews them.
+ * admin without the role is reviewed like anybody else.
+ *
+ * The answer is written once and never corrected, so a lookup that fails is tried
+ * again rather than read as "not an Executive". Somebody Discord still cannot
+ * answer for is left out, which reviews them, and the administrators are told,
+ * because that row and its place on the chart would otherwise pass as true.
  */
 export async function currentExecutives(
     client: Client,
@@ -113,9 +120,27 @@ export async function currentExecutives(
 ): Promise<Set<string>> {
     const executives = new Set<string>();
     if (config.reviewExecutives) return executives;
+    const unknown: string[] = [];
     for (const staff of await listActiveStaff()) {
-        const member = await fetchPublicMember(client, config, staff.discordId);
-        if (tierOf(member, config) === "executive") executives.add(staff.discordId);
+        const read = await retrying(
+            () => readMember(client, config.publicGuildId, staff.discordId),
+            (result) => result.kind !== "unknown"
+        );
+        if (read.kind === "unknown") unknown.push(staff.discordId);
+        if (read.kind === "present" && tierOf(read.member, config) === "executive") {
+            executives.add(staff.discordId);
+        }
+    }
+    if (unknown.length > 0) {
+        log.error(`Could not read the roles of ${unknown.join(", ")} for the fortnight's Executives.`);
+        await alertAdmins(
+            client,
+            "Some roles could not be read for the review",
+            `Discord would not say what roles ${unknown.map((id) => `<@${id}>`).join(", ")} ` +
+                "hold, even after retrying. They are treated as not being Executives for this " +
+                "fortnight, so any who are will appear on its chart and in its queue, and that " +
+                "cannot be changed afterwards. An Executive row can be excused or dismissed."
+        );
     }
     return executives;
 }

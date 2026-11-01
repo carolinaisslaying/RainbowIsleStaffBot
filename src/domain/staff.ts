@@ -64,6 +64,10 @@ export async function listAllStaff(): Promise<StaffDoc[]> {
     return collections.staff().find({}).toArray();
 }
 
+export async function listRetiredStaff(): Promise<StaffDoc[]> {
+    return collections.staff().find({ active: false }).toArray();
+}
+
 export async function countRetiredStaff(): Promise<number> {
     return collections.staff().countDocuments({ active: false });
 }

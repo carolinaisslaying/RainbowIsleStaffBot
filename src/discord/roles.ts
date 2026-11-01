@@ -1,4 +1,4 @@
-import type { Client, GuildMember } from "discord.js";
+import { DiscordAPIError, type Client, type GuildMember } from "discord.js";
 import type { ObjectId } from "mongodb";
 import type { StaffBotConfig } from "../config/guildConfig.js";
 import { audit } from "../domain/audit.js";
@@ -16,6 +16,36 @@ export async function fetchMember(
         return await guild.members.fetch(userId);
     } catch {
         return null;
+    }
+}
+
+export type MemberRead =
+    | { kind: "present"; member: GuildMember }
+    | { kind: "absent" }
+    | { kind: "unknown" };
+
+/** Discord's own "no such member" and "no such user". Everything else is a failure. */
+const NOT_THERE = new Set([10007, 10013]);
+
+/**
+ * A member, asked of Discord itself, keeping apart what `fetchMember` cannot:
+ * somebody who is not in the guild, and a lookup that failed. Forced, because
+ * after downtime the cache is what is out of date.
+ */
+export async function readMember(
+    client: Client,
+    guildId: string,
+    userId: string
+): Promise<MemberRead> {
+    try {
+        const guild = await client.guilds.fetch(guildId);
+        return { kind: "present", member: await guild.members.fetch({ user: userId, force: true }) };
+    } catch (error) {
+        if (error instanceof DiscordAPIError && NOT_THERE.has(Number(error.code))) {
+            return { kind: "absent" };
+        }
+        log.warn(`Could not read member ${userId}`, error);
+        return { kind: "unknown" };
     }
 }
 

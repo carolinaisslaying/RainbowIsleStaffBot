@@ -640,6 +640,11 @@ quarter of the roster stops too, deciding before it writes anything. Either show
 the threshold it lists the names with **Retire them**, because a first cleanup can honestly cross it; that
 button re-reads the roster on every press and never overrides bad roles.
 
+**Leave closes five minutes after retirement, not at it** (`closeLeaveOfRetired`, on the `leave-transitions`
+tick, going by `retiredAt`). Cancelled leave cannot be brought back, and moving somebody between roles in two
+steps retires them for a moment. Their shift ends and they leave every view at once; the leave waits. Meanwhile
+`activateLeave` refuses a retired record, and `resolveTierAllowingLeave` does not let waiting leave re-grant them Staff tier.
+
 Rollups cover every record (`rebuildWeekFor`), because a closed week keeps somebody who worked it:
 `appearsInClosedWeek` lists a retired person only with minutes, and current staff always. A retired member
 writes no empty rollups. The team recap adds their minutes and leaves them out of the head count, the ring
@@ -952,6 +957,11 @@ fortnight now claims a `deliveries` receipt (`claimFortnightAnnouncement`) befor
 re-running an assessment refreshes the figures without re-notifying the roster. `assessmentDryRun`,
 and `/admin assess rehearse: true`, post the card marked as a rehearsal, DM nobody and claim no
 receipt, so a rehearsal is repeatable and never spends the one real announcement.
+
+**A failed job DMs the seeded admins** (`onJobFailure`, `services/adminAlerts.ts`), at most once per job per six
+hours (`jobAlertDue`), because `shift-sweep` runs every minute. Failures a job catches itself, a recap send or a
+handoff, stay in the log. `currentExecutives` retries a failed role lookup (`retrying`, `domain/retry.ts`), since its answer is
+written once and never corrected, and DMs the same people about anybody Discord still cannot answer for.
 
 **One open shift per member is a unique index, not a check.** `beginShift` read for an open shift and
 then inserted one; two clicks either side of that read both saw none and both inserted, and

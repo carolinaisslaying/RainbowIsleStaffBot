@@ -214,7 +214,8 @@ async function resolveTierAllowingLeave(
     if (wearsOnLeaveRole(member, config)) return "staff";
 
     const staff = await findStaffByDiscordId(userId);
-    if (!staff) return "none";
+    // Off the team, with leave only waiting to be closed.
+    if (!staff?.active) return "none";
     const leave = await pendingOrApprovedLeaveFor(staff._id);
     const away = leave.some(
         (record) => record.status === "approved" || record.status === "active"
