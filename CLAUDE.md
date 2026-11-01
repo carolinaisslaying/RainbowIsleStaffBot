@@ -745,6 +745,13 @@ still congratulates the holder, posts the notice and marks the week handed off, 
 `granted: false`, because the receipt is already spent and nothing will retry this week if the run
 stops there.
 
+**Moderators on trial cannot hold it, by default.** `trialModeratorRole` names the role and
+`staffOfWeekAllowTrialModerators` (default off) lets them. `barredAsTrial` (`domain/staffOfWeek.ts`) is the rule
+and `onTrial` a hard refusal, so `/sotw set`, the rest-of-week grant, the draw, the leaders list and a pick at the handoff
+all refuse alike. A pick refused at the handoff leaves the week empty, as any hard refusal does. Roles the leave
+took count as worn, or a trial member could qualify by going on leave. Unset bars nobody, and `configWarnings`
+says so. A holder given the role mid-week keeps it: nothing watches for that.
+
 **Credited versus removed holders.** A week's document keeps `holders` (everybody ever granted it
 that week) and `removedHolders` (anybody taken off early) rather than overwriting one with the
 other, so the history says what happened rather than just what stands now. `creditedHolders`

@@ -173,3 +173,21 @@ describe("the warnings as a set", () => {
         ]);
     });
 });
+
+describe("the trial rule with no role to read", () => {
+    const base = { ...DEFAULT_CONFIG, staffOfWeekRole: "sotw" };
+    const flagged = (config: typeof base) =>
+        configWarnings(config, new Date("2027-01-01T00:00:00Z")).some(
+            (warning) => warning.key === "trialModeratorRole"
+        );
+
+    it("says so while Staff of the Week is on", () => {
+        expect(flagged(base)).toBe(true);
+    });
+
+    it("is quiet once set, once allowed, or with the feature off", () => {
+        expect(flagged({ ...base, trialModeratorRole: "t" })).toBe(false);
+        expect(flagged({ ...base, staffOfWeekAllowTrialModerators: true })).toBe(false);
+        expect(flagged({ ...base, staffOfWeekRole: "" })).toBe(false);
+    });
+});

@@ -101,6 +101,15 @@ export function configWarnings(config: StaffBotConfig, now: Date): ConfigWarning
         });
     }
 
+    if (config.staffOfWeekRole && !config.staffOfWeekAllowTrialModerators && !config.trialModeratorRole) {
+        warnings.push({
+            key: "trialModeratorRole",
+            text:
+                "Moderators on trial are barred from Staff of the Week, but no trial role is set, " +
+                "so the bot cannot tell who they are and **any of them can still be picked or drawn**."
+        });
+    }
+
     return warnings;
 }
 

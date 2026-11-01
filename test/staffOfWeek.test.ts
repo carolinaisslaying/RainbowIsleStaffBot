@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+    barredAsTrial,
     barredIds,
     bootHandoff,
     creditedHolders,
@@ -18,6 +19,7 @@ const candidate = (overrides: Partial<Candidate> = {}): Candidate => ({
     staffId: "a",
     active: true,
     tier: "staff",
+    barredAsTrial: false,
     exemptByLeave: false,
     pendingLeave: false,
     ...overrides
@@ -76,9 +78,45 @@ describe("eligibility", () => {
     });
 
     it("words every refusal for the Executive reading it", () => {
-        for (const reason of ["inactive", "notStaff", "executive", "recentHolder", "onLeave"] as const) {
+        for (const reason of ["inactive", "notStaff", "executive", "onTrial", "recentHolder", "onLeave"] as const) {
             expect(refusalText(reason, "Robin")).toContain("**Robin**");
         }
+    });
+});
+
+describe("moderators on trial", () => {
+    const rule = { trialRole: "trial", allowTrial: false, wornRoles: [], rolesTakenByLeave: [] };
+
+    it("bars somebody wearing the role, by default", () => {
+        expect(barredAsTrial({ ...rule, wornRoles: ["mod", "trial"] })).toBe(true);
+    });
+
+    it("does not bar anybody else", () => {
+        expect(barredAsTrial({ ...rule, wornRoles: ["mod"] })).toBe(false);
+    });
+
+    it("still bars somebody whose leave took the role", () => {
+        expect(barredAsTrial({ ...rule, rolesTakenByLeave: ["trial"] })).toBe(true);
+    });
+
+    it("bars nobody once allowed, or with no role set", () => {
+        expect(barredAsTrial({ ...rule, allowTrial: true, wornRoles: ["trial"] })).toBe(false);
+        expect(barredAsTrial({ ...rule, trialRole: "", wornRoles: [""] })).toBe(false);
+    });
+
+    it("refuses them, ahead of having held it recently", () => {
+        expect(eligibilityFor(candidate({ barredAsTrial: true }), new Set(["a"]))).toEqual({
+            eligible: false,
+            reason: "onTrial"
+        });
+    });
+
+    it("refuses a recorded pick at the handoff, and leaves them out of the draw", () => {
+        const refused = eligibilityFor(candidate({ barredAsTrial: true }), new Set());
+        expect(isHardRefusal(refused)).toBe(true);
+        expect(
+            drawPool([{ staffId: "a", minutes: 500 }], 120, new Map([["a", refused]]))
+        ).toEqual([]);
     });
 });
 

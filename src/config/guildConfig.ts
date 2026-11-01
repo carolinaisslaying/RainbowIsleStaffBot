@@ -20,6 +20,7 @@ export interface StaffBotConfig {
     executiveRoles: string[];
     staffExecutivePingRole: string;
     staffOfWeekRole: string;
+    trialModeratorRole: string;
 
     trackedChannels: string[];
     leaveChannelId: string;
@@ -42,6 +43,7 @@ export interface StaffBotConfig {
     softRingsEnabled: boolean;
     assessmentDryRun: boolean;
     reviewExecutives: boolean;
+    staffOfWeekAllowTrialModerators: boolean;
     warningExpiryDays: number;
     reviewReminderDays: number;
     staffOfWeekReminderOffsetMinutes: number;
@@ -166,6 +168,14 @@ export const CONFIG_KEYS: Record<keyof StaffBotConfig, KeySpec> = {
         importance: "optional",
         group: "roles",
         consequence: "Staff of the Week is off: no reminder, no handoff, no draw"
+    },
+    trialModeratorRole: {
+        kind: "string",
+        description: "Worn by moderators on trial, in the community server",
+        target: "role",
+        importance: "optional",
+        group: "roles",
+        consequence: "Nobody counts as on trial, so anybody can be Staff of the Week"
     },
     trackedChannels: {
         kind: "stringArray",
@@ -296,6 +306,13 @@ export const CONFIG_KEYS: Record<keyof StaffBotConfig, KeySpec> = {
         kind: "boolean",
         description:
             "Put Executives under the requirement in the fortnight review. Decided when a fortnight closes",
+        target: "plain",
+        importance: "optional",
+        group: "targets"
+    },
+    staffOfWeekAllowTrialModerators: {
+        kind: "boolean",
+        description: "Let moderators on trial be picked or drawn for Staff of the Week",
         target: "plain",
         importance: "optional",
         group: "targets"
@@ -468,6 +485,8 @@ export const DEFAULT_CONFIG: StaffBotConfig = {
     leaderboardLogChannelId: "",
     warningChannelId: "",
     staffOfWeekRole: "",
+    trialModeratorRole: "",
+    staffOfWeekAllowTrialModerators: false,
     staffOfWeekChannelId: "",
     // 5 days 6 hours: Saturday 06:00 when weeks start Monday 00:00.
     staffOfWeekReminderOffsetMinutes: 7560,

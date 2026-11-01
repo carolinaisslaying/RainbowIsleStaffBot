@@ -36,20 +36,38 @@ export interface Candidate {
     active: boolean;
     /** Resolved in the public guild; `none` covers somebody who has left it. */
     tier: Tier;
+    /** Wears the trial role, while the configuration bars it. */
+    barredAsTrial: boolean;
     /** Approved or active leave exempts the week. */
     exemptByLeave: boolean;
     /** Leave waiting on a decision would exempt the week if approved. */
     pendingLeave: boolean;
 }
 
-export type Refusal = "inactive" | "notStaff" | "executive" | "recentHolder" | "onLeave";
+export type Refusal = "inactive" | "notStaff" | "executive" | "onTrial" | "recentHolder" | "onLeave";
 
 export type Eligibility = { eligible: true; pendingLeave: boolean } | { eligible: false; reason: Refusal };
+
+/**
+ * Whether the trial rule bars somebody. Leave can take the trial role with their
+ * other staff roles, so what it took counts as what they wear: somebody on trial
+ * does not stop being on trial by going on leave. Unset bars nobody.
+ */
+export function barredAsTrial(input: {
+    trialRole: string;
+    allowTrial: boolean;
+    wornRoles: readonly string[];
+    rolesTakenByLeave: readonly string[];
+}): boolean {
+    if (input.allowTrial || !input.trialRole) return false;
+    return input.wornRoles.includes(input.trialRole) || input.rolesTakenByLeave.includes(input.trialRole);
+}
 
 export function eligibilityFor(candidate: Candidate, barred: Set<string>): Eligibility {
     if (!candidate.active) return { eligible: false, reason: "inactive" };
     if (candidate.tier === "none") return { eligible: false, reason: "notStaff" };
     if (candidate.tier === "executive") return { eligible: false, reason: "executive" };
+    if (candidate.barredAsTrial) return { eligible: false, reason: "onTrial" };
     if (barred.has(candidate.staffId)) return { eligible: false, reason: "recentHolder" };
     if (candidate.exemptByLeave) return { eligible: false, reason: "onLeave" };
     return { eligible: true, pendingLeave: candidate.pendingLeave };
@@ -60,7 +78,7 @@ export function eligibilityFor(candidate: Candidate, barred: Set<string>): Eligi
  * Late leave is not one of them: the Executives were already told who it
  * would be, and changing it is their call.
  */
-const HARD: readonly Refusal[] = ["inactive", "notStaff", "executive"];
+const HARD: readonly Refusal[] = ["inactive", "notStaff", "executive", "onTrial"];
 
 export function isHardRefusal(eligibility: Eligibility): boolean {
     return !eligibility.eligible && HARD.includes(eligibility.reason);
@@ -74,6 +92,8 @@ export function refusalText(reason: Refusal, name: string): string {
             return `**${name}** is not Moderation staff in the community server, or has left it.`;
         case "executive":
             return `**${name}** is an Executive, and Executives cannot be Staff of the Week.`;
+        case "onTrial":
+            return `**${name}** is on trial, and moderators on trial cannot be Staff of the Week.`;
         case "recentHolder":
             return (
                 `**${name}** was Staff of the Week in one of the last two weeks, so they ` +

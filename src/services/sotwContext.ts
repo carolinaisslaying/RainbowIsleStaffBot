@@ -2,12 +2,13 @@ import type { Client } from "discord.js";
 import type { StaffBotConfig } from "../config/guildConfig.js";
 import type { StaffDoc, StaffOfWeekDoc } from "../db/types.js";
 import { fetchPublicMember, resolveTier, wearsOnLeaveRole } from "../domain/permissions.js";
-import { leaveOverlapping, pendingSpansOverlapping } from "../domain/leave.js";
+import { activeLeaveFor, leaveOverlapping, pendingSpansOverlapping } from "../domain/leave.js";
 import { weekLeave } from "../domain/leaveDays.js";
 import { findStaffById, listActiveStaff } from "../domain/staff.js";
 import { previousWeekWindow, weekWindowFor, type WeekWindow } from "../domain/weekly.js";
 import {
     barredIds,
+    barredAsTrial,
     eligibilityFor,
     handoffSettled,
     isHolding,
@@ -74,10 +75,18 @@ export async function candidateFor(
         config.minimumLeaveDays
     ).exempt;
 
+    const leave = wearsOnLeaveRole(member, config) ? await activeLeaveFor(staff._id) : null;
+
     return {
         staffId: staff._id.toHexString(),
         active: staff.active,
         tier,
+        barredAsTrial: barredAsTrial({
+            trialRole: config.trialModeratorRole,
+            allowTrial: config.staffOfWeekAllowTrialModerators,
+            wornRoles: member ? [...member.roles.cache.keys()] : [],
+            rolesTakenByLeave: leave?.removedRoles ?? []
+        }),
         exemptByLeave: exempt,
         pendingLeave: !exempt && exemptIfApproved
     };
