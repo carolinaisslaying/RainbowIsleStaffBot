@@ -13,13 +13,15 @@ const DAY_MS = 86_400_000;
 export const REMINDER_DAYS_BEFORE_CLOSE = 3;
 
 /**
- * Their own 09:00, inside the last three days. The receipt makes it once, so this
- * is the first such hour for everybody, and a bot that was down catches up at the
- * next one with a day less to say.
+ * Their own 09:00, inside the last three days but not the last one. The receipt
+ * makes it once, so this is the first such hour for everybody, and a bot that was
+ * down catches up at the next one with a day less to say. With under a day left
+ * nobody hears at all: a deployment just before a close, or somebody whose 09:00
+ * lands in its final hours, would otherwise get a nudge too late to act on.
  */
 export function fortnightReminderDue(now: Date, closesAt: Date, localHour: number): boolean {
     const left = closesAt.getTime() - now.getTime();
-    return left > 0 && left <= REMINDER_DAYS_BEFORE_CLOSE * DAY_MS && localHour === 9;
+    return left > DAY_MS && left <= REMINDER_DAYS_BEFORE_CLOSE * DAY_MS && localHour === 9;
 }
 
 export type FortnightReminderRefusal =
@@ -51,7 +53,6 @@ export function fortnightReminderRefusal(input: {
 
 /** The card's title, true whenever it goes out. */
 export function daysLeftTitle(now: Date, closesAt: Date): string {
-    const days = Math.max(1, Math.ceil((closesAt.getTime() - now.getTime()) / DAY_MS));
-    const word = ["One", "Two", "Three"][days - 1] ?? String(days);
-    return `${word} ${days === 1 ? "day" : "days"} left this fortnight`;
+    const days = Math.ceil((closesAt.getTime() - now.getTime()) / DAY_MS);
+    return `${days === 2 ? "Two" : "Three"} days left this fortnight`;
 }

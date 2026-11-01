@@ -975,7 +975,7 @@ go to find out why.
 
 **A heads up three days before a fortnight closes.** Members were closing fortnights about thirty minutes
 short, which read as an oversight. `services/fortnightReminderService.ts` DMs anybody still short at their own
-09:00 inside the last three days (`fortnight-reminders`, hourly; `domain/fortnightReminder.ts` is the rule), once
+09:00 inside the last three days but never the last 24 hours (`fortnight-reminders`, hourly; `domain/fortnightReminder.ts` is the rule), once
 per fortnight through a `deliveries` receipt. It is compulsory, friendly, and names no review or consequence.
 It skips Executives, anybody on leave, and anybody leave excuses or pending leave might, and Executives
 never see who got one. A rehearsal deployment sends none. The card (`render/fortnightReminder.ts`) is deliberately

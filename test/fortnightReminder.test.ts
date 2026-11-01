@@ -20,8 +20,14 @@ describe("when the heads up goes out", () => {
         expect(fortnightReminderDue(before(63), closes, 8)).toBe(false);
     });
 
-    it("does not go earlier, or once the fortnight has closed", () => {
+    it("does not go earlier", () => {
         expect(fortnightReminderDue(before(73), closes, 9)).toBe(false);
+    });
+
+    it("does not go with a day or less left", () => {
+        expect(fortnightReminderDue(before(25), closes, 9)).toBe(true);
+        expect(fortnightReminderDue(before(24), closes, 9)).toBe(false);
+        expect(fortnightReminderDue(before(3), closes, 9)).toBe(false);
         expect(fortnightReminderDue(before(0), closes, 9)).toBe(false);
     });
 });
@@ -30,7 +36,6 @@ describe("the title", () => {
     it("says how long is really left", () => {
         expect(daysLeftTitle(before(63), closes)).toBe("Three days left this fortnight");
         expect(daysLeftTitle(before(39), closes)).toBe("Two days left this fortnight");
-        expect(daysLeftTitle(before(15), closes)).toBe("One day left this fortnight");
     });
 });
 
