@@ -3,6 +3,7 @@ import { cachedConfig, loadConfig, type StaffBotConfig } from "../config/guildCo
 import { everyHour, everyMinute, onJobFailure, schedule, startScheduler } from "./scheduler.js";
 import { jobAlertDue } from "../domain/adminAlerts.js";
 import { alertAdmins } from "../services/adminAlerts.js";
+import { deliverFortnightReminders } from "../services/fortnightReminderService.js";
 import { closeLeaveOfRetired } from "../services/retirementService.js";
 import { cmd } from "../discord/commandMentions.js";
 import { sweepShifts } from "../services/shiftService.js";
@@ -106,6 +107,13 @@ export async function registerJobs(client: Client): Promise<void> {
         const sent = await deliverDueRecaps(client, await loadConfig(), at);
         if (sent > 0) log.info(`Delivered ${sent} weekly recaps`);
         pruneActivityCache(at);
+    });
+
+    // The heads up before a fortnight closes, held until each member's own 09:00,
+    // so it ticks hourly for the same reason the recaps do.
+    schedule("fortnight-reminders", everyHour, async (at) => {
+        const sent = await deliverFortnightReminders(client, await loadConfig(), at);
+        if (sent > 0) log.info(`Sent ${sent} fortnight reminders`);
     });
 
     // Week close: rebuild the closing week, then assess if it completed a

@@ -45,6 +45,11 @@ export async function claimTeamRecap(weekStart: Date): Promise<boolean> {
     return claim(`team-recap:${weekStart.getTime()}`);
 }
 
+/** A member's one heads up before a fortnight closes. */
+export async function claimFortnightReminder(staffId: ObjectId, index: number): Promise<boolean> {
+    return claim(`fortnight-reminder:${staffId.toHexString()}:${index}`);
+}
+
 /** The closed week's leaderboard, logged once. */
 export async function claimLeaderboardLog(weekStart: Date): Promise<boolean> {
     return claim(`leaderboard-log:${weekStart.getTime()}`);

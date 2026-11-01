@@ -929,7 +929,7 @@ service decides each cell's step (`severity`) and the renderer only draws it, so
 worst-hours list cannot disagree. This replaced a "moderators short" chart for a day: its numbers were
 defensible and nobody could read them, and every empty hour below the median read the same.
 
-**Jobs** (`src/jobs/index.ts`): `shift-sweep`, `uptime` and `leave-transitions` every minute, `recaps` hourly,
+**Jobs** (`src/jobs/index.ts`): `shift-sweep`, `uptime` and `leave-transitions` every minute, `recaps` and `fortnight-reminders` hourly,
 `week-close` at 00:05 in the accounting timezone. All are date-driven and idempotent, so a missed
 run self-heals.
 
@@ -972,6 +972,15 @@ on shift" card the read produces. Index creation for it goes through `tryIndex`,
 already accumulated a duplicate logs the failure rather than refusing to boot — taking the bot down
 to protect against a race it has already lost helps nobody, and `/dev status` is where somebody would
 go to find out why.
+
+**A heads up three days before a fortnight closes.** Members were closing fortnights about thirty minutes
+short, which read as an oversight. `services/fortnightReminderService.ts` DMs anybody still short at their own
+09:00 inside the last three days (`fortnight-reminders`, hourly; `domain/fortnightReminder.ts` is the rule), once
+per fortnight through a `deliveries` receipt. It is compulsory, friendly, and names no review or consequence.
+It skips Executives, anybody on leave, and anybody leave excuses or pending leave might, and Executives
+never see who got one. A rehearsal deployment sends none. The card (`render/fortnightReminder.ts`) is deliberately
+**one** ring rather than the three-ring card: that one is read as a week, shift time and active days do not count
+towards the minimum, and its accent is the ring's. The arc is `cappedArcPath`, so a near-full ring keeps its gap.
 
 **Nobody is on shift while offline, and invisible counts as offline.** Discord reports an invisible
 member to the bot as offline, and the community sees them the same way it sees somebody who has left.
