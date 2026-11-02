@@ -724,6 +724,25 @@ export function reviewBulkConfirmCard(input: {
 }
 
 /**
+ * What a warning DM asks of its reader, and the button that does it. Both kinds
+ * share it. Members were leaving the button unpressed: nothing asked them to
+ * press it, it was grey under a line about contacting an Executive, and the news
+ * that pressing it is not agreeing only arrived after they had pressed it.
+ */
+const ACKNOWLEDGE_ASK =
+    "**Once you've read this, please press the button below.**\n-# It doesn't mean you agree.";
+
+function acknowledgeRow(warningId: string): ActionRowBuilder<ButtonBuilder> {
+    return new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+            .setCustomId(`warning:${warningId}:ack`)
+            .setLabel("I have read this")
+            .setEmoji({ name: "✅" })
+            .setStyle(ButtonStyle.Primary)
+    );
+}
+
+/**
  * The warning as the member receives it.
  *
  * It carries the Executive's own words rather than a generated line, because a
@@ -751,17 +770,10 @@ export function warningDmCard(input: {
                     `**${shortfall}** under your fortnight requirement.\n\n` +
                     `**Why**\n${quote(input.reason)}\n\n` +
                     "If you think this is wrong, or something was going on that we should " +
-                    "know about, contact an Executive."
+                    `know about, contact an Executive.\n\n${ACKNOWLEDGE_ASK}`
             )
         )
-        .addActionRowComponents(
-            new ActionRowBuilder<ButtonBuilder>().addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`warning:${input.warningId}:ack`)
-                    .setLabel("I have read this")
-                    .setStyle(ButtonStyle.Secondary)
-            )
-        );
+        .addActionRowComponents(acknowledgeRow(input.warningId));
 
     return { components: [container], files: [], flags: V2_FLAGS };
 }
@@ -1948,17 +1960,10 @@ export function conductWarnDmCard(input: {
                     `${input.issuedBy} has given you a warning.\n\n` +
                     `${input.consequence}\n\n` +
                     `**What happened**\n${quote(input.reason)}\n\n` +
-                    "If you disagree, contact an Executive."
+                    `If you disagree, contact an Executive.\n\n${ACKNOWLEDGE_ASK}`
             )
         )
-        .addActionRowComponents(
-            new ActionRowBuilder<ButtonBuilder>().addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`warning:${input.warningId}:ack`)
-                    .setLabel("I have read this")
-                    .setStyle(ButtonStyle.Secondary)
-            )
-        );
+        .addActionRowComponents(acknowledgeRow(input.warningId));
 
     return { components: [container], files: [], flags: V2_FLAGS };
 }

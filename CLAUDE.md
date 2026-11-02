@@ -403,6 +403,11 @@ and — if it is taken back — the withdrawal and its reason. Nothing user-faci
 `WarningDoc` carries no field for one. If it ever comes back, it wants its own queue and its own
 clock rather than a flag on a review row.
 
+**A warning DM asks for its button to be pressed.** Members were leaving it unpressed, so both kinds share
+`ACKNOWLEDGE_ASK` and `acknowledgeRow` (`render/cards.ts`): a bold line asking, subtext saying it does not mean they
+agree, and a blurple button with ✅. It says nothing about Executives seeing who pressed it, which read as watching
+over somebody's shoulder. Warnings already in an inbox keep their old wording.
+
 **Warnings come in two kinds, and every one of them is logged.** `WarningDoc.kind` is `activity` or
 `conduct` and reads as `activity` when absent, which is what every warning written before this was.
 `assessmentId` is **nullable** — a conduct warning belongs to no fortnight — and making it so turned
