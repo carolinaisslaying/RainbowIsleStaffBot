@@ -173,7 +173,7 @@ export async function runFortnightAssessment(
 
         const reduced =
             assessment.week1Exempt || assessment.week2Exempt
-                ? " Your leave exempted one week, so it asked for one weekly target."
+                ? " Your leave exempted one week, so only one weekly target was required."
                 : "";
         const body =
             assessment.status === "exempt"
