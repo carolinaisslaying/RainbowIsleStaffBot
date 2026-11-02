@@ -832,8 +832,17 @@ whether 120 is bad depends on what the rest of the team managed. The scale stops
 used to run to the busiest member, and two people on 3000 minutes flattened everyone below the line, the part
 a review is about. Past the line a column goes lighter, as a ring does past 100%. Columns are **named**
 (`chartName` strips what the image fonts cannot draw, in the image only), hidden members included and unmarked,
-because the channel is an Executive record; names and figures drop out past 19 members, when they no longer fit.
-`onSpreadChart` (`domain/review.ts`) is who it draws, Executives left out.
+because the channel is an Executive record; names and figures drop out when they no longer fit, past 17 members, or 15
+once anybody has a lowered minimum.
+`onSpreadChart` (`domain/review.ts`) is who it draws: Executives and a fortnight asking nothing left out.
+
+**Somebody whose leave lowered their minimum gets a line of their own.** They used to be left off because the
+main line was not theirs, which left a chart titled "Everyone" counting one fewer below the line than the queue under
+it, and nothing said why. Now they sit in a group after everyone else, in real minutes against their own line, with
+"had leave" under the name. It is "had", not "on": the leave can be long over. Every line is labelled in a gutter at
+its own end (`SPREAD_GUTTER`), never above the line, because columns run anywhere from zero to the ceiling and any label
+in the plot eventually collides with one. A column's colour reads against its own minimum, so 96 of 120 is amber beside
+139 of 240 in red.
 
 **Colour carries met and below here, deliberately.** These were one blue, with below drawn as an absence so
 that colour expressed no verdict the Executive had not reached. Executives found it a sea of blue that did not

@@ -335,9 +335,9 @@ export async function refreshQueueHeader(
     // Every member assessed, not just the ones below: the point of the chart is
     // to say whether this was a bad fortnight for two people or for everybody.
     const everyone = await assessmentsForFortnight(index);
-    // The line is the full requirement, two weekly targets, under the rules
-    // this fortnight was assessed by. Somebody whose leave lowered theirs is
-    // left off the chart rather than drawn against a line that is not theirs.
+    // The main line is the full requirement, two weekly targets, under the rules
+    // this fortnight was assessed by. Somebody whose leave lowered theirs gets a
+    // line of their own, so the chart counts everybody the queue below it does.
     const fullRequirement = fullRequirementOf(everyone, config);
     // Executives left out of the queue are left off the chart too, or it
     // shows more people below the line than the header counts.
@@ -357,9 +357,10 @@ export async function refreshQueueHeader(
             ),
             minutes: entry.totalMinutes,
             below: entry.status === "below",
+            requiredMinutes: entry.requiredMinutes,
             state: ringStateFor({
                 activityMinutes: entry.totalMinutes,
-                weeklyTargetMinutes: fullRequirement,
+                weeklyTargetMinutes: entry.requiredMinutes,
                 amberThresholdPercent: config.amberThresholdPercent,
                 onLeave: false
             })
@@ -816,8 +817,12 @@ function describeSpread(entries: SpreadEntry[], required: number): string {
     const median = [...entries].sort((left, right) => left.minutes - right.minutes)[
         Math.floor(entries.length / 2)
     ];
+    const lowered = entries.filter(
+        (entry) => entry.requiredMinutes !== undefined && entry.requiredMinutes < required
+    ).length;
     return (
-        `${entries.length} members assessed against a ${required} minute minimum. ` +
+        `${entries.length} members assessed against a ${required} minute minimum` +
+        (lowered > 0 ? `, ${lowered} of them with a lower one because of leave. ` : ". ") +
         `${below} below the line. Median ${median?.minutes ?? 0} minutes, ` +
         `${Math.round(total / entries.length)} on average.`
     );

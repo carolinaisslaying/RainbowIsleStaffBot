@@ -102,7 +102,73 @@ describe("the fortnight's spread", () => {
     });
 
     it("keeps the requirement labelled", () => {
-        expect(spread()).toContain("240 min minimum");
+        expect(spread()).toContain(">240 min</text>");
+    });
+
+    describe("somebody whose leave lowered their minimum", () => {
+        const junior = {
+            name: "Junior",
+            minutes: 96,
+            below: true,
+            requiredMinutes: 120,
+            state: "amber" as const
+        };
+        const texts = (svg: string, name: string) =>
+            [...svg.matchAll(new RegExp(`class="${name}" x="([\\d.]+)"`, "g"))].map((m) =>
+                Number(m[1])
+            );
+        const trackHeights = (svg: string) =>
+            [...svg.matchAll(/height="([\d.]+)"[^>]*class="spread-track"/g)].map((m) => Number(m[1]));
+
+        it("counts them with everybody else, the way the queue does", () => {
+            expect(spread([...entries, junior])).toContain("2 met the minimum and 4 did not.");
+        });
+
+        it("draws them on a line of their own, labelled", () => {
+            const svg = spread([...entries, junior]);
+            expect(svg.match(/class="spread-line"/g)).toHaveLength(2);
+            expect(svg).toContain(">120 min</text>");
+        });
+
+        it("draws their track up to their own line, not the main one", () => {
+            const heights = trackHeights(spread([junior, entries[2]!]));
+            expect(heights[0]).toBeGreaterThan(heights[1]!);
+        });
+
+        it("goes lighter past their own line, not past the main one", () => {
+            const svg = spread([{ ...junior, minutes: 200, below: false, state: "green" }]);
+            expect(svg).toContain('class="spread-past"');
+        });
+
+        it("sits after everybody on the full requirement, whatever the figures", () => {
+            const names = [...spread([junior, ...entries]).matchAll(/class="spread-name"[^>]*>([^<]+)</g)];
+            expect(names.at(-1)?.[1]).toBe("Junior");
+        });
+
+        it("keeps every line's label past every column of its group", () => {
+            const svg = spread([...entries, { ...junior, minutes: 600 }]);
+            const names = texts(svg, "spread-name");
+            const [mainLabel, ownLabel] = texts(svg, "spread-line-label");
+            expect(mainLabel).toBeGreaterThan(names.at(-2)!);
+            expect(mainLabel).toBeLessThan(names.at(-1)!);
+            expect(ownLabel).toBeGreaterThan(names.at(-1)!);
+        });
+
+        it("says they had leave, and says nothing when nobody did", () => {
+            expect(spread([...entries, junior])).toContain(">had leave</text>");
+            expect(spread()).not.toContain("had leave");
+        });
+
+        it("says it under each name while there is room", () => {
+            const pair = [junior, { ...junior, name: "Rua" }];
+            expect(spread(pair).match(/class="spread-note"/g)).toHaveLength(2);
+        });
+
+        it("says it once when it would run into the next name", () => {
+            const crowd = Array.from({ length: 11 }, (_, i) => ({ ...entries[0]!, name: `m${i}` }));
+            const pair = [junior, { ...junior, name: "Rua" }];
+            expect(spread([...crowd, ...pair]).match(/class="spread-note"/g)).toHaveLength(1);
+        });
     });
 
     it("shows no padlock on a hidden member", () => {
@@ -157,9 +223,9 @@ describe("who the chart draws", () => {
         expect(onSpreadChart({ status: "below", excludedAsExecutive: false })).toBe(true);
     });
 
-    it("leaves out anybody with an exempt week, whose line is not this one", () => {
-        expect(onSpreadChart({ status: "below", week1Exempt: true })).toBe(false);
-        expect(onSpreadChart({ status: "exempt" })).toBe(false);
+    it("draws anybody something was asked of, and only them", () => {
+        expect(onSpreadChart({ status: "below" })).toBe(true);
         expect(onSpreadChart({ status: "met" })).toBe(true);
+        expect(onSpreadChart({ status: "exempt" })).toBe(false);
     });
 });

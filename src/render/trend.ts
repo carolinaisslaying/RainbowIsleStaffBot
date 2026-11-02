@@ -186,9 +186,11 @@ export interface SpreadEntry {
     /** Their staff name, as `chartName` prepares it for the column. */
     name: string;
     minutes: number;
-    /** Below the requirement, and so one of the rows awaiting a decision. */
+    /** Below their own requirement, and so one of the rows awaiting a decision. */
     below: boolean;
-    /** `ringStateFor`'s answer against the requirement, so this and a ring agree. */
+    /** What this fortnight asked of them, when it differs from the chart's main line. */
+    requiredMinutes?: number;
+    /** `ringStateFor`'s answer against their own requirement, so this and a ring agree. */
     state: RingState;
 }
 
@@ -197,7 +199,14 @@ const COLUMN_WIDTH = 17;
 const MAX_SLOT = 44;
 /** Below this a figure and a name no longer fit beneath their column. */
 const LABEL_SLOT = 30;
-const NAME_CHAR_WIDTH = 4.5;
+const NAME_CHAR_WIDTH = 5.2;
+/** Room at the end of each line for its label, where no column can be. */
+const SPREAD_GUTTER = 60;
+const LINE_LABEL_GAP = 8;
+/** Below this, "had leave" under each name would run into the next one's. */
+const NOTE_SLOT = 42;
+/** The extra height that line of text takes when any is drawn. */
+const SPREAD_NOTE_ROW = 12;
 const SPREAD_TOP = 50;
 const SPREAD_PLOT = 130;
 /** The tallest a column goes, as a multiple of the requirement. */
@@ -229,6 +238,13 @@ function column(x: number, top: number, base: number, fill: string, extra = ""):
     );
 }
 
+/** People measured against one minimum: one dashed line and its label. */
+interface SpreadGroup {
+    requiredMinutes: number;
+    entries: SpreadEntry[];
+    left: number;
+}
+
 /**
  * Everybody's minutes for the fortnight, sorted, with the requirement across it.
  *
@@ -236,6 +252,14 @@ function column(x: number, top: number, base: number, fill: string, extra = ""):
  * in the queue or bad for everybody, because those are different conversations
  * and the queue alone cannot tell them apart: it only ever lists the people who
  * fell short.
+ *
+ * Leave can lower somebody's minimum, and they get their own group with their
+ * own line rather than being read against one that is not theirs. They used to
+ * be left off, so a chart titled "Everyone" counted one fewer below the line
+ * than the queue beneath it, and nothing said why.
+ *
+ * Every line is labelled in a gutter at its own end, where no column can ever
+ * be, so no figure can run through a label whatever the data.
  *
  * The scale stops at twice the requirement. It used to run to the busiest
  * member, and two people on 3000 minutes squashed the requirement and everyone
@@ -252,71 +276,112 @@ export function spreadSvg(input: {
         return emptyPanel("Nobody was assessed for this fortnight.");
     }
 
-    const sorted = [...input.entries].sort((left, right) => right.minutes - left.minutes);
     const base = SPREAD_TOP + SPREAD_PLOT;
     const ceiling = Math.max(1, input.requiredMinutes * SPREAD_CEILING);
     const y = (value: number) => base - (Math.min(value, ceiling) / ceiling) * SPREAD_PLOT;
 
-    const room = WIDTH - PAD * 2;
-    const slot = Math.min(MAX_SLOT, room / sorted.length);
-    // A small roster sits in the middle rather than against one edge.
-    const left = PAD + (room - slot * sorted.length) / 2;
-    const labelled = slot >= LABEL_SLOT;
-    const line = y(input.requiredMinutes);
-
-    const parts = [chartTitle(input.title, PAD)];
-
-    for (const [index, entry] of sorted.entries()) {
-        const centre = left + slot * index + slot / 2;
-        const x = centre - COLUMN_WIDTH / 2;
-        const fill = `url(#column-${entry.state})`;
-
-        if (entry.below) {
-            parts.push(
-                column(x, line, base, OUTER_COLOURS[entry.state].core,
-                    `class="spread-track" fill-opacity="${SURFACE.trackAlpha}" `)
-            );
-        }
-        // Nothing at zero: a mark there is a figure somebody did not earn, and
-        // the track above it already says how far they had to go.
-        if (entry.minutes > 0) {
-            const top = Math.min(y(entry.minutes), base - SMALLEST_FILL);
-            if (entry.minutes > input.requiredMinutes) {
-                parts.push(
-                    column(x, top, base, OUTER_COLOURS[entry.state].overlay, `class="spread-past" `),
-                    column(x, line, base, fill, `class="spread-fill" `)
-                );
-            } else {
-                parts.push(column(x, top, base, fill, `class="spread-fill" `));
-            }
-        }
-        if (labelled) {
-            parts.push(
-                `<text x="${round(centre)}" y="${base + 18}" text-anchor="middle" font-family="${FONT_STACK}" ` +
-                    `font-size="10.5" font-weight="bold" fill="${SURFACE.text}">${entry.minutes}</text>`,
-                `<text class="spread-name" x="${round(centre)}" y="${base + 32}" text-anchor="middle" ` +
-                    `font-family="${FONT_STACK}" font-size="9" fill="${SURFACE.textMuted}">` +
-                    `${escapeXml(fitName(entry.name, slot))}</text>`
-            );
-        }
+    const byMinimum = new Map<number, SpreadEntry[]>();
+    for (const entry of input.entries) {
+        const minimum = entry.requiredMinutes ?? input.requiredMinutes;
+        byMinimum.set(minimum, [...(byMinimum.get(minimum) ?? []), entry]);
     }
 
-    // Above the line at the right, where the short columns leave room for it;
-    // up beside the title when even the last column reaches past the line.
-    const lastClear = (sorted.at(-1)?.minutes ?? 0) < input.requiredMinutes;
-    const belowCount = sorted.filter((entry) => entry.below).length;
-    const captionY = base + (labelled ? 54 : 26);
+    const room = WIDTH - PAD * 2;
+    const available = room - SPREAD_GUTTER * byMinimum.size;
+    const slot = Math.min(MAX_SLOT, available / input.entries.length);
+    const labelled = slot >= LABEL_SLOT;
+
+    // A small roster sits in the middle rather than against one edge.
+    let nextLeft = PAD + (available - slot * input.entries.length) / 2;
+    const groups: SpreadGroup[] = [...byMinimum.entries()]
+        .sort(([left], [right]) => right - left)
+        .map(([requiredMinutes, entries]) => {
+            const group = {
+                requiredMinutes,
+                entries: [...entries].sort((left, right) => right.minutes - left.minutes),
+                left: nextLeft
+            };
+            nextLeft += slot * entries.length + SPREAD_GUTTER;
+            return group;
+        });
+
+    const parts = [chartTitle(input.title, PAD)];
+    const noted = labelled && groups.some((group) => group.requiredMinutes < input.requiredMinutes);
+
+    for (const group of groups) {
+        const line = y(group.requiredMinutes);
+        const lowered = group.requiredMinutes < input.requiredMinutes;
+
+        for (const [index, entry] of group.entries.entries()) {
+            const centre = group.left + slot * index + slot / 2;
+            const x = centre - COLUMN_WIDTH / 2;
+            const fill = `url(#column-${entry.state})`;
+
+            if (entry.below) {
+                parts.push(
+                    column(x, line, base, OUTER_COLOURS[entry.state].core,
+                        `class="spread-track" fill-opacity="${SURFACE.trackAlpha}" `)
+                );
+            }
+            // Nothing at zero: a mark there is a figure somebody did not earn, and
+            // the track above it already says how far they had to go.
+            if (entry.minutes > 0) {
+                const top = Math.min(y(entry.minutes), base - SMALLEST_FILL);
+                if (entry.minutes > group.requiredMinutes) {
+                    parts.push(
+                        column(x, top, base, OUTER_COLOURS[entry.state].overlay, `class="spread-past" `),
+                        column(x, line, base, fill, `class="spread-fill" `)
+                    );
+                } else {
+                    parts.push(column(x, top, base, fill, `class="spread-fill" `));
+                }
+            }
+            if (labelled) {
+                parts.push(
+                    `<text x="${round(centre)}" y="${base + 18}" text-anchor="middle" font-family="${FONT_STACK}" ` +
+                        `font-size="10.5" font-weight="bold" fill="${SURFACE.text}">${entry.minutes}</text>`,
+                    `<text class="spread-name" x="${round(centre)}" y="${base + 32}" text-anchor="middle" ` +
+                        `font-family="${FONT_STACK}" font-size="9" fill="${SURFACE.textMuted}">` +
+                        `${escapeXml(fitName(entry.name, slot))}</text>`
+                );
+            }
+        }
+
+        // "Had" rather than "on": the leave may be long over, and "on leave"
+        // beside a name reads as away now. Under each name while it fits there,
+        // otherwise once beneath the group rather than over the neighbours'.
+        if (labelled && lowered) {
+            const width = slot * group.entries.length;
+            const centres =
+                slot >= NOTE_SLOT
+                    ? group.entries.map((_, index) => group.left + slot * index + slot / 2)
+                    : [group.left + width / 2];
+            for (const centre of centres) {
+                parts.push(
+                    `<text class="spread-note" x="${round(centre)}" y="${base + 44}" text-anchor="middle" ` +
+                        `font-family="${FONT_STACK}" font-size="9" fill="${SURFACE.textMuted}">had leave</text>`
+                );
+            }
+        }
+
+        const right = group.left + slot * group.entries.length;
+        parts.push(
+            `<line class="spread-line" x1="${round(group.left)}" y1="${round(line)}" x2="${round(right)}" y2="${round(line)}" ` +
+                `stroke="${REQUIREMENT}" stroke-width="2" stroke-dasharray="5 4" />`,
+            `<text class="spread-line-label" x="${round(right + LINE_LABEL_GAP)}" y="${round(line + 4)}" ` +
+                `font-family="${FONT_STACK}" font-size="11" fill="${SURFACE.textMuted}">` +
+                `${group.requiredMinutes} min</text>`
+        );
+    }
+
+    const belowCount = input.entries.filter((entry) => entry.below).length;
+    const captionY = base + (labelled ? 54 : 26) + (noted ? SPREAD_NOTE_ROW : 0);
     const legendY = captionY + 22;
     parts.push(
-        `<line x1="${PAD}" y1="${round(line)}" x2="${WIDTH - PAD}" y2="${round(line)}" ` +
-            `stroke="${REQUIREMENT}" stroke-width="2" stroke-dasharray="5 4" />`,
-        `<text x="${WIDTH - PAD}" y="${round(lastClear ? line - 6 : TITLE_BASELINE)}" text-anchor="end" ` +
-            `font-family="${FONT_STACK}" font-size="11" fill="${SURFACE.textMuted}">` +
-            `${input.requiredMinutes} min minimum</text>`,
         `<text x="${PAD}" y="${captionY}" font-family="${FONT_STACK}" font-size="12.5" ` +
-            `fill="${SURFACE.textMuted}">Minutes this fortnight. ${sorted.length - belowCount} met the ` +
+            `fill="${SURFACE.textMuted}">Minutes this fortnight. ${input.entries.length - belowCount} met the ` +
             `minimum and ${belowCount} did not.` +
-            (sorted.some((entry) => entry.minutes > ceiling) ? ` Bars stop at ${ceiling}.` : "") +
+            (input.entries.some((entry) => entry.minutes > ceiling) ? ` Bars stop at ${ceiling}.` : "") +
             `</text>`
     );
 

@@ -54,23 +54,17 @@ export function inReviewQueue(assessment: {
 }
 
 /**
- * Who the fortnight's chart draws. Everyone assessed against the full
- * requirement: somebody whose leave lowered theirs would be read against a line
- * that is not theirs. Executives left out of the queue are left off too, or it
- * shows more people below the line than the header counts.
+ * Who the fortnight's chart draws. Everyone something was asked of: somebody
+ * whose leave lowered their requirement is drawn against a line of their own,
+ * and only a fortnight asking nothing has no column. Executives left out of the
+ * queue are left off too, or it shows more people below the line than the header
+ * counts.
  */
 export function onSpreadChart(assessment: {
     status: string;
-    week1Exempt?: boolean;
-    week2Exempt?: boolean;
     excludedAsExecutive?: boolean;
 }): boolean {
-    return (
-        assessment.status !== "exempt" &&
-        !assessment.week1Exempt &&
-        !assessment.week2Exempt &&
-        assessment.excludedAsExecutive !== true
-    );
+    return assessment.status !== "exempt" && assessment.excludedAsExecutive !== true;
 }
 
 /**
