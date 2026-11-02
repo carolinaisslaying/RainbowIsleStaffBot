@@ -13,6 +13,8 @@ import type { ReviewAction } from "../src/domain/review.js";
 const base = {
     assessmentId: "aaaaaaaaaaaaaaaaaaaaaaaa",
     displayName: "Robin (<@123>)",
+    totalMinutes: 96,
+    requiredMinutes: 120,
     week1: { minutes: 69, leaveDays: 0, exempt: false },
     week2: { minutes: 27, leaveDays: 0, exempt: false },
     activityWarnings: 1,
@@ -112,20 +114,28 @@ describe("the row's text", () => {
             components: { type: number; content?: string }[];
         }).components.find((part) => part.type === 10)?.content;
 
-    it("is the name, each week and the activity warnings, nothing else", () => {
+    it("is the name, the result, each week and the activity warnings, nothing else", () => {
         expect(body()).toBe(
-            "**Robin (<@123>)**\n" +
+            "### Robin (<@123>)\n" +
+                "96 of 120 minutes (80%), 24 under the requirement\n" +
                 "-# 1️⃣ **Week 1:** 69 minutes\n" +
                 "-# 2️⃣ **Week 2:** 27 minutes\n" +
                 "-# 📉 **Activity warnings:** 1"
         );
     });
 
-    it("leads with the conditional lines", () => {
-        expect(body({ held: true, departed: true })?.split("\n").slice(1, 3)).toEqual([
+    it("puts the conditional lines straight after the result", () => {
+        expect(body({ held: true, departed: true })?.split("\n").slice(2, 4)).toEqual([
             "-# ⌛ **On hold:** leave request waiting on an Executive",
             "-# 🚪 **Left the server:** can only be cleared"
         ]);
+    });
+
+    it("says nothing required, and no shortfall once they are over", () => {
+        expect(body({ totalMinutes: 35, requiredMinutes: 0 })).toContain("35 minutes, nothing required");
+        const over = body({ totalMinutes: 130, requiredMinutes: 120 });
+        expect(over).toContain("130 of 120 minutes (108%)");
+        expect(over).not.toContain("under the requirement");
     });
 
     it("says what leave did to each week", () => {

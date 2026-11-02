@@ -514,6 +514,8 @@ export async function reviewRowFor(
                   "Departed member"
               )} (<@${staff.discordId}>)`
             : "unknown member",
+        totalMinutes: assessment.totalMinutes,
+        requiredMinutes: assessment.requiredMinutes,
         week1: {
             minutes: assessment.week1Minutes,
             leaveDays: assessment.week1LeaveDays,
