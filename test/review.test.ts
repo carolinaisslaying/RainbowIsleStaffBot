@@ -300,7 +300,7 @@ describe("the previous outcomes line", () => {
         expect(line).not.toMatch(/F-?\d/);
     });
 
-    it("runs oldest first, as the chart beneath it does", () => {
+    it("runs oldest first", () => {
         const entry = (date: string) => ({
             windowStart: new Date(date),
             totalMinutes: 300,

@@ -54,6 +54,21 @@ export function inReviewQueue(assessment: {
 }
 
 /**
+ * How an earlier fortnight ended, as its row on a review card says it. A warning
+ * taken back since still happened, so it says both rather than going quiet.
+ */
+export function earlierOutcomeWord(entry: {
+    status: string;
+    outcome: ReviewOutcome | null;
+    withdrawn: boolean;
+}): string {
+    if (entry.outcome === "warned" && entry.withdrawn) return "warned, withdrawn";
+    if (entry.outcome) return OUTCOME_LABEL[entry.outcome].toLowerCase();
+    if (entry.status === "exempt") return "on leave";
+    return entry.status === "met" ? "met" : "undecided";
+}
+
+/**
  * Who the fortnight's chart draws. Everyone something was asked of: somebody
  * whose leave lowered their requirement is drawn against a line of their own,
  * and only a fortnight asking nothing has no column. Executives left out of the
@@ -549,7 +564,7 @@ export interface PriorOutcome {
  * and that "below" is a status while "warned" is a decision about a status. It
  * is the line an Executive reads immediately before deciding somebody's record,
  * so it says the date, the shortfall and what was decided, in words. Oldest
- * first whatever order it is handed, as the chart beneath it runs.
+ * first whatever order it is handed.
  */
 export function priorOutcomesLine(
     entries: PriorOutcome[],

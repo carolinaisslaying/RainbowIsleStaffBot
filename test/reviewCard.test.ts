@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { reviewRowCard, reviewHeaderCard, reviewRowMessage } from "../src/render/cards.js";
+import { reviewRowCard, reviewHeaderCard, reviewRowMessage, reviewWeekLine } from "../src/render/cards.js";
 import { COLOUR } from "../src/render/theme.js";
 import type { ReviewAction } from "../src/domain/review.js";
 
@@ -13,12 +13,10 @@ import type { ReviewAction } from "../src/domain/review.js";
 const base = {
     assessmentId: "aaaaaaaaaaaaaaaaaaaaaaaa",
     displayName: "Robin (<@123>)",
-    week1Minutes: 0,
-    week2Minutes: 0,
-    totalMinutes: 0,
-    requiredMinutes: 240,
-    priorOutcomes: "No earlier fortnight has been reviewed.",
-    warningWeight: "No warnings currently count against them.",
+    week1: { minutes: 69, leaveDays: 0, exempt: false },
+    week2: { minutes: 27, leaveDays: 0, exempt: false },
+    activityWarnings: 1,
+    held: false,
     buttons: ["warn", "excuse", "dismiss"] as ReviewAction[],
     outcome: null,
     decidedLine: null,
@@ -27,8 +25,7 @@ const base = {
     departed: false,
     rehearsal: false,
     contradiction: null,
-    below: true,
-    leaveLines: []
+    below: true
 };
 
 const json = (extra: Record<string, unknown> = {}) =>
@@ -92,19 +89,8 @@ describe("what each state draws", () => {
 
     it("says somebody has left, and does not offer to warn them", () => {
         const gone = { departed: true, buttons: ["excuse", "dismiss"] as ReviewAction[] };
-        expect(json(gone)).toContain("No longer in the server");
+        expect(json(gone)).toContain("🚪 **Left the server:** can only be cleared");
         expect(ids(gone)).not.toContain(`review:${base.assessmentId}:warn`);
-    });
-
-    it("shows what the next warning would be, before it is issued", () => {
-        expect(json({ warningWeight: "2 warnings currently count. This would be their 3rd." }))
-            .toContain("their 3rd");
-    });
-
-    it("hides the weight once decided, when it is no longer a question", () => {
-        expect(
-            json({ outcome: "warned", decidedLine: "x", buttons: ["reopen"] })
-        ).not.toContain("currently count");
     });
 
     it("says a rehearsal recorded nothing", () => {
@@ -118,11 +104,37 @@ describe("what each state draws", () => {
             "recompute"
         );
     });
+});
 
-    it("never prints a raw fortnight index at the reader", () => {
-        // "F-3 0m below" was the old line. It asks the reader to know what a
-        // fortnight index is and that a negative one is possible.
-        expect(json({ priorOutcomes: "3 Aug: warned · 20 Jul: met" })).not.toMatch(/F-?\d+ \d+m/);
+describe("the row's text", () => {
+    const body = (extra: Record<string, unknown> = {}) =>
+        (reviewRowCard({ ...base, ...extra }).toJSON() as unknown as {
+            components: { type: number; content?: string }[];
+        }).components.find((part) => part.type === 10)?.content;
+
+    it("is the name, each week and the activity warnings, nothing else", () => {
+        expect(body()).toBe(
+            "**Robin (<@123>)**\n" +
+                "-# 1️⃣ **Week 1:** 69 minutes\n" +
+                "-# 2️⃣ **Week 2:** 27 minutes\n" +
+                "-# 📉 **Activity warnings:** 1"
+        );
+    });
+
+    it("leads with the conditional lines", () => {
+        expect(body({ held: true, departed: true })?.split("\n").slice(1, 3)).toEqual([
+            "-# ⌛ **On hold:** leave request waiting on an Executive",
+            "-# 🚪 **Left the server:** can only be cleared"
+        ]);
+    });
+
+    it("says what leave did to each week", () => {
+        const week = (leaveDays: number, exempt: boolean) =>
+            reviewWeekLine(1, { minutes: 69, leaveDays, exempt });
+        expect(week(0, false)).toBe("**Week 1:** 69 minutes");
+        expect(week(3, true)).toBe("**Week 1:** 69 minutes, exempt for leave");
+        expect(week(2, false)).toBe("**Week 1:** 69 minutes, 2 days of leave, not exempt");
+        expect(week(1, false)).toBe("**Week 1:** 69 minutes, 1 day of leave, not exempt");
     });
 });
 

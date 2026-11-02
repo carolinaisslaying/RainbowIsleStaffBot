@@ -431,11 +431,17 @@ export async function findAssessment(id: ObjectId): Promise<FortnightAssessmentD
  */
 export async function assessmentHistory(
     staffId: ObjectId,
-    limit = 10
+    limit = 10,
+    /** Only fortnights before this one, so an old review never shows later ones. */
+    beforeIndex?: number
 ): Promise<FortnightAssessmentDoc[]> {
     return collections
         .fortnightAssessments()
-        .find({ staffId, rehearsal: { $ne: true }, fortnightIndex: { $gte: 0 } })
+        .find({
+            staffId,
+            rehearsal: { $ne: true },
+            fortnightIndex: { $gte: 0, ...(beforeIndex === undefined ? {} : { $lt: beforeIndex }) }
+        })
         .sort({ fortnightIndex: -1 })
         .limit(limit)
         .toArray();

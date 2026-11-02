@@ -20,13 +20,12 @@ import {
 } from "../domain/assessments.js";
 import {
     deliveryState,
-    priorOutcomesLine,
+    earlierOutcomeWord,
     queueCounts,
     queueHeadline,
     reminderDue,
     rowButtons,
     warningTally,
-    warningWeightLine,
     onSpreadChart
 } from "../domain/review.js";
 import {
@@ -73,36 +72,6 @@ const OUTCOME_LABEL_PAST: Record<ReviewOutcome, string> = {
     excused: "Excused",
     dismissed: "Dismissed"
 };
-
-/**
- * The member's earlier fortnights, in words.
- *
- * `assessmentHistory` already drops rehearsals and pre-anchor fortnights; this
- * turns what is left into a sentence. The old version printed
- * `F-3 0m below, F-5 0m warned`, which needs the reader to know what a
- * fortnight index is, that a negative one exists, and that "below" is a status
- * while "warned" is a decision about one. It is the line somebody reads
- * immediately before deciding a colleague's record.
- */
-async function priorOutcomesFor(
-    staffId: ObjectId,
-    excludeIndex: number,
-    config: StaffBotConfig
-): Promise<string> {
-    const history = await assessmentHistory(staffId, 6);
-    const relevant = history.filter((entry) => entry.fortnightIndex !== excludeIndex);
-    return priorOutcomesLine(
-        relevant.map((entry) => ({
-            windowStart: entry.windowStart,
-            totalMinutes: entry.totalMinutes,
-            requiredMinutes: entry.requiredMinutes,
-            outcome: entry.reviewOutcome,
-            status: entry.status
-        })),
-        (date) => labelDate(date, config.accountingTimezone)
-    );
-}
-
 
 /**
  * The Discord ids of active staff holding an Executive role in the public
@@ -427,7 +396,7 @@ export async function upsertReviewRow(
     const channel = await staffChannel(client, config, config.reportChannelId);
     if (!channel) return;
 
-    const row = await reviewRowFor(client, config, assessment, index, rehearsal);
+    const row = await reviewRowFor(client, config, assessment, rehearsal);
 
     if (assessment.reviewChannelId && assessment.reviewMessageId) {
         try {
@@ -494,45 +463,6 @@ function fullRequirementOf(
 }
 
 /**
- * What leave did to a row, in the words the row prints. Pure, so every
- * combination can be read without a database.
- */
-export function leaveLinesFor(assessment: {
-    week1LeaveDays: number;
-    week2LeaveDays: number;
-    week1Exempt: boolean;
-    week2Exempt: boolean;
-    requiredMinutes: number;
-    heldForLeave: boolean;
-    minimumLeaveDays: number;
-}): string[] {
-    const lines: string[] = [];
-    const weeks = [
-        { name: "Week one", days: assessment.week1LeaveDays, exempt: assessment.week1Exempt },
-        { name: "Week two", days: assessment.week2LeaveDays, exempt: assessment.week2Exempt }
-    ];
-    for (const week of weeks) {
-        if (week.days <= 0) continue;
-        lines.push(
-            `${week.name}: ${week.days} ${week.days === 1 ? "day" : "days"} of leave, ` +
-                (week.exempt
-                    ? "exempt."
-                    : `under the ${assessment.minimumLeaveDays} it takes to exempt a week.`)
-        );
-    }
-    if (assessment.week1Exempt !== assessment.week2Exempt) {
-        lines.push(`One week counts, so this fortnight asks for ${assessment.requiredMinutes} minutes.`);
-    }
-    if (assessment.heldForLeave) {
-        lines.push(
-            "📆 A leave request waiting on an Executive would take them off the queue. Decide " +
-                "it before warning."
-        );
-    }
-    return lines;
-}
-
-/**
  * The one renderer for a review row, wherever it is being drawn.
  *
  * Every state change goes through this, so the colour, the buttons and the
@@ -542,7 +472,6 @@ export async function reviewRowFor(
     client: Client,
     config: StaffBotConfig,
     assessment: FortnightAssessmentDoc,
-    index: number,
     rehearsal: boolean
 ): Promise<RenderedMessage> {
     const staff = await findStaffById(assessment.staffId);
@@ -550,16 +479,8 @@ export async function reviewRowFor(
     const now = new Date();
 
     const warnings = staff ? await warningsFor(staff._id) : [];
-    // The count that matters is what already counts, so a warning issued by
-    // this very assessment is left out of "this would be their nth".
-    // A conduct warning belongs to no assessment, so it is never the one this
-    // row issued and always counts toward "this would be their nth". That is
-    // the point of one total: an Executive deciding an attendance shortfall
-    // should see that the member also has conduct history.
-    const others = warnings.filter(
-        (warning) => !warning.assessmentId?.equals(assessment._id)
-    );
-    const tally = warningTally(others, now, config);
+    // Activity alone: conduct has its own record and is not what this row decides.
+    const tally = warningTally(warnings, now, config);
 
     const decider = assessment.reviewedBy ? await findStaffById(assessment.reviewedBy) : null;
     // The live warning this assessment issued, if it has one.
@@ -571,7 +492,7 @@ export async function reviewRowFor(
     const issued = warnings.find(
         (warning) => warning.assessmentId?.equals(assessment._id) && !warning.withdrawnAt
     );
-    const trend = await trendFor(assessment.staffId, config);
+    const trend = await trendFor(assessment, warnings, config);
 
     const decidedLine =
         assessment.reviewOutcome && assessment.reviewedAt
@@ -593,12 +514,18 @@ export async function reviewRowFor(
                   "Departed member"
               )} (<@${staff.discordId}>)`
             : "unknown member",
-        week1Minutes: assessment.week1Minutes,
-        week2Minutes: assessment.week2Minutes,
-        totalMinutes: assessment.totalMinutes,
-        requiredMinutes: assessment.requiredMinutes,
-        priorOutcomes: await priorOutcomesFor(assessment.staffId, index, config),
-        warningWeight: warningWeightLine(tally),
+        week1: {
+            minutes: assessment.week1Minutes,
+            leaveDays: assessment.week1LeaveDays,
+            exempt: assessment.week1Exempt
+        },
+        week2: {
+            minutes: assessment.week2Minutes,
+            leaveDays: assessment.week2LeaveDays,
+            exempt: assessment.week2Exempt
+        },
+        activityWarnings: tally.activity,
+        held: assessment.heldForLeave,
         buttons: rowButtons({
             outcome: assessment.reviewOutcome,
             departed,
@@ -607,7 +534,6 @@ export async function reviewRowFor(
             held: assessment.heldForLeave
         }),
         below: assessment.status === "below",
-        leaveLines: leaveLinesFor(assessment),
         outcome: assessment.reviewOutcome,
         decidedLine,
         reason: assessment.reviewNote,
@@ -619,16 +545,10 @@ export async function reviewRowFor(
         acknowledgedLine: issued ? acknowledgementLine(issued) : null,
         departed,
         rehearsal: assessment.rehearsal === true,
-        trend: trend.points.length > 0
-            ? {
-                  png: renderTrend({
-                      points: trend.points,
-                      fullMinutes: assessment.weeklyTargetMinutes * 2,
-                      title: "Recent fortnights"
-                  }),
-                  alt: trend.alt
-              }
-            : null,
+        trend: {
+            png: renderTrend({ points: trend.points, title: "Recent fortnights" }),
+            alt: trend.alt
+        },
         // A recompute or a leave change can take somebody off the queue after
         // they were decided. The figures move; the decision is a human's and
         // stays put, flagged so a human can reopen it if they want to. An
@@ -751,36 +671,47 @@ export async function chaseUnworkedQueues(
 
 
 /**
- * The member's last four fortnights, oldest first, ready to plot. Four because
- * every row card in the queue carries this, and six rows made each one tall.
+ * The fortnight under review and up to three before it, newest first.
  *
- * Oldest first because a chart of time reads left to right, while
- * `assessmentHistory` returns newest first for the text line. Exempt fortnights
- * are kept and marked rather than dropped: a gap in the row would read as a
- * fortnight nobody measured, when in fact it is one they were excused from.
+ * Built backwards from the reviewed fortnight rather than from the member's
+ * latest, or reposting an old review would call a newer fortnight "this
+ * fortnight". The reviewed one comes from the record in hand, because a rehearsal
+ * is filtered out of history. Exempt fortnights are kept and marked rather than
+ * dropped: a gap would read as a fortnight nobody measured.
  */
 async function trendFor(
-    staffId: ObjectId,
+    assessment: FortnightAssessmentDoc,
+    warnings: WarningDoc[],
     config: StaffBotConfig
 ): Promise<{ points: TrendPoint[]; alt: string }> {
-    const history = await assessmentHistory(staffId, 4);
-    const points: TrendPoint[] = history
-        .slice()
-        .reverse()
-        .map((entry) => ({
+    const earlier = await assessmentHistory(assessment.staffId, 3, assessment.fortnightIndex);
+    const points: TrendPoint[] = [assessment, ...earlier].map((entry, index) => {
+        const issued = warnings.filter((warning) => warning.assessmentId?.equals(entry._id));
+        return {
             label: labelDate(entry.windowStart, config.accountingTimezone),
             minutes: entry.totalMinutes,
             exempt: entry.status === "exempt",
             requiredMinutes: entry.requiredMinutes,
+            lowered: entry.requiredMinutes < entry.weeklyTargetMinutes * 2,
             state: ringStateFor({
                 activityMinutes: entry.totalMinutes,
                 weeklyTargetMinutes: entry.requiredMinutes,
                 amberThresholdPercent: config.amberThresholdPercent,
                 onLeave: entry.status === "exempt"
-            })
-        }));
+            }),
+            word:
+                index === 0
+                    ? null
+                    : earlierOutcomeWord({
+                          status: entry.status,
+                          outcome: entry.reviewOutcome,
+                          withdrawn:
+                              issued.length > 0 && issued.every((warning) => warning.withdrawnAt)
+                      })
+        };
+    });
 
-    return { points, alt: describeTrend(points, fullRequirementOf(history, config)) };
+    return { points, alt: describeTrend(points, assessment.weeklyTargetMinutes * 2) };
 }
 
 /**
@@ -790,18 +721,15 @@ async function trendFor(
  * chart is for, and the figures are already in the card above it.
  */
 function describeTrend(points: TrendPoint[], required: number): string {
-    if (points.length === 0) return "No earlier fortnight to compare against.";
     const measured = points.filter((point) => !point.exempt);
-    const met = measured.filter(
-        (point) => point.minutes >= (point.requiredMinutes ?? required)
-    ).length;
+    const met = measured.filter((point) => point.minutes >= point.requiredMinutes).length;
     const exempt = points.length - measured.length;
 
     return (
-        `Their last ${points.length} fortnights against a ${required} minute minimum: ` +
+        `This fortnight and those before it, ${points.length} in all, against a ${required} minute minimum: ` +
         `${met} met, ${measured.length - met} below` +
         (exempt > 0 ? `, ${exempt} on leave` : "") +
-        `. Most recent first to last: ` +
+        `. Newest first: ` +
         points
             .map((point) =>
                 point.exempt ? `${point.label} on leave` : `${point.label} ${point.minutes}`

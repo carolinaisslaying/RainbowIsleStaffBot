@@ -827,12 +827,12 @@ anything. It is scoped to the holder because the handler sits on `GuildMemberUpd
 110,000 members, and checking anybody else's roles on every one of those events is work with no
 reader.
 
+**A review row's text is a key, not a paragraph.** Name, then 1️⃣ and 2️⃣ each week's minutes and what leave did to it, then 📉 the active activity warnings, conduct left out on purpose: Rosie's Caution is on `/warnings view`, not here. Figures belong to the chart beneath, and the paragraph that repeated them read as a wall. Two conditional lines lead when they apply, ⌛ **On hold** and 🚪 **Left the server**, because each says why a button is missing.
+
 **Review charts.** `render/trend.ts` draws two, both pure string functions, in the ring card's language: its
-panel, its state colours (`ringStateFor`, so a bar and a ring cannot disagree), its track and fill. `trendSvg`
-is a member's last four fortnights as the ring card's legend rows, because "0 of 240" reads the same whether
-somebody has always been at zero or fell off a cliff. Each row is measured against what that fortnight asked
-for, and a minimum leave lowered is said in words, so no second line is needed. Exempt fortnights read
-"exempt", never as a zero somebody earned. `spreadSvg` is everybody's minutes as ring-thick columns, sorted, because
+panel, its state colours (`ringStateFor`, so a bar and a ring cannot disagree), its track and fill. `trendSvg` is the fortnight under review and up to three before it, newest first, as the ring card's legend rows, because "0 of 240" reads the same whether
+somebody has always been at zero or fell off a cliff. `trendFor` builds backwards from the reviewed fortnight, so a repost of an old review never calls a newer one "this fortnight". Every row's sub-line is one pattern (`trendDetail`): minutes against what that fortnight asked for, what was under, "minimum lowered", and how an earlier row ended (`earlierOutcomeWord`). A 1px divider separates the row being decided from the rest. Exempt fortnights read "exempt", never as a zero somebody earned, and draw no rail while keeping its height.
+`spreadSvg` is everybody's minutes as ring-thick columns, sorted, because
 whether 120 is bad depends on what the rest of the team managed. The scale stops at twice the requirement: it
 used to run to the busiest member, and two people on 3000 minutes flattened everyone below the line, the part
 a review is about. Past the line a column goes lighter, as a ring does past 100%. Columns are **named**

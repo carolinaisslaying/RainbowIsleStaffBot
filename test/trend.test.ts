@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { onSpreadChart } from "../src/domain/review.js";
-import { chartName, spreadSvg, trendSvg, type TrendPoint } from "../src/render/trend.js";
+import { earlierOutcomeWord, onSpreadChart } from "../src/domain/review.js";
+import { chartName, spreadSvg, trendDetail, trendSvg, type TrendPoint } from "../src/render/trend.js";
 
 /**
  * The charts are pure string functions, exported separately from the render*
@@ -12,32 +12,55 @@ const point = (extra: Partial<TrendPoint>): TrendPoint => ({
     minutes: 66,
     exempt: false,
     requiredMinutes: 240,
+    lowered: false,
     state: "red",
+    word: null,
     ...extra
 });
-const trend = (points: TrendPoint[]) => trendSvg({ points, fullMinutes: 240, title: "x" });
+const trend = (points: TrendPoint[]) => trendSvg({ points, title: "x" });
+const earlier = (extra: Partial<TrendPoint>) => point({ label: "21 Sep", word: "met", ...extra });
 
 describe("a member's recent fortnights", () => {
-    it("states each fortnight's figures and percentage", () => {
-        const svg = trend([point({})]);
-        expect(svg).toContain("66 of 240 minutes");
-        expect(svg).toContain(">28%<");
+    it("titles the first row as the one under review, and only that one", () => {
+        const svg = trend([point({ label: "19 Oct" }), earlier({})]);
+        expect(svg).toContain("This fortnight · 19 Oct");
+        expect(svg).toContain(">21 Sep<");
     });
 
-    it("says in words when leave lowered the minimum", () => {
-        const svg = trend([point({ minutes: 112, requiredMinutes: 120, state: "amber" })]);
-        expect(svg).toContain("112 of 120 minutes (minimum lowered for leave)");
-        expect(svg).toContain(">93%<");
+    it("holds every sub-line to one pattern", () => {
+        expect(trendDetail(point({ minutes: 139 }))).toBe("139 of 240 minutes · 101 under");
+        expect(trendDetail(point({ minutes: 96, requiredMinutes: 120, lowered: true }))).toBe(
+            "96 of 120 minutes · 24 under · minimum lowered"
+        );
+        expect(trendDetail(point({ minutes: 207, word: "warned" }))).toBe(
+            "207 of 240 minutes · 33 under · warned"
+        );
+        expect(trendDetail(point({ minutes: 453, word: "met" }))).toBe("453 of 240 minutes · met");
     });
 
-    it("does not call the normal minimum lowered", () => {
-        expect(trend([point({})])).not.toContain("lowered");
+    it("states the percentage", () => {
+        expect(trend([point({})])).toContain(">28%<");
     });
 
-    it("reads leave as exempt, never as a zero", () => {
-        const svg = trend([point({ exempt: true, minutes: 0, requiredMinutes: 0, state: "leave" })]);
+    it("reads leave as exempt, never as a zero, and draws no rail", () => {
+        const exempt = point({ exempt: true, minutes: 35, requiredMinutes: 0, state: "leave" });
+        expect(trendDetail(exempt)).toBe("35 minutes · on leave");
+        const svg = trend([exempt]);
         expect(svg).toContain(">exempt<");
         expect(svg).not.toContain("rail-fill");
+        expect(svg).not.toContain("rail-track");
+    });
+
+    it("keeps an exempt row as tall as one with a rail", () => {
+        const height = (extra: Partial<TrendPoint>) =>
+            trend([point({}), earlier(extra)]).match(/height="(\d+)"/)?.[1];
+        expect(height({ exempt: true, requiredMinutes: 0, state: "leave" })).toBe(height({}));
+    });
+
+    it("divides the row under review from earlier ones, when there are any", () => {
+        expect(trend([point({})])).not.toContain("rows-divider");
+        expect(trend([point({}), earlier({})]).match(/rows-divider/g)).toHaveLength(1);
+        expect(trend([point({}), earlier({}), earlier({})]).match(/rows-divider/g)).toHaveLength(1);
     });
 
     it("lights the rail in the ring's state, stopping at full", () => {
@@ -52,9 +75,26 @@ describe("a member's recent fortnights", () => {
         expect(svg).toContain("0 of 240 minutes");
         expect(svg).not.toContain("rail-fill");
     });
+});
 
-    it("says so in words when there is nothing to compare", () => {
-        expect(trend([])).toContain("No earlier fortnight");
+describe("how an earlier fortnight ended", () => {
+    const word = (status: string, outcome: "warned" | "excused" | "dismissed" | null, withdrawn = false) =>
+        earlierOutcomeWord({ status, outcome, withdrawn });
+
+    it("says what was decided, first", () => {
+        expect(word("below", "warned")).toBe("warned");
+        expect(word("below", "excused")).toBe("excused");
+        expect(word("below", "dismissed")).toBe("dismissed");
+    });
+
+    it("says when a warning was taken back", () => {
+        expect(word("below", "warned", true)).toBe("warned, withdrawn");
+    });
+
+    it("says met, on leave or undecided without a decision", () => {
+        expect(word("met", null)).toBe("met");
+        expect(word("exempt", null)).toBe("on leave");
+        expect(word("below", null)).toBe("undecided");
     });
 });
 

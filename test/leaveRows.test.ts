@@ -1,44 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { leaveLinesFor } from "../src/services/assessmentService.js";
 import { actualEnd } from "../src/domain/leave.js";
 import { pingLine } from "../src/services/pings.js";
-
-const none = {
-    week1LeaveDays: 0,
-    week2LeaveDays: 0,
-    week1Exempt: false,
-    week2Exempt: false,
-    requiredMinutes: 240,
-    heldForLeave: false,
-    minimumLeaveDays: 3
-};
-
-describe("what a review row says about leave", () => {
-    it("says nothing when there was none", () => {
-        expect(leaveLinesFor(none)).toEqual([]);
-    });
-
-    it("names the exempt week and the reduced requirement", () => {
-        expect(
-            leaveLinesFor({ ...none, week1LeaveDays: 4, week1Exempt: true, requiredMinutes: 120 })
-        ).toEqual([
-            "Week one: 4 days of leave, exempt.",
-            "One week counts, so this fortnight asks for 120 minutes."
-        ]);
-    });
-
-    it("explains leave that fell short of exempting a week", () => {
-        expect(leaveLinesFor({ ...none, week2LeaveDays: 2 })).toEqual([
-            "Week two: 2 days of leave, under the 3 it takes to exempt a week."
-        ]);
-    });
-
-    it("says when a pending request holds the row", () => {
-        expect(leaveLinesFor({ ...none, heldForLeave: true }).at(-1)).toContain(
-            "Decide it before warning"
-        );
-    });
-});
 
 describe("where an ended leave actually ends", () => {
     const leave = {

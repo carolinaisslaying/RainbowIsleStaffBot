@@ -423,14 +423,12 @@ export function leaderboardCard(options: LeaderboardCardOptions): RenderedMessag
 export interface ReviewRowInput {
     assessmentId: string;
     displayName: string;
-    week1Minutes: number;
-    week2Minutes: number;
-    totalMinutes: number;
-    requiredMinutes: number;
-    /** Plain English history. Never a fortnight index. */
-    priorOutcomes: string;
-    /** What the next warning would be. Surfaced, never acted on. */
-    warningWeight: string;
+    week1: ReviewWeek;
+    week2: ReviewWeek;
+    /** Activity warnings counting now. Conduct has its own record, not this card. */
+    activityWarnings: number;
+    /** A pending leave request would take them off the queue, so no Warn button. */
+    held: boolean;
     /** Which buttons to draw, decided by domain/review.ts. */
     buttons: ReviewAction[];
     outcome: ReviewOutcome | null;
@@ -444,10 +442,24 @@ export interface ReviewRowInput {
     contradiction: string | null;
     /** Still below the requirement. False once leave has taken them off the queue. */
     below: boolean;
-    /** What leave did to this fortnight, and whether a request is still pending. */
-    leaveLines: string[];
     /** Their recent fortnights, drawn. Omitted while there is nothing to plot. */
     trend?: { png: Buffer; alt: string } | null;
+}
+
+/** One week of a review row: what was logged and what leave did to it. */
+export interface ReviewWeek {
+    minutes: number;
+    leaveDays: number;
+    exempt: boolean;
+}
+
+export function reviewWeekLine(number: 1 | 2, week: ReviewWeek): string {
+    const leave = week.exempt
+        ? ", exempt for leave"
+        : week.leaveDays > 0
+          ? `, ${week.leaveDays} ${week.leaveDays === 1 ? "day" : "days"} of leave, not exempt`
+          : "";
+    return `**Week ${number}:** ${week.minutes} minutes${leave}`;
 }
 
 const REVIEW_OUTCOME_COLOUR: Record<ReviewOutcome, number> = {
@@ -480,32 +492,22 @@ const REVIEW_BUTTON: Record<
  * warning, green an excusal, grey filed with nothing left to do.
  */
 export function reviewRowCard(row: ReviewRowInput): ContainerBuilder {
-    const shortfall = Math.max(0, row.requiredMinutes - row.totalMinutes);
-    const reached = percent(row.totalMinutes, row.requiredMinutes);
     const colour = row.outcome
         ? REVIEW_OUTCOME_COLOUR[row.outcome]
         : row.below
           ? COLOUR.adverse
           : COLOUR.settled;
 
+    // Figures live in the chart beneath. The conditional lines lead because each
+    // explains why a button is missing.
     const lines = [
         `**${row.displayName}**`,
-        row.requiredMinutes === 0
-            ? `**${row.totalMinutes} minutes**, nothing required`
-            : `**${row.totalMinutes} of ${row.requiredMinutes} minutes** (${reached}%)` +
-              (shortfall > 0 ? `, **${shortfall}** under the requirement` : ""),
-        `-# Week one ${row.week1Minutes} min, week two ${row.week2Minutes} min`,
-        ...row.leaveLines.map((line) => `-# ${line}`),
-        `-# Earlier fortnights: ${row.priorOutcomes}`
+        ...(row.held ? ["-# ⌛ **On hold:** leave request waiting on an Executive"] : []),
+        ...(row.departed ? ["-# 🚪 **Left the server:** can only be cleared"] : []),
+        `-# 1️⃣ ${reviewWeekLine(1, row.week1)}`,
+        `-# 2️⃣ ${reviewWeekLine(2, row.week2)}`,
+        `-# ${ACTIVITY_STYLE.emoji} **Activity warnings:** ${row.activityWarnings}`
     ];
-
-    if (row.departed) {
-        lines.push("-# ❗ No longer in the server. They cannot be warned, only cleared.");
-    }
-
-    // Said before the click, not after it. The bot counts and surfaces; it
-    // never escalates by itself.
-    if (!row.outcome && row.below) lines.push(`-# ${row.warningWeight}`);
 
     const container = new ContainerBuilder()
         .setAccentColor(colour)

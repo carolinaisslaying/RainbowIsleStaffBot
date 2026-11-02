@@ -15,7 +15,7 @@ import type { RingState } from "../db/types.js";
  *
  *  - **The member's history.** "0 of 240" reads the same whether somebody has
  *    always been at zero or fell off a cliff this fortnight, and those are
- *    opposite decisions. The rows say which.
+ *    opposite decisions. The rows say which, and how each one ended.
  *  - **The fortnight's spread.** Whether 120 minutes is bad depends on what
  *    everybody else managed. A fortnight where the whole team collapsed is a
  *    different conversation from one person drifting.
@@ -37,6 +37,13 @@ const ROWS_WIDTH = 460;
 const ROWS_GAP = 55;
 const ROWS_FIRST = 62;
 const ROWS_BELOW = 30;
+/**
+ * The divider under the row being reviewed sits 21 clear of the rail above and
+ * the date below, one and a half times the 14 between ordinary rows. That takes
+ * 28 more than an ordinary gap, and puts it 32 above the next row's baseline.
+ */
+const ROWS_DIVIDER_ROOM = 28;
+const ROWS_DIVIDER_ABOVE_TITLE = 32;
 const PIP_RADIUS = 5;
 const PIP_HALO = 8.5;
 const PIP_CENTRE = ROWS_PAD + PIP_HALO + 1;
@@ -118,48 +125,77 @@ export interface TrendPoint {
     exempt: boolean;
     /** What this fortnight asked for, which leave can have made lower. */
     requiredMinutes: number;
+    /** Leave made `requiredMinutes` lower than that fortnight's full requirement. */
+    lowered: boolean;
     /** `ringStateFor`'s answer against `requiredMinutes`, so this and a ring agree. */
     state: RingState;
+    /** How an earlier fortnight ended. Null on the one still being decided. */
+    word: string | null;
+}
+
+/** The sub-line of one row. One pattern on every row, whatever it is about. */
+export function trendDetail(point: TrendPoint): string {
+    if (point.exempt) return `${point.minutes} minutes · on leave`;
+    const under = point.requiredMinutes - point.minutes;
+    return [
+        `${point.minutes} of ${point.requiredMinutes} minutes`,
+        ...(under > 0 ? [`${under} under`] : []),
+        ...(point.lowered ? ["minimum lowered"] : []),
+        ...(point.word ? [point.word] : [])
+    ].join(" · ");
 }
 
 /**
- * A member's recent fortnights, oldest first, as the ring card's legend rows.
+ * The fortnight under review and those before it, newest first, as the ring
+ * card's legend rows. The first point is always the one under review.
  *
  * Each row is measured against what that fortnight asked for and says so in
  * words, so a fortnight leave lowered needs no second line on a shared scale,
  * which is what bars against one dashed line kept getting wrong.
+ *
+ * An exempt row draws no rail, since nothing was asked to fill one, and keeps
+ * the rail's height so the gaps between rows stay even.
  */
-export function trendSvg(input: { points: TrendPoint[]; fullMinutes: number; title: string }): string {
+export function trendSvg(input: { points: TrendPoint[]; title: string }): string {
     if (input.points.length === 0) {
         return emptyPanel("No earlier fortnight to compare against.");
     }
 
     const right = ROWS_WIDTH - ROWS_PAD;
     const railWidth = right - ROWS_TEXT;
+    const hasEarlier = input.points.length > 1;
     const parts = [chartTitle(input.title, ROWS_PAD)];
 
     for (const [index, point] of input.points.entries()) {
-        const y = ROWS_FIRST + index * ROWS_GAP;
+        const y = ROWS_FIRST + index * ROWS_GAP + (index > 0 ? ROWS_DIVIDER_ROOM : 0);
         const state: RingState = point.exempt ? "leave" : point.state;
         const share =
             point.exempt || point.requiredMinutes <= 0 ? 0 : point.minutes / point.requiredMinutes;
-        const detail = point.exempt
-            ? "On leave, nothing asked"
-            : `${point.minutes} of ${point.requiredMinutes} minutes` +
-              (point.requiredMinutes < input.fullMinutes ? " (minimum lowered for leave)" : "");
+
+        if (index === 1) {
+            parts.push(
+                `<rect class="rows-divider" x="${ROWS_TEXT}" y="${y - ROWS_DIVIDER_ABOVE_TITLE}" ` +
+                    `width="${railWidth}" height="1" fill="${SURFACE.rail}" />`
+            );
+        }
 
         parts.push(
             pip(PIP_CENTRE, y - 5, state),
             `<text x="${ROWS_TEXT}" y="${y}" font-family="${FONT_STACK}" font-size="15" ` +
-                `font-weight="bold" letter-spacing="-0.2" fill="${SURFACE.text}">${escapeXml(point.label)}</text>`,
+                `font-weight="bold" letter-spacing="-0.2" fill="${SURFACE.text}">` +
+                `${escapeXml(index === 0 ? `This fortnight · ${point.label}` : point.label)}</text>`,
             `<text x="${right}" y="${y}" text-anchor="end" font-family="${FONT_STACK}" font-size="15" ` +
                 `font-weight="bold" letter-spacing="-0.3" fill="${OUTER_COLOURS[state].light}">` +
                 `${point.exempt ? "exempt" : `${Math.round(share * 100)}%`}</text>`,
             `<text x="${ROWS_TEXT}" y="${y + 18}" font-family="${FONT_STACK}" font-size="12.5" ` +
-                `fill="${SURFACE.textMuted}">${escapeXml(detail)}</text>`,
-            `<rect x="${ROWS_TEXT}" y="${y + 26}" width="${railWidth}" height="${RAIL_HEIGHT}" ` +
-                `rx="2" fill="${SURFACE.rail}" />`
+                `fill="${SURFACE.textMuted}">${escapeXml(trendDetail(point))}</text>`
         );
+        if (!point.exempt) {
+            parts.push(
+                `<rect class="rail-track" x="${ROWS_TEXT}" y="${y + 26}" width="${railWidth}" height="${RAIL_HEIGHT}" ` +
+                    `rx="2" fill="${SURFACE.rail}" />`
+            );
+        }
         if (share > 0) {
             parts.push(
                 `<rect class="rail-fill" x="${ROWS_TEXT}" y="${y + 26}" ` +
@@ -169,7 +205,12 @@ export function trendSvg(input: { points: TrendPoint[]; fullMinutes: number; tit
         }
     }
 
-    const height = ROWS_FIRST + (input.points.length - 1) * ROWS_GAP + ROWS_BELOW + ROWS_PAD;
+    const height =
+        ROWS_FIRST +
+        (input.points.length - 1) * ROWS_GAP +
+        (hasEarlier ? ROWS_DIVIDER_ROOM : 0) +
+        ROWS_BELOW +
+        ROWS_PAD;
     return panel(parts.join("\n    "), ROWS_WIDTH, height);
 }
 
