@@ -548,7 +548,8 @@ export interface PriorOutcome {
  * reader to know what a fortnight index is, that a negative one is possible,
  * and that "below" is a status while "warned" is a decision about a status. It
  * is the line an Executive reads immediately before deciding somebody's record,
- * so it says the date, the shortfall and what was decided, in words.
+ * so it says the date, the shortfall and what was decided, in words. Oldest
+ * first whatever order it is handed, as the chart beneath it runs.
  */
 export function priorOutcomesLine(
     entries: PriorOutcome[],
@@ -556,7 +557,8 @@ export function priorOutcomesLine(
 ): string {
     if (entries.length === 0) return "No earlier fortnight has been reviewed.";
 
-    return entries
+    return [...entries]
+        .sort((left, right) => left.windowStart.getTime() - right.windowStart.getTime())
         .map((entry) => {
             const when = formatMonthDay(entry.windowStart);
             if (entry.outcome) return `${when}: ${OUTCOME_LABEL[entry.outcome].toLowerCase()}`;

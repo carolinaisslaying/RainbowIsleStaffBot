@@ -300,6 +300,19 @@ describe("the previous outcomes line", () => {
         expect(line).not.toMatch(/F-?\d/);
     });
 
+    it("runs oldest first, as the chart beneath it does", () => {
+        const entry = (date: string) => ({
+            windowStart: new Date(date),
+            totalMinutes: 300,
+            requiredMinutes: 240,
+            outcome: null,
+            status: "met"
+        });
+        expect(
+            priorOutcomesLine([entry("2026-10-05T00:00:00Z"), entry("2026-09-21T00:00:00Z")], month)
+        ).toBe("21 Sep: met · 5 Oct: met");
+    });
+
     it("says on leave rather than exempt", () => {
         const line = priorOutcomesLine(
             [

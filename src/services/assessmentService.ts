@@ -204,11 +204,11 @@ export async function runFortnightAssessment(
 
         const reduced =
             assessment.week1Exempt || assessment.week2Exempt
-                ? " Your leave set one week aside, so it asked for one weekly target."
+                ? " Your leave exempted one week, so it asked for one weekly target."
                 : "";
         const body =
             assessment.status === "exempt"
-                ? `Fortnight ${label}. Your leave set both weeks aside, so nothing was ` +
+                ? `Fortnight ${label}. Your leave exempted both weeks, so nothing was ` +
                   "required of you."
                 : assessment.status === "met"
                   ? `Fortnight ${label}. You recorded ${formatMinutes(assessment.totalMinutes)} ` +
@@ -383,7 +383,7 @@ export async function refreshQueueHeader(
                           entries: spreadEntries,
                           requiredMinutes: fullRequirement,
                           amberPercent: config.amberThresholdPercent,
-                          title: "Everyone this fortnight"
+                          title: "This fortnight"
                       }),
                       alt: describeSpread(spreadEntries, fullRequirement)
                   }

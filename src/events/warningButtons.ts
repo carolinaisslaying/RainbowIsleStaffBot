@@ -97,8 +97,8 @@ export async function handleWarningButton(
         sendOptions(
             noticeCard(
                 "Thank you",
-                "The Executive team can see that you have read it. Acknowledging it does " +
-                    "not mean you agree. If you do not, contact an Executive.",
+                "Acknowledging a warning does not mean you agree. If you do not, please " +
+                    "contact an Executive.",
                 { colour: COLOUR.settled, emoji: EMOJI.welcome }
             )
         ) as never
