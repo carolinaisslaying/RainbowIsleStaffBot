@@ -117,7 +117,7 @@ describe("the row's text", () => {
     it("is the name, the result, each week and the activity warnings, nothing else", () => {
         expect(body()).toBe(
             "### Robin (<@123>)\n" +
-                "96 of 120 minutes (80%), 24 under the requirement\n" +
+                "**96 of 120 minutes** (80%), **24** under the requirement\n" +
                 "-# 1️⃣ **Week 1:** 69 minutes\n" +
                 "-# 2️⃣ **Week 2:** 27 minutes\n" +
                 "-# 📉 **Activity warnings:** 1"
@@ -132,9 +132,9 @@ describe("the row's text", () => {
     });
 
     it("says nothing required, and no shortfall once they are over", () => {
-        expect(body({ totalMinutes: 35, requiredMinutes: 0 })).toContain("35 minutes, nothing required");
+        expect(body({ totalMinutes: 35, requiredMinutes: 0 })).toContain("**35 minutes**, nothing required");
         const over = body({ totalMinutes: 130, requiredMinutes: 120 });
-        expect(over).toContain("130 of 120 minutes (108%)");
+        expect(over).toContain("**130 of 120 minutes** (108%)");
         expect(over).not.toContain("under the requirement");
     });
 

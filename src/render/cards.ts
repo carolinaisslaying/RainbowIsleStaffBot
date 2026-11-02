@@ -502,17 +502,15 @@ export function reviewRowCard(row: ReviewRowInput): ContainerBuilder {
 
     const shortfall = Math.max(0, row.requiredMinutes - row.totalMinutes);
 
-    // Three levels: the person, the result, the details. The result is plain
-    // because `###` and bold are nearly the same size, so a bold result read as a
-    // second name. The conditional lines lead the details because each explains
-    // why a button is missing.
+    // Three levels: the person, the result, the details. The conditional lines
+    // lead the details because each explains why a button is missing.
     const lines = [
         `### ${row.displayName}`,
         row.requiredMinutes === 0
-            ? `${row.totalMinutes} minutes, nothing required`
-            : `${row.totalMinutes} of ${row.requiredMinutes} minutes ` +
+            ? `**${row.totalMinutes} minutes**, nothing required`
+            : `**${row.totalMinutes} of ${row.requiredMinutes} minutes** ` +
               `(${percent(row.totalMinutes, row.requiredMinutes)}%)` +
-              (shortfall > 0 ? `, ${shortfall} under the requirement` : ""),
+              (shortfall > 0 ? `, **${shortfall}** under the requirement` : ""),
         ...(row.held ? ["-# ⌛ **On hold:** leave request waiting on an Executive"] : []),
         ...(row.departed ? ["-# 🚪 **Left the server:** can only be cleared"] : []),
         `-# 1️⃣ ${reviewWeekLine(1, row.week1)}`,

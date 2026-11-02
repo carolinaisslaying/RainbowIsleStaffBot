@@ -827,7 +827,7 @@ anything. It is scoped to the holder because the handler sits on `GuildMemberUpd
 110,000 members, and checking anybody else's roles on every one of those events is work with no
 reader.
 
-**A review row's text is a key, not a paragraph.** The name at `###`, the result in plain text, then as subtext 1️⃣ and 2️⃣ each week's minutes and what leave did to it, and 📉 the active activity warnings, conduct left out on purpose: Rosie's Caution is on `/warnings view`, not here. The result stays plain because `###` and bold are nearly the same size in Discord, so a bold one read as a second name. The history belongs to the chart beneath, and the paragraph that repeated it read as a wall. Two conditional lines lead the subtext when they apply, ⌛ **On hold** and 🚪 **Left the server**, because each says why a button is missing.
+**A review row's text is a key, not a paragraph.** The name at `###`, the result with its figures in bold, then as subtext 1️⃣ and 2️⃣ each week's minutes and what leave did to it, and 📉 the active activity warnings, conduct left out on purpose: Rosie's Caution is on `/warnings view`, not here. The history belongs to the chart beneath, and the paragraph that repeated it read as a wall. Two conditional lines lead the subtext when they apply, ⌛ **On hold** and 🚪 **Left the server**, because each says why a button is missing.
 
 **Review charts.** `render/trend.ts` draws two, both pure string functions, in the ring card's language: its
 panel, its state colours (`ringStateFor`, so a bar and a ring cannot disagree), its track and fill. `trendSvg` is the fortnight under review and up to three before it, newest first, as the ring card's legend rows, because "0 of 240" reads the same whether
