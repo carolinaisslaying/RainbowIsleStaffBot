@@ -19,7 +19,6 @@ import {
     type AnnouncementPlan
 } from "../domain/assessments.js";
 import {
-    deliveryState,
     earlierOutcomeWord,
     queueCounts,
     queueHeadline,
@@ -483,15 +482,6 @@ export async function reviewRowFor(
     const tally = warningTally(warnings, now, config);
 
     const decider = assessment.reviewedBy ? await findStaffById(assessment.reviewedBy) : null;
-    // The live warning this assessment issued, if it has one.
-    //
-    // Withdrawn ones are skipped deliberately. Reopening no longer deletes the
-    // warning, so a row that was warned, reopened and warned again has two
-    // records against it — and the acknowledgement line belongs to the one that
-    // still stands, not to the one that was taken back.
-    const issued = warnings.find(
-        (warning) => warning.assessmentId?.equals(assessment._id) && !warning.withdrawnAt
-    );
     const trend = await trendFor(assessment, warnings, config);
 
     const decidedLine =
@@ -539,12 +529,6 @@ export async function reviewRowFor(
         outcome: assessment.reviewOutcome,
         decidedLine,
         reason: assessment.reviewNote,
-        // Three states where there used to be two. "Not yet acknowledged" was
-        // drawn both for a member who read it and never pressed the button and
-        // for one whose DMs are closed, who never saw it at all — the same
-        // silence, and opposite facts to anybody deciding whether a warning has
-        // been ignored.
-        acknowledgedLine: issued ? acknowledgementLine(issued) : null,
         departed,
         rehearsal: assessment.rehearsal === true,
         trend: {
@@ -571,26 +555,6 @@ export async function reviewRowFor(
                             : "A recompute took"
                     } them off the queue (${assessment.status}). Nothing to decide.`
     });
-}
-
-/**
- * What the row says about a warning's delivery, in one place.
- *
- * A warning issued before delivery was recorded carries neither timestamp, and
- * reads as unknown rather than as delivered: the bot did not observe it either
- * way, and asserting a delivery it never saw is the whole mistake this replaced.
- */
-function acknowledgementLine(warning: WarningDoc): string {
-    switch (deliveryState(warning)) {
-        case "acknowledged":
-            return `Acknowledged ${ts(warning.acknowledgedAt as Date, "R")}`;
-        case "failed":
-            return "❗ Never delivered — their direct messages are closed, so they have not seen this";
-        case "delivered":
-            return "Delivered, not yet acknowledged";
-        default:
-            return "Not yet acknowledged";
-    }
 }
 
 export async function fortnightSummary(index: number): Promise<{

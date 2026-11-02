@@ -550,7 +550,7 @@ async function applyDecision(
     }
 
     // What actually happened to the DM, against the warning it carried. This is
-    // what lets the row say "never delivered" instead of "not yet
+    // what lets the log card say "never delivered" instead of "not yet
     // acknowledged", which is the same silence and a completely different fact.
     if (issued) {
         await recordWarningDelivery(issued._id, messaged);

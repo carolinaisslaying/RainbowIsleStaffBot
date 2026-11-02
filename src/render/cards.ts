@@ -437,7 +437,6 @@ export interface ReviewRowInput {
     /** Who decided, when, and why. The card is the log, so this stays on it. */
     decidedLine: string | null;
     reason: string | null;
-    acknowledgedLine: string | null;
     departed: boolean;
     rehearsal: boolean;
     /** Set when a recompute or a leave change has moved them off the queue since. */
@@ -526,7 +525,6 @@ export function reviewRowCard(row: ReviewRowInput): ContainerBuilder {
         container.addSeparatorComponents(separator());
         const settled = [`${emojiForColour(colour)} **${row.decidedLine}**`];
         if (row.reason) settled.push(quote(row.reason));
-        if (row.acknowledgedLine) settled.push(`-# ${row.acknowledgedLine}`);
         if (row.rehearsal) {
             settled.push("-# Rehearsal. Nothing was recorded against them and nobody was told.");
         }

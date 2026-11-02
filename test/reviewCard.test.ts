@@ -23,7 +23,6 @@ const base = {
     outcome: null,
     decidedLine: null,
     reason: null,
-    acknowledgedLine: null,
     departed: false,
     rehearsal: false,
     contradiction: null,
@@ -75,6 +74,8 @@ describe("what each state draws", () => {
         };
         expect(ids(decided)).toEqual([`review:${base.assessmentId}:reopen`]);
         expect(json(decided)).toContain("Third fortnight running.");
+        // Delivery and acknowledgement belong to the warnings log alone.
+        expect(json(decided)).not.toMatch(/acknowledged|delivered/i);
         // The activity warning's slate, not the queue's amber: a warned row is
         // decided, and amber would say it is still waiting.
         expect(accent(decided)).toBe(COLOUR.activityWarning);

@@ -387,7 +387,7 @@ at, because a row can carry a `warning:` ping as well as its `row:` one) and not
 `repost`, an announced fortnight refreshes its figures and leaves the channel alone.
 
 **A warning says whether it arrived.** `tryDm` returns a boolean and every caller now reads it: `WarningDoc.deliveredAt`/`deliveryFailedAt` record what happened and
-`deliveryState` (`domain/review.ts`) turns them into the row's line. "Not yet acknowledged" used to
+`deliveryState` (`domain/review.ts`) turns them into the log card's line. Only the log card says this: the review row is finished once decided, so it carries no delivery or acknowledgement status. "Not yet acknowledged" used to
 be drawn both for somebody who read it and never pressed the button and for somebody whose DMs are
 closed — the same silence, opposite facts to an Executive deciding whether a warning has been
 ignored. A warning written before these existed has neither timestamp and reads as **unknown**,
@@ -444,8 +444,8 @@ what it tells an Executive reading the record, never a clock.
 log card both mark `withdrawnAt`/`withdrawnBy`/`withdrawalReason` and leave the record in place
 carrying both reasons. A withdrawn warning counts nowhere, whatever its clock says.
 Reopen used to delete, leaving the audit log as the only trace; `DELETION.md` is corrected. A row
-warned, reopened and warned again therefore carries two documents, so `reviewRowFor` takes the one
-that still stands — the acknowledgement line belongs to the live warning.
+warned, reopened and warned again therefore carries two documents, and only the
+one that still stands counts.
 
 **`/warnings issue user:`** opens a modal carrying the rung and the reason. Executives issue; staff and
 Leads receive. **An Executive cannot be warned through this bot at all** — a warning here is one

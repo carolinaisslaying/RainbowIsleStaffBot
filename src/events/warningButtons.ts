@@ -3,13 +3,11 @@ import type { ObjectId } from "mongodb";
 import type { StaffBotConfig } from "../config/guildConfig.js";
 import {
     acknowledgeWarning,
-    findAssessment,
     findWarning,
     findWarningById
 } from "../domain/assessments.js";
 import { findStaffByDiscordId } from "../domain/staff.js";
 import { audit } from "../domain/audit.js";
-import { upsertReviewRow } from "../services/assessmentService.js";
 import { upsertWarningCard } from "../services/conductService.js";
 import { pingKey, resolvePing } from "../services/pings.js";
 import { errorCard, noticeCard } from "../render/cards.js";
@@ -91,8 +89,7 @@ export async function handleWarningButton(
     }
 
     // The card that carried the button is replaced, so it cannot be pressed
-    // again to no effect, and the Executives' copy is redrawn so the review
-    // channel shows that it landed.
+    // again to no effect, and the log card is redrawn to show that it landed.
     await interaction.update(
         sendOptions(
             noticeCard(
@@ -104,20 +101,6 @@ export async function handleWarningButton(
         ) as never
     );
 
-    // Both copies the Executives can see. A conduct warning has no review row;
-    // an activity one has both a row and a card in the log.
-    if (warning.assessmentId) {
-        const assessment = await findAssessment(warning.assessmentId);
-        if (assessment) {
-            await upsertReviewRow(
-                client,
-                config,
-                assessment,
-                assessment.fortnightIndex,
-                assessment.rehearsal === true
-            );
-        }
-    }
     await upsertWarningCard(client, config, warning._id);
     // They have it now, so a ping about it failing to arrive is out of date. A
     // ping about leave covering it is not, and stays until somebody decides.
