@@ -7,11 +7,14 @@ import { emojiForColour } from "./emoji.js";
  * The card `/callmod` posts in the channel it was run in, read by the whole
  * community. Its wording is the community team's, kept as it was given.
  *
+ * `command` is the mention chip from `cmd()`, so the footnote names the
+ * command as something a reader can click rather than as code.
+ *
  * The ping sits as subtext under the footnotes so it reads with them rather
  * than as a line of its own. A role mention in subtext still pings; whether it
  * does is decided by `allowedMentions` on the send, not by the markdown.
  */
-export function callModCard(pingRoleId: string): RenderedMessage {
+export function callModCard(pingRoleId: string, command: string): RenderedMessage {
     const container = new ContainerBuilder()
         .setAccentColor(COLOUR.callMod)
         .addTextDisplayComponents(
@@ -26,7 +29,7 @@ export function callModCard(pingRoleId: string): RenderedMessage {
         .addSeparatorComponents(separator(true))
         .addTextDisplayComponents(
             text(
-                "-# The `/callmod` command should only be used in the event of discriminatory " +
+                `-# The ${command} command should only be used in the event of discriminatory ` +
                     "behaviour, slurs, raider, or other serious rule breach."
             ),
             text(

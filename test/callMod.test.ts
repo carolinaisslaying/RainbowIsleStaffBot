@@ -76,12 +76,12 @@ describe("/callmod cooldowns", () => {
 });
 
 describe("the /callmod card", () => {
-    const json = (roleId: string) => JSON.stringify(callModCard(roleId).components[0]);
+    const json = (roleId: string) => JSON.stringify(callModCard(roleId, "</callmod:42>").components[0]);
 
     it("is public, and a refusal is not", () => {
-        expect(callModCard("1").flags & MessageFlags.Ephemeral).toBe(0);
+        expect(callModCard("1", "</callmod:1>").flags & MessageFlags.Ephemeral).toBe(0);
         expect(callModRefusalCard("x").flags & MessageFlags.Ephemeral).toBe(MessageFlags.Ephemeral);
-        expect(callModCard("1").flags & MessageFlags.IsComponentsV2).toBe(MessageFlags.IsComponentsV2);
+        expect(callModCard("1", "</callmod:1>").flags & MessageFlags.IsComponentsV2).toBe(MessageFlags.IsComponentsV2);
     });
 
     it("pings the available role as subtext", () => {
@@ -90,6 +90,14 @@ describe("the /callmod card", () => {
 
     it("leaves the ping out when no role is configured", () => {
         expect(json("")).not.toContain("<@&");
+    });
+
+    it("names the command as a clickable mention", () => {
+        expect(json("1")).toContain(
+            "-# The </callmod:42> command should only be used in the event of discriminatory " +
+                "behaviour, slurs, raider, or other serious rule breach."
+        );
+        expect(json("1")).not.toContain("`/callmod`");
     });
 
     it("leads with the alarm", () => {

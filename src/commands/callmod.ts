@@ -3,6 +3,7 @@ import type { StaffBotConfig } from "../config/guildConfig.js";
 import { CallModLimiter, callModRefusalText } from "../domain/callMod.js";
 import { callModCard, callModRefusalCard } from "../render/callMod.js";
 import { respond } from "../discord/respond.js";
+import { cmd } from "../discord/commandMentions.js";
 import { log } from "../log.js";
 
 /**
@@ -43,7 +44,7 @@ export const callModCommand: PublicCommand = {
         if (!ping) log.warn("/callmod ran with availabilityRole unset, so nobody was pinged");
 
         try {
-            const card = callModCard(ping);
+            const card = callModCard(ping, cmd("callmod", interaction.guildId));
             // The client pings nobody by default. This replaces that for this
             // one reply: the available role, and nothing else in the card.
             await interaction.reply({
