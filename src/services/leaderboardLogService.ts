@@ -175,6 +175,6 @@ async function logChannel(client: Client, config: StaffBotConfig) {
 
 function sendLog(channel: SendableChannels, card: RenderedMessage) {
     // Names are display names, but a member with no fetchable name falls back
-    // to a mention, and a record of a closed week should ping nobody.
-    return channel.send({ ...card, allowedMentions: { parse: [] } });
+    // to a mention. The client default keeps that from pinging.
+    return channel.send(card);
 }

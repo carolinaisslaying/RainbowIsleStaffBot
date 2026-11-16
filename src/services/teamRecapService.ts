@@ -175,7 +175,7 @@ export async function postTeamRecap(
     if (!(await claimTeamRecap(week.start))) return false;
 
     try {
-        await channel.send({ ...card, allowedMentions: { users: [] } });
+        await channel.send(card);
     } catch (error) {
         // The receipt is spent and the post did not land. Said loudly rather
         // than swallowed: the alternative is claiming it again on the next

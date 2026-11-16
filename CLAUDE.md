@@ -338,6 +338,16 @@ Lead" is a check inside the handler, because it turns on an option value, not on
 Names say what a view answers, not what it draws: `/coverage server` and `/coverage staff`, not
 `heatmap` and `activity`, which were both heatmaps.
 
+**The bot pings nobody unless a send names who.** The client is built with
+`allowedMentions: { parse: [], repliedUser: false }` (`NO_MENTIONS`, `discord/client.ts`), which covers
+every send, reply, follow-up, edit and DM. Cards mention people everywhere — the member on a leave card,
+the issuer on a warning, a name that could not be fetched — and before this each first send pinged them,
+the Executive who had just issued a warning included. A send's own `allowedMentions` **replaces** the
+default rather than merging with it, so exactly two may set one, each naming a single role with
+`parse: []`: Executive pings (`services/pings.ts`, `staffExecutivePingRole`) and `/callmod`
+(`availabilityRole`). `test/allowedMentions.test.ts` fails if any other file sets its own, or if the
+default loosens. A new kind of ping is a decision to add to that list, not a line at the call site.
+
 **`/callmod` is the one command for the community.** Anybody in the public guild may run it, and
 only there. It is a `PublicCommand` (`commands/callmod.ts`, listed in `publicCommands`), not a
 `Command`, and `interactionCreate` dispatches it before any tier is resolved, so no staff rule —
@@ -725,8 +735,8 @@ footnote comes from `leaderboardVisibility` (`executiveRecord: true`) like every
 `/admin leaderboard-log weeks_ago:` posts a closed week again through the same builder and claims
 no receipt, because the Executive asking is the deliberate act the receipt stands in for; it posts
 beside the old copy, which the bot has no record of. Every row is on one card with no buttons: `leaderboardCard` splits rows into text displays of
-25 to stay under the 4000 character limit, and a single page draws no paging row. Sent with
-`allowedMentions: { parse: [] }`, because a name that cannot be fetched falls back to a mention.
+25 to stay under the 4000 character limit, and a single page draws no paging row. A name that
+cannot be fetched falls back to a mention, which the client default keeps from pinging.
 
 **A hidden row carries 🔒 (`EMOJI.hidden`) wherever it is drawn**: a Lead's copy, and the member's
 own row on theirs, `(you)` included, and every hidden row on the leaderboard log. It replaced the word "(hidden)". A padlock rather than an eye,

@@ -61,7 +61,10 @@ export async function pingExecutives(
             components: [new TextDisplayBuilder().setContent(pingLine(config.staffExecutivePingRole, line))],
             flags: V2_FLAGS,
             reply: { messageReference: target.messageId, failIfNotExists: false },
+            // Replaces the client default, which pings nobody: this role and
+            // nothing else.
             allowedMentions: {
+                parse: [],
                 roles: config.staffExecutivePingRole ? [config.staffExecutivePingRole] : [],
                 repliedUser: false
             }

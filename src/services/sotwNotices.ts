@@ -37,8 +37,8 @@ export async function postNotice(client: Client, config: StaffBotConfig, card: R
         return;
     }
     try {
-        // Names fall back to mentions; a notice pings nobody.
-        await channel.send({ ...sendOptions(card), allowedMentions: { parse: [] } });
+        // Names fall back to mentions; the client default keeps that from pinging.
+        await channel.send(sendOptions(card));
     } catch (error) {
         log.error("Could not post a Staff of the Week notice", error);
     }

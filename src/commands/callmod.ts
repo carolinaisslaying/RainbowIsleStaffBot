@@ -44,13 +44,13 @@ export const callModCommand: PublicCommand = {
 
         try {
             const card = callModCard(ping);
-            // Role mentions are suppressed in an interaction reply unless named.
-            // Only the available role: nothing else in the card may ping.
+            // The client pings nobody by default. This replaces that for this
+            // one reply: the available role, and nothing else in the card.
             await interaction.reply({
                 components: card.components,
                 files: card.files,
                 flags: card.flags,
-                allowedMentions: { parse: [], roles: ping ? [ping] : [] }
+                allowedMentions: { parse: [], roles: ping ? [ping] : [], repliedUser: false }
             } as Parameters<ChatInputCommandInteraction["reply"]>[0]);
             log.info(`/callmod by ${interaction.user.id} in channel ${interaction.channelId}`);
         } catch (error) {

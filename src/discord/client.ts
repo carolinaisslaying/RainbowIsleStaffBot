@@ -1,6 +1,19 @@
-import { Client, GatewayIntentBits, Partials } from "discord.js";
+import { Client, GatewayIntentBits, Partials, type MessageMentionOptions } from "discord.js";
 import type { StaffBotConfig } from "../config/guildConfig.js";
 import { log } from "../log.js";
+
+/**
+ * The bot pings nobody unless a send says exactly who.
+ *
+ * This is the client default, so it covers every send, reply, follow-up, edit
+ * and DM, including ones nobody has written yet. A send that passes its own
+ * `allowedMentions` replaces this outright rather than merging with it, so the
+ * only sends allowed to do that are the two that exist to ping, each naming one
+ * role: Executive pings (`services/pings.ts`) and `/callmod`
+ * (`commands/callmod.ts`). `test/allowedMentions.test.ts` fails if anything
+ * else sets its own.
+ */
+export const NO_MENTIONS: MessageMentionOptions = { parse: [], repliedUser: false };
 
 /**
  * Intents: Guilds, GuildMembers, GuildMessages, GuildPresences.
@@ -18,7 +31,8 @@ export function createClient(): Client {
             GatewayIntentBits.GuildMessages,
             GatewayIntentBits.GuildPresences
         ],
-        partials: [Partials.GuildMember, Partials.User, Partials.Channel]
+        partials: [Partials.GuildMember, Partials.User, Partials.Channel],
+        allowedMentions: NO_MENTIONS
     });
 }
 
