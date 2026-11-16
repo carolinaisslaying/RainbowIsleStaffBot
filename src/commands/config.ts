@@ -1,4 +1,4 @@
-import { MessageFlags, SlashCommandBuilder, type AutocompleteInteraction, type Client } from "discord.js";
+import { ChannelType, MessageFlags, SlashCommandBuilder, type AutocompleteInteraction, type Client } from "discord.js";
 import type { Command } from "./types.js";
 import {
     CONFIG_KEYS,
@@ -80,14 +80,19 @@ async function suggestRoles(
 async function suggestChannels(
     client: Client,
     guildId: string,
-    query: string
+    query: string,
+    withCategories = false
 ): Promise<{ name: string; value: string }[]> {
     try {
         const guild = await client.guilds.fetch(guildId);
         const channels = await guild.channels.fetch();
         const needle = query.toLowerCase().replace(/[<#>]/g, "");
         return [...channels.values()]
-            .filter((channel) => channel?.isTextBased())
+            .filter(
+                (channel) =>
+                    channel?.isTextBased() ||
+                    (withCategories && channel?.type === ChannelType.GuildCategory)
+            )
             .filter(
                 (channel) =>
                     !needle ||
@@ -96,7 +101,10 @@ async function suggestChannels(
             )
             .slice(0, 25)
             .map((channel) => ({
-                name: `#${channel!.name}`.slice(0, 100),
+                name: (channel!.type === ChannelType.GuildCategory
+                    ? `${channel!.name} (whole category)`
+                    : `#${channel!.name}`
+                ).slice(0, 100),
                 value: channel!.id
             }));
     } catch (error) {
@@ -145,7 +153,16 @@ async function suggestValues(
         return;
     }
     if (spec.target === "channel") {
-        await interaction.respond(await suggestChannels(interaction.client, guildId, query));
+        // Only trackedChannels takes a category: every message in any of its
+        // channels counts.
+        await interaction.respond(
+            await suggestChannels(
+                interaction.client,
+                guildId,
+                query,
+                rawKey === "trackedChannels"
+            )
+        );
         return;
     }
     if (spec.kind === "boolean") {

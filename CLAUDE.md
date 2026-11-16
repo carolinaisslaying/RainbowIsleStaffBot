@@ -943,6 +943,12 @@ service decides each cell's step (`severity`) and the renderer only draws it, so
 worst-hours list cannot disagree. This replaced a "moderators short" chart for a day: its numbers were
 defensible and nobody could read them, and every empty hour below the median read the same.
 
+**`trackedChannels` takes categories too.** A message counts when its channel, or the category that
+channel sits in, is on the list; a thread is judged as its parent (`isTracked`,
+`domain/trackedChannels.ts`). Demand is still stored per channel, never per category, so the coverage
+cards open a tracked category into its current channels (`resolveTrackedChannelIds`) before reading.
+Moving a channel out of a tracked category takes its history out of the default view with it.
+
 **Jobs** (`src/jobs/index.ts`): `shift-sweep`, `uptime` and `leave-transitions` every minute, `recaps` and `fortnight-reminders` hourly,
 `week-close` at 00:05 in the accounting timezone. All are date-driven and idempotent, so a missed
 run self-heals.

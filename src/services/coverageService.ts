@@ -156,22 +156,26 @@ async function buildGrid(
     };
 }
 
-/** Demand against moderators available, over every tracked channel. */
+/**
+ * Demand against moderators available, over every tracked channel. Pass the
+ * channels from `resolveTrackedChannelIds`, which opens up tracked categories.
+ */
 export function buildCoverageGrid(
     config: StaffBotConfig,
     timeZone: string,
     lookbackWeeks: number,
+    channelIds: readonly string[],
     now = new Date()
 ): Promise<CoverageGrid> {
-    return buildGrid(config, timeZone, lookbackWeeks, config.trackedChannels, true, now);
+    return buildGrid(config, timeZone, lookbackWeeks, channelIds, true, now);
 }
 
-/** Messages alone, over every tracked channel or just the ones named. */
+/** Messages alone, over the channels named. */
 export function buildActivityGrid(
     config: StaffBotConfig,
     timeZone: string,
     lookbackWeeks: number,
-    channelIds: readonly string[] = config.trackedChannels,
+    channelIds: readonly string[],
     now = new Date()
 ): Promise<CoverageGrid> {
     return buildGrid(config, timeZone, lookbackWeeks, channelIds, false, now);

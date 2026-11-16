@@ -130,6 +130,7 @@ change one item:
 ```
 /config add    key:trackedChannels value:#general
 /config add    key:trackedChannels value:#help
+/config add    key:trackedChannels value:Community   (a whole category)
 /config remove key:trackedChannels value:#help
 /config add    key:executiveRoles  value:@Executive
 ```
@@ -164,7 +165,9 @@ left alone until you want to change policy.
 
 `trackedChannels` deserves particular attention: it is the whitelist that
 decides what counts as participation, it is Rainbow Isle only, and threads count
-when their parent channel is on it. An empty whitelist means a member can work a
+when their parent channel is on it. It takes categories as well as channels: add
+a category and every channel inside it counts, including channels created there
+later, and a channel moved out of it stops counting. An empty whitelist means a member can work a
 full shift and earn nothing.
 
 ### The commands

@@ -1,6 +1,7 @@
 import { Events, type Client, type Message } from "discord.js";
 import { loadConfig } from "../config/guildConfig.js";
 import { recordDemand } from "../domain/demand.js";
+import { isTracked } from "../domain/trackedChannels.js";
 import { creditMinute } from "../domain/activity.js";
 import { findStaffByDiscordId } from "../domain/staff.js";
 import { getOpenShift, openPauseOf } from "../domain/shifts.js";
@@ -35,11 +36,17 @@ export function registerMessageHandler(client: Client): void {
             const config = await loadConfig();
             if (message.guildId !== config.publicGuildId) return; // staff guild never counts
 
-            // Threads count if their parent channel is whitelisted.
-            const channelId = message.channel.isThread()
-                ? (message.channel.parentId ?? message.channelId)
+            // Threads count if their parent channel is whitelisted, and a
+            // channel counts if its category is.
+            const channel = message.channel;
+            if (channel.isDMBased()) return;
+            const channelId = channel.isThread()
+                ? (channel.parentId ?? message.channelId)
                 : message.channelId;
-            const tracked = config.trackedChannels.includes(channelId);
+            const categoryId = channel.isThread()
+                ? (channel.parent?.parentId ?? null)
+                : channel.parentId;
+            const tracked = isTracked(config.trackedChannels, { channelId, categoryId });
 
             // Demand is counted for every member, staff or not. No identity is
             // recorded: the bucket is a channel and an hour and a counter.

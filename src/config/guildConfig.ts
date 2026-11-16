@@ -179,7 +179,8 @@ export const CONFIG_KEYS: Record<keyof StaffBotConfig, KeySpec> = {
     },
     trackedChannels: {
         kind: "stringArray",
-        description: "Where participation counts, in the community server",
+        description:
+            "Channels, or whole categories, where participation counts, in the community server",
         target: "channel",
         importance: "required",
         group: "channels",

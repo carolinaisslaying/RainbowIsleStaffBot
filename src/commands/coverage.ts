@@ -28,6 +28,8 @@ import {
     type HeatmapKind
 } from "../render/heatmap.js";
 import { isExecutive } from "../domain/permissions.js";
+import { isTracked } from "../domain/trackedChannels.js";
+import { resolveTrackedChannelIds } from "../services/trackedChannels.js";
 import { findStaffByDiscordId } from "../domain/staff.js";
 import { noLongerOnTeamLine } from "../render/retired.js";
 import {
@@ -221,12 +223,18 @@ export const coverageCommand: Command = {
         if (sub === "server") {
             const channel = interaction.options.getChannel("channel");
             // Refused before the defer, so the refusal is the only reply.
-            if (channel && !config.trackedChannels.includes(channel.id)) {
+            const categoryId =
+                channel && "parentId" in channel ? (channel.parentId ?? null) : null;
+            if (
+                channel &&
+                !isTracked(config.trackedChannels, { channelId: channel.id, categoryId })
+            ) {
                 await respond(
                     interaction,
                     errorCard(
-                        `<#${channel.id}> is not a tracked channel, so its messages are not ` +
-                            "counted. Pick a tracked one, or leave the channel out to see all of them."
+                        `<#${channel.id}> is not tracked, on its own or through its category, so ` +
+                            "its messages are not counted. Pick a tracked one, or leave the channel " +
+                            "out to see all of them."
                     )
                 );
                 return;
@@ -237,7 +245,7 @@ export const coverageCommand: Command = {
                 config,
                 zone,
                 weeks,
-                channel ? [channel.id] : config.trackedChannels
+                channel ? [channel.id] : await resolveTrackedChannelIds(client, config)
             );
             const scope = channel ? `<#${channel.id}>` : "every tracked channel";
 
@@ -377,7 +385,12 @@ export const coverageCommand: Command = {
 
         await defer(interaction, false);
 
-        const grid = await buildCoverageGrid(config, zone, weeks);
+        const grid = await buildCoverageGrid(
+            config,
+            zone,
+            weeks,
+            await resolveTrackedChannelIds(client, config)
+        );
         const worst = worstCells(grid, 5);
 
         const { gallery, attachment } = heatmapGallery(
