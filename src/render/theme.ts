@@ -76,7 +76,13 @@ export const COLOUR = {
      * Staff of the Week. Mint: not amber, which is the fortnight review's; not
      * red; and not the gold that standings and the Caution rung already share.
      */
-    staffOfWeek: 0x66d4cf
+    staffOfWeek: 0x66d4cf,
+    /**
+     * `/callmod`, posted in the community server when somebody calls
+     * moderators. A hotter red than `adverse`, because it is an alarm to a
+     * channel rather than a refusal to one person.
+     */
+    callMod: 0xff2d30
 } as const;
 
 /**

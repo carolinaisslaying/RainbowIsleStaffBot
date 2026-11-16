@@ -186,6 +186,14 @@ everything about warnings is under `/warnings` whoever is asking.
 | `/admin` | `recompute`, `assess`, `relink` | Executive |
 | `/config` | `view`, `set`, `add`, `remove`, `reset` | Deployment administrators |
 | `/dev` | `rehearse`, `recap`, `purge`, `status` | Deployment administrators |
+| `/callmod` | | Anyone in the community server, and only there |
+
+`/callmod` posts a public card in the channel it was run in and pings
+`availabilityRole`. Two in-memory cooldowns hold it back, one per member
+(`callModUserCooldownMinutes`, 30) and one for the whole server
+(`callModServerCooldownMinutes`, 5); a refusal is ephemeral. If the available
+role is not mentionable, the bot needs Mention All Roles in that channel or the
+ping is dropped silently.
 
 `/coverage server` is how active the server is, hour by hour. `/coverage staff`
 is that activity divided by moderators on shift, with the five hours most short

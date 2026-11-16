@@ -56,6 +56,9 @@ export interface StaffBotConfig {
     shiftReminderMessages: number;
     shiftReminderWindowMinutes: number;
     shiftReminderCooldownHours: number;
+
+    callModUserCooldownMinutes: number;
+    callModServerCooldownMinutes: number;
 }
 
 type KeyKind =
@@ -409,6 +412,24 @@ export const CONFIG_KEYS: Record<keyof StaffBotConfig, KeySpec> = {
         min: 1,
         max: 168
     },
+    callModUserCooldownMinutes: {
+        kind: "number",
+        description: "Minutes before one member can run /callmod again. 0 turns it off",
+        target: "plain",
+        importance: "optional",
+        group: "timings",
+        min: 0,
+        max: 1440
+    },
+    callModServerCooldownMinutes: {
+        kind: "number",
+        description: "Minutes before anybody in the community server can run /callmod again. 0 turns it off",
+        target: "plain",
+        importance: "optional",
+        group: "timings",
+        min: 0,
+        max: 1440
+    },
     accountingTimezone: {
         kind: "timezone",
         description: "Timezone used for measuring weekly boundaries",
@@ -517,7 +538,9 @@ export const DEFAULT_CONFIG: StaffBotConfig = {
     // fires on a few off-duty replies, and then miss the one that mattered.
     shiftReminderMessages: 20,
     shiftReminderWindowMinutes: 30,
-    shiftReminderCooldownHours: 6
+    shiftReminderCooldownHours: 6,
+    callModUserCooldownMinutes: 30,
+    callModServerCooldownMinutes: 5
 };
 
 /**

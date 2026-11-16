@@ -16,6 +16,7 @@ import { adminCommand } from "./admin.js";
 import { configCommand } from "./config.js";
 import { devCommand } from "./dev.js";
 import { sotwCommand } from "./sotw.js";
+import { callModCommand, type PublicCommand } from "./callmod.js";
 import { env } from "../config/env.js";
 import type { StaffBotConfig } from "../config/guildConfig.js";
 import {
@@ -48,6 +49,16 @@ export const commandsByName = new Map(
 );
 
 /**
+ * Commands for everybody in the community server, staff or not. Registered
+ * there alone, ungated, and dispatched before any tier is resolved.
+ */
+export const publicCommands: PublicCommand[] = [callModCommand];
+
+export const publicCommandsByName = new Map(
+    publicCommands.map((command) => [command.data.name, command])
+);
+
+/**
  * Where commands are registered, and why, and who can see each one.
  *
  * Three surfaces, and none of them is a free-for-all:
@@ -62,10 +73,11 @@ export const commandsByName = new Map(
  *   guild, and Discord cannot gate on a role held in a DIFFERENT guild anyway.
  *   So the DM surface carries the baseline (Staff tier) commands only. Lead and
  *   Executive work happens in the staff server, where the gate is real.
- * - The community server gets configuration alone, behind a permission gate of
+ * - The community server gets configuration, behind a permission gate of
  *   zero, runnable only by an ID in BOOTSTRAP_ADMIN_IDS. That is the recovery
  *   hatch, and it is also where a seeded admin still reaches /config when the
- *   staff server is misconfigured.
+ *   staff server is misconfigured. It also gets the public commands
+ *   (`publicCommands`), ungated, for every member: /callmod.
  *
  * Visibility remains a filter, never the check. `interactionCreate` resolves
  * the caller's tier against community server roles and refuses anyone who does
@@ -123,7 +135,14 @@ export async function registerCommands(config: StaffBotConfig): Promise<void> {
             const json = command.data.toJSON() as Record<string, unknown>;
             json.default_member_permissions = "0";
             return json;
-        });
+        })
+        .concat(
+            publicCommands.map((command) => {
+                const json = command.data.toJSON() as Record<string, unknown>;
+                json.contexts = [InteractionContextType.Guild];
+                return json;
+            })
+        );
     await putGuildCommands(rest, config.publicGuildId, forCommunityGuild, "community");
 
     setDefaultMentionGuild(config.staffGuildId);

@@ -8,7 +8,7 @@ import {
 } from "discord.js";
 import { ObjectId } from "mongodb";
 import { loadConfig, type StaffBotConfig } from "../config/guildConfig.js";
-import { commandsByName } from "../commands/index.js";
+import { commandsByName, publicCommandsByName } from "../commands/index.js";
 import type { Command } from "../commands/types.js";
 import { requirementsFor } from "../commands/requirements.js";
 import {
@@ -97,6 +97,22 @@ export function registerInteractionHandler(client: Client): void {
             if (!interaction.isChatInputCommand()) return;
 
             const config = await loadConfig();
+
+            // Public commands answer in the community server, for anybody, and
+            // never pass through the tier check below.
+            const publicCommand = publicCommandsByName.get(interaction.commandName);
+            if (publicCommand) {
+                if (interaction.guildId !== config.publicGuildId) {
+                    await respond(
+                        interaction,
+                        errorCard(`/${interaction.commandName} only works in ${publicGuildName()}.`)
+                    );
+                    return;
+                }
+                await publicCommand.execute(client, config, interaction);
+                return;
+            }
+
             const command = commandsByName.get(interaction.commandName);
             if (!command) return;
 

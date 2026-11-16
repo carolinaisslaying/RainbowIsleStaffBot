@@ -193,7 +193,8 @@ rows do not, and redrawing all of them per click costs a Discord edit per member
 modal's customId carries the count the confirmation showed, so a run that finds fewer rows says how
 many somebody else decided while it sat open rather than quietly absorbing the difference.
 
-**Two guilds.** Roles live in the public guild; commands answer in the staff guild or in DMs.
+**Two guilds.** Roles live in the public guild; commands answer in the staff guild or in DMs,
+`/callmod` aside.
 `resolveTierAllowingLeave` in `interactionCreate.ts` re-grants Staff tier to members whose
 department role was removed by active leave, or they could not run `/leave end`.
 
@@ -336,6 +337,20 @@ misspelt `issue` would open the warning modal to everyone. "Yours, or somebody e
 Lead" is a check inside the handler, because it turns on an option value, not on the subcommand.
 Names say what a view answers, not what it draws: `/coverage server` and `/coverage staff`, not
 `heatmap` and `activity`, which were both heatmaps.
+
+**`/callmod` is the one command for the community.** Anybody in the public guild may run it, and
+only there. It is a `PublicCommand` (`commands/callmod.ts`, listed in `publicCommands`), not a
+`Command`, and `interactionCreate` dispatches it before any tier is resolved, so no staff rule —
+tier, onboarding, `ensureStaff` — can reach it, and no staff command can leak into the community
+through it. It is registered in the community guild beside the configuration hatch, ungated. It
+posts a public card in the channel (wording as the community team gave it) and pings
+`availabilityRole` in subtext under the footnotes, with `allowedMentions` naming that role alone.
+Two in-memory cooldowns (`CallModLimiter`, `domain/callMod.ts`): the member's own
+(`callModUserCooldownMinutes`) is checked before the server's (`callModServerCooldownMinutes`),
+because telling somebody who called ten minutes ago to wait five sends them back to be refused
+again. A refused call starts no clock; a send that fails gives its claim back; 0 turns a clock off.
+A restart forgets both, which at worst lets one extra call through. 🚨 is its mark as well as
+Misconduct's: one is only drawn in the community server, the other only on staff-side warnings.
 
 **Interaction routing.** All buttons go through `routeButton` in `src/events/interactionCreate.ts`,
 which splits `customId` on `:` into `namespace:first:second`. Namespaces in use: `config`

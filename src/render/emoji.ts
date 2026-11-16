@@ -36,7 +36,10 @@ export const EMOJI_FOR_COLOUR: Record<number, string> = {
     // because the leaderboard card writes its own title; it now belongs to
     // Staff of the Week alone.
     [COLOUR.standings]: "📈",
-    [COLOUR.staffOfWeek]: "🏆"
+    [COLOUR.staffOfWeek]: "🏆",
+    // Shared with the Misconduct rung's mark. That one is only ever drawn on
+    // staff-side warning cards, and this only in the community server.
+    [COLOUR.callMod]: "🚨"
 };
 
 /** Emoji for cards whose state the palette does not distinguish. */
