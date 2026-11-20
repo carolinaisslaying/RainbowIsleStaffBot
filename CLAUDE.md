@@ -681,6 +681,20 @@ writes no empty rollups. The team recap adds their minutes and leaves them out o
 figure and the top streak. A later re-run of an assessment takes whoever is on the team at that moment, which is
 how an Executive repairs an accidental removal across a close.
 
+**A short first week is carried onto the second week's ring, and only onto the ring.** The fortnight
+pools both weeks, but a ring showed one week's target, so somebody short in week one had nothing in
+week two saying what they still needed. `domain/carryOver.ts` holds the rule (`carriedShortfall`,
+`weekTargetFor`, pure and tested): in the second week of an assessable fortnight, the ring measures
+`weeklyTargetMinutes` plus what the first week was short. A surplus never carries, deliberately,
+though the review would count it; leave exempting either week carries nothing; somebody who joined
+after last week began carries nothing. It reaches every ring a member reads about themselves —
+`/stats`, the shift cards, the ring-closed DM (which now fires at the carried target) and the
+weekly recap DM — and the leaderboard's **week** view, row by row, where it moves a percentage and
+never a rank. The card says where the extra came from ("120 for this week, plus **40** left over from
+last week"). It is a picture, not a rule: the stored `ringState`, weeks in a row, the review, the
+team recap and the leaderboard log all stay on the plain target, and a week under it is still a
+missed week. `ringsCacheKey` includes the carry, or the image would lag the target.
+
 **Ring faces.** A member picks one of four curated faces (`render/faces.ts`), stored as
 `StaffDoc.ringFace`. A face sets **only the two soft rings**, shift time and active days, because
 `rings.ts` says those carry no compliance meaning. The outer ring is red/amber/green/grey and is

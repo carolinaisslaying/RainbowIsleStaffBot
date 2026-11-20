@@ -13,6 +13,7 @@ import {
     type WeekWindow
 } from "../domain/weekly.js";
 import { activeLeaveFor } from "../domain/leave.js";
+import { weekRingFor } from "../domain/carryOver.js";
 import { noticeCard, ringCard, ringGalleryCard, type RenderedMessage } from "../render/cards.js";
 import { localHourIn } from "../time/timezones.js";
 import { formatMinutes, ts } from "../time/format.js";
@@ -109,15 +110,22 @@ export async function maybeRingClosure(
     now = new Date()
 ): Promise<void> {
     const stats = await currentWeekStats(staffId, config, now);
+    // A carry only ever raises the target, so this stays the cheap early exit
+    // it was for nearly every credit.
     if (stats.activityMinutes < config.weeklyTargetMinutes) return;
     if (stats.onLeave) return;
+
+    const staff = await findStaffById(staffId);
+    if (!staff) return;
+
+    // Closed means the ring the member is looking at, carry included, so the
+    // card it sends never shows an open ring under "Ring closed".
+    const ring = await weekRingFor(staff, stats, config, now);
+    if (stats.activityMinutes < ring.activityTarget) return;
 
     const window = weekWindowFor(now, config);
     const key = `ring:${staffId.toHexString()}:${window.start.getTime()}`;
     if (!(await claim(key))) return;
-
-    const staff = await findStaffById(staffId);
-    if (!staff) return;
 
     const streak = await computeStreak(staffId, config, now);
 
@@ -127,12 +135,13 @@ export async function maybeRingClosure(
         weekStart: window.start,
         weekEnd: window.end,
         activityMinutes: stats.activityMinutes,
-        activityTarget: config.weeklyTargetMinutes,
+        activityTarget: ring.activityTarget,
+        carriedMinutes: ring.carriedMinutes,
         shiftMs: stats.shiftMs,
         shiftTargetHours: config.weeklyShiftTargetHours,
         activeDays: stats.activeDays,
         activeDaysTarget: config.weeklyActiveDaysTarget,
-        state: stats.ringState,
+        state: ring.state,
         softRingsEnabled: config.softRingsEnabled,
         face: staff.ringFace,
         streak,
@@ -288,6 +297,7 @@ async function sendRecap(
                 : `down ${rank - priorRank}`;
 
     const streak = await computeStreak(staffId, config);
+    const ring = await weekRingFor(staff, stored, config);
 
     const card = ringCard({
         staffId: staffId.toHexString(),
@@ -295,12 +305,13 @@ async function sendRecap(
         weekStart: closed.start,
         weekEnd: closed.end,
         activityMinutes: stored.activityMinutes,
-        activityTarget: config.weeklyTargetMinutes,
+        activityTarget: ring.activityTarget,
+        carriedMinutes: ring.carriedMinutes,
         shiftMs: stored.shiftMs,
         shiftTargetHours: config.weeklyShiftTargetHours,
         activeDays: stored.activeDays,
         activeDaysTarget: config.weeklyActiveDaysTarget,
-        state: stored.ringState,
+        state: ring.state,
         softRingsEnabled: config.softRingsEnabled,
         face: staff.ringFace,
         streak,

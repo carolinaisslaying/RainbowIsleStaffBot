@@ -135,6 +135,8 @@ export interface RingCardInput {
     weekEnd: Date;
     activityMinutes: number;
     activityTarget: number;
+    /** Carried from a short first week, already inside `activityTarget`. */
+    carriedMinutes?: number;
     shiftMs: number;
     shiftTargetHours: number;
     activeDays: number;
@@ -154,6 +156,7 @@ function ringsInputFor(input: RingCardInput): RingsInput {
         face: input.face,
         activityMinutes: input.activityMinutes,
         activityTarget: input.activityTarget,
+        carriedMinutes: input.carriedMinutes,
         shiftHours,
         shiftTarget: input.shiftTargetHours,
         activeDays: input.activeDays,
@@ -166,7 +169,8 @@ function ringsInputFor(input: RingCardInput): RingsInput {
             activeDays: input.activeDays,
             state: input.state,
             softRingsEnabled: input.softRingsEnabled,
-            face: input.face
+            face: input.face,
+            carriedMinutes: input.carriedMinutes
         })
     };
 }
@@ -188,6 +192,14 @@ export function ringFigures(input: RingCardInput): string {
         `**${input.activityMinutes} of ${input.activityTarget} activity minutes** ` +
             `this week, ${RING_STATE_LABEL[input.state]}.`
     ];
+
+    const carried = input.carriedMinutes ?? 0;
+    if (carried > 0) {
+        lines.push(
+            `-# ${input.activityTarget - carried} for this week, ` +
+                `plus **${carried}** left over from last week.`
+        );
+    }
 
     if (input.streak !== undefined && input.streak > 0) {
         lines.push(

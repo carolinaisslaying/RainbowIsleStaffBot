@@ -29,6 +29,12 @@ import { panelDefs, panelGround, panelRim } from "./panel.js";
 export interface RingsInput {
     activityMinutes: number;
     activityTarget: number;
+    /**
+     * Minutes carried onto this week's target from a short first week of the
+     * fortnight, already included in `activityTarget`. Named in the legend so
+     * the bigger number explains itself.
+     */
+    carriedMinutes?: number;
     shiftHours: number;
     shiftTarget: number;
     activeDays: number;
@@ -250,7 +256,10 @@ export function ringsSvg(input: RingsInput): string {
 
 /** Text equivalent of the image. Also used as the alt text on the attachment. */
 export function describeRings(input: RingsInput): string {
-    const outer = `${input.activityMinutes} of ${input.activityTarget} activity minutes`;
+    const carried = input.carriedMinutes ?? 0;
+    const outer =
+        `${input.activityMinutes} of ${input.activityTarget} activity minutes` +
+        (carried > 0 ? `, including ${carried} carried over from last week` : "");
     if (!input.softRingsEnabled) return outer;
     return (
         `${outer}, ${round(input.shiftHours)} of ${input.shiftTarget} shift hours, ` +
@@ -270,7 +279,7 @@ export function ringsCacheKey(
     input: Pick<
         RingsInput,
         "activityMinutes" | "shiftHours" | "activeDays" | "state" | "softRingsEnabled" | "face"
-    >
+    > & { carriedMinutes?: number }
 ): string {
     return [
         staffId,
@@ -284,7 +293,9 @@ export function ringsCacheKey(
         // week. Leave it out and changing your face changes nothing you can
         // see: the key still matches, and the cache keeps handing back the
         // picture drawn in the old one until the minute count moves.
-        faceFor(input.face).id
+        faceFor(input.face).id,
+        // The carry moves the target, and the target moves the ring.
+        input.carriedMinutes ?? 0
     ].join(":");
 }
 
@@ -375,7 +386,11 @@ function legendRows(input: RingsInput): LegendRow[] {
         {
             name: "outer",
             label: "Activity",
-            detail: `${input.activityMinutes} of ${input.activityTarget} minutes`,
+            detail:
+                (input.carriedMinutes ?? 0) > 0
+                    ? `${input.activityMinutes} of ${input.activityTarget} · ` +
+                      `${input.carriedMinutes} carried over`
+                    : `${input.activityMinutes} of ${input.activityTarget} minutes`,
             share: ratio(input.activityMinutes, input.activityTarget),
             colours: OUTER_COLOURS[input.state]
         }

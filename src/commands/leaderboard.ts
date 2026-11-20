@@ -7,6 +7,7 @@ import { staffExemptDuring } from "../domain/leave.js";
 import { weekWindowFor } from "../domain/weekly.js";
 import { currentFortnightIndex, windowForIndex } from "../domain/assessments.js";
 import { ringStateFor } from "../domain/rings.js";
+import { carriesIntoWeek, weekRingFor } from "../domain/carryOver.js";
 import { isLeadOrAbove } from "../domain/permissions.js";
 import { leaderboardRowVisible, leaderboardVisibility } from "../domain/leaderboard.js";
 import { leaderboardCard, type LeaderboardRowView } from "../render/cards.js";
@@ -26,6 +27,11 @@ export interface LeaderboardEntry {
     staff: StaffDoc;
     minutes: number;
     onLeave: boolean;
+    /**
+     * This row's own target, when it differs from the card's: the week view's
+     * second week adds what the member was short in the first.
+     */
+    target?: number;
 }
 
 export async function buildLeaderboard(
@@ -74,12 +80,24 @@ export async function buildLeaderboard(
                   ]);
                   return new Set([...first].filter((key) => second.has(key)));
               })();
+    // The week view measures each row the way that member's own ring does,
+    // shortfall carried from the fortnight's first week included. Ranking is
+    // still by minutes, so the carry moves a percentage and never a position.
+    const carries =
+        scope === "week"
+            ? await carriesIntoWeek(staff, window.start, onLeave, config, now)
+            : new Map<string, number>();
+    const baseTarget =
+        scope === "week" ? config.weeklyTargetMinutes : config.weeklyTargetMinutes * 2;
+
     const entries: LeaderboardEntry[] = [];
     for (const member of staff) {
+        const key = member._id.toHexString();
         entries.push({
             staff: member,
             minutes: await countMinutesBetween(member._id, window.start, window.end),
-            onLeave: onLeave.has(member._id.toHexString())
+            onLeave: onLeave.has(key),
+            target: baseTarget + (carries.get(key) ?? 0)
         });
     }
 
@@ -90,10 +108,7 @@ export async function buildLeaderboard(
             window.end,
             config.accountingTimezone
         )}`,
-        target:
-            scope === "week"
-                ? config.weeklyTargetMinutes
-                : config.weeklyTargetMinutes * 2
+        target: baseTarget
     };
 }
 
@@ -180,10 +195,10 @@ export async function renderLeaderboard(
                 `<@${entry.staff.discordId}>`
             ),
             activityMinutes: entry.minutes,
-            target,
+            target: entry.target ?? target,
             state: ringStateFor({
                 activityMinutes: entry.minutes,
-                weeklyTargetMinutes: target,
+                weeklyTargetMinutes: entry.target ?? target,
                 amberThresholdPercent: config.amberThresholdPercent,
                 onLeave: entry.onLeave
             }),
@@ -222,23 +237,26 @@ export async function renderLeaderboard(
     // answers "where am I" and "how am I doing" in one glance.
     const window = weekWindowFor(new Date(), config);
     const viewerStats = await currentWeekStats(viewer._id, config);
+    const viewerRing = await weekRingFor(viewer, viewerStats, config);
     const ringsInput = {
         activityMinutes: viewerStats.activityMinutes,
-        activityTarget: config.weeklyTargetMinutes,
+        activityTarget: viewerRing.activityTarget,
+        carriedMinutes: viewerRing.carriedMinutes,
         shiftHours: viewerStats.shiftMs / 3_600_000,
         shiftTarget: config.weeklyShiftTargetHours,
         activeDays: viewerStats.activeDays,
         activeDaysTarget: config.weeklyActiveDaysTarget,
-        state: viewerStats.ringState,
+        state: viewerRing.state,
         softRingsEnabled: config.softRingsEnabled,
         face: viewer.ringFace,
         cacheKey: ringsCacheKey(viewer._id.toHexString(), window.start, {
             activityMinutes: viewerStats.activityMinutes,
             shiftHours: Math.round((viewerStats.shiftMs / 3_600_000) * 100) / 100,
             activeDays: viewerStats.activeDays,
-            state: viewerStats.ringState,
+            state: viewerRing.state,
             softRingsEnabled: config.softRingsEnabled,
-            face: viewer.ringFace
+            face: viewer.ringFace,
+            carriedMinutes: viewerRing.carriedMinutes
         })
     };
 

@@ -16,6 +16,7 @@ import {
 import { activeLeaveFor } from "../domain/leave.js";
 import { currentWeekStats, leaveNoteFor, weekWindowFor } from "../domain/weekly.js";
 import { computeStreak } from "../domain/weekly.js";
+import { weekRingFor } from "../domain/carryOver.js";
 import { findStaffById } from "../domain/staff.js";
 import { noticeCard, ringCard, shiftSummaryCard, type RenderedMessage } from "../render/cards.js";
 import { audit } from "../domain/audit.js";
@@ -91,18 +92,20 @@ async function ringCardFor(
     const window = weekWindowFor(now, config);
     const stats = await currentWeekStats(staff._id, config, now);
     const streak = await computeStreak(staff._id, config, now);
+    const ring = await weekRingFor(staff, stats, config, now);
     return ringCard({
         staffId: staff._id.toHexString(),
         displayName,
         weekStart: window.start,
         weekEnd: window.end,
         activityMinutes: stats.activityMinutes,
-        activityTarget: config.weeklyTargetMinutes,
+        activityTarget: ring.activityTarget,
+        carriedMinutes: ring.carriedMinutes,
         shiftMs: stats.shiftMs,
         shiftTargetHours: config.weeklyShiftTargetHours,
         activeDays: stats.activeDays,
         activeDaysTarget: config.weeklyActiveDaysTarget,
-        state: stats.ringState,
+        state: ring.state,
         softRingsEnabled: config.softRingsEnabled,
         face: staff.ringFace,
         streak,
@@ -343,6 +346,7 @@ export async function finishShift(
     const window = weekWindowFor(at, config);
     const stats = await currentWeekStats(staff._id, config, at);
     const streak = await computeStreak(staff._id, config, at);
+    const ring = await weekRingFor(staff, stats, config, at);
 
     return shiftSummaryCard({
         staffId: staff._id.toHexString(),
@@ -350,12 +354,13 @@ export async function finishShift(
         weekStart: window.start,
         weekEnd: window.end,
         activityMinutes: stats.activityMinutes,
-        activityTarget: config.weeklyTargetMinutes,
+        activityTarget: ring.activityTarget,
+        carriedMinutes: ring.carriedMinutes,
         shiftMs: stats.shiftMs,
         shiftTargetHours: config.weeklyShiftTargetHours,
         activeDays: stats.activeDays,
         activeDaysTarget: config.weeklyActiveDaysTarget,
-        state: stats.ringState,
+        state: ring.state,
         softRingsEnabled: config.softRingsEnabled,
         face: staff.ringFace,
         streak,

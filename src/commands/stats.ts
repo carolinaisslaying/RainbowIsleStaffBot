@@ -8,6 +8,7 @@ import {
     weekWindowFor
 } from "../domain/weekly.js";
 import { isLeadOrAbove } from "../domain/permissions.js";
+import { weekRingFor } from "../domain/carryOver.js";
 import { timesHeld } from "../domain/staffOfWeek.js";
 import { toHolderRecord, weeksHeldBy } from "../domain/staffOfWeekStore.js";
 import { errorCard, noticeCard, ringCard } from "../render/cards.js";
@@ -92,6 +93,7 @@ async function showRings({ client, config, interaction, staff, tier }: CommandCo
     const window = weekWindowFor(new Date(), config);
     const stats = await currentWeekStats(subject._id, config);
     const streak = await computeStreak(subject._id, config);
+    const ring = await weekRingFor(subject, stats, config);
 
     const held = timesHeld(
         (await weeksHeldBy(subject._id)).map((doc) => ({
@@ -117,12 +119,13 @@ async function showRings({ client, config, interaction, staff, tier }: CommandCo
             weekStart: window.start,
             weekEnd: window.end,
             activityMinutes: stats.activityMinutes,
-            activityTarget: config.weeklyTargetMinutes,
+            activityTarget: ring.activityTarget,
+            carriedMinutes: ring.carriedMinutes,
             shiftMs: stats.shiftMs,
             shiftTargetHours: config.weeklyShiftTargetHours,
             activeDays: stats.activeDays,
             activeDaysTarget: config.weeklyActiveDaysTarget,
-            state: stats.ringState,
+            state: ring.state,
             softRingsEnabled: config.softRingsEnabled,
             face: subject.ringFace,
             streak,
